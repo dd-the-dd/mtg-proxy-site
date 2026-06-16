@@ -97,16 +97,36 @@ function isGamePiece(card) {
 }
 
 function comboPieceCategory(card, part) {
+    const name = normalizeCardName(card.name);
+    const typeLine = card.type_line ?? '';
+
+    if (name.includes('the ring') || typeLine === 'Emblem // Card') {
+        return 'ring';
+    }
+
+    if (name.includes('initiative')) {
+        return 'initiative';
+    }
+
+    if (typeLine.includes('Dungeon')) {
+        return 'dungeon';
+    }
+
+    if (card.layout === 'emblem' || typeLine.includes('Emblem')) {
+        return 'emblem';
+    }
+
     if (part.component === 'token') {
         return 'token';
     }
 
-    if (card.layout === 'emblem' || (card.type_line ?? '').includes('Emblem')) {
-        return 'emblem';
-    }
+    if (typeLine === 'Card') {
+        const trackerNames = ['experience', 'energy reserve', 'poison counter', 'radiation'];
+        if (trackerNames.includes(name)) {
+            return 'tracker';
+        }
 
-    if (isGamePiece(card)) {
-        return 'playerHelper';
+        return 'mechanicHelper';
     }
 
     return 'realCard';

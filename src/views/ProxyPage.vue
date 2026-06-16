@@ -169,10 +169,42 @@
               <label class="form-switch">
                 <input
                   type="checkbox"
-                  name="combo-piece-player-helper"
-                  v-model="config.comboPieceTypes.playerHelper"
+                  name="combo-piece-tracker"
+                  v-model="config.comboPieceTypes.tracker"
                 >
-                <i class="form-icon" /> Player helpers
+                <i class="form-icon" /> Trackers
+              </label>
+              <label class="form-switch">
+                <input
+                  type="checkbox"
+                  name="combo-piece-mechanic-helper"
+                  v-model="config.comboPieceTypes.mechanicHelper"
+                >
+                <i class="form-icon" /> Mechanic helpers
+              </label>
+              <label class="form-switch">
+                <input
+                  type="checkbox"
+                  name="combo-piece-dungeon"
+                  v-model="config.comboPieceTypes.dungeon"
+                >
+                <i class="form-icon" /> Dungeons
+              </label>
+              <label class="form-switch">
+                <input
+                  type="checkbox"
+                  name="combo-piece-initiative"
+                  v-model="config.comboPieceTypes.initiative"
+                >
+                <i class="form-icon" /> Initiative
+              </label>
+              <label class="form-switch">
+                <input
+                  type="checkbox"
+                  name="combo-piece-ring"
+                  v-model="config.comboPieceTypes.ring"
+                >
+                <i class="form-icon" /> Ring
               </label>
               <label class="form-switch">
                 <input
@@ -441,7 +473,11 @@ export default {
                 comboPieceTypes: {
                     token: true,
                     emblem: true,
-                    playerHelper: true,
+                    tracker: true,
+                    mechanicHelper: true,
+                    dungeon: true,
+                    initiative: true,
+                    ring: true,
                     realCard: false,
                 },
                 decklist: "",
@@ -710,7 +746,11 @@ export default {
             this.config.comboPieceConfigOpen = bindStorage('comboPieceConfigOpen', (v) => v === "true");
             this.config.comboPieceTypes.token = bindStorage('comboPieceToken', (v) => v !== "false");
             this.config.comboPieceTypes.emblem = bindStorage('comboPieceEmblem', (v) => v !== "false");
-            this.config.comboPieceTypes.playerHelper = bindStorage('comboPiecePlayerHelper', (v) => v !== "false");
+            this.config.comboPieceTypes.tracker = bindStorage('comboPieceTracker', (v) => v !== "false");
+            this.config.comboPieceTypes.mechanicHelper = bindStorage('comboPieceMechanicHelper', (v) => v !== "false");
+            this.config.comboPieceTypes.dungeon = bindStorage('comboPieceDungeon', (v) => v !== "false");
+            this.config.comboPieceTypes.initiative = bindStorage('comboPieceInitiative', (v) => v !== "false");
+            this.config.comboPieceTypes.ring = bindStorage('comboPieceRing', (v) => v !== "false");
             this.config.comboPieceTypes.realCard = bindStorage('comboPieceRealCard', (v) => v === "true");
         },
         formatRelatedGamePieceLine(gamePiece) {

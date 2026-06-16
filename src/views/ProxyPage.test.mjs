@@ -55,7 +55,11 @@ describe('Deck Loading', async () => {
         expect(wrapper.find('#generate-combo-pieces').exists()).toBe(true);
         expect(wrapper.find('#combo-piece-config').exists()).toBe(true);
         expect(wrapper.find('input[name="combo-piece-token"]').exists()).toBe(true);
-        expect(wrapper.find('input[name="combo-piece-player-helper"]').exists()).toBe(true);
+        expect(wrapper.find('input[name="combo-piece-tracker"]').exists()).toBe(true);
+        expect(wrapper.find('input[name="combo-piece-mechanic-helper"]').exists()).toBe(true);
+        expect(wrapper.find('input[name="combo-piece-dungeon"]').exists()).toBe(true);
+        expect(wrapper.find('input[name="combo-piece-initiative"]').exists()).toBe(true);
+        expect(wrapper.find('input[name="combo-piece-ring"]').exists()).toBe(true);
         expect(wrapper.find('input[name="combo-piece-real-card"]').exists()).toBe(true);
     });
 
@@ -193,7 +197,11 @@ describe('Deck Loading', async () => {
 
         component.data.config.comboPieceTypes.token = true;
         component.data.config.comboPieceTypes.emblem = false;
-        component.data.config.comboPieceTypes.playerHelper = false;
+        component.data.config.comboPieceTypes.tracker = false;
+        component.data.config.comboPieceTypes.mechanicHelper = false;
+        component.data.config.comboPieceTypes.dungeon = false;
+        component.data.config.comboPieceTypes.initiative = false;
+        component.data.config.comboPieceTypes.ring = false;
         component.data.config.comboPieceTypes.realCard = false;
         component.data.config.decklist = 'Pestbrood Sloth';
         await component.ctx.loadCardList();
@@ -208,7 +216,11 @@ describe('Deck Loading', async () => {
 
         component.data.config.comboPieceTypes.token = false;
         component.data.config.comboPieceTypes.emblem = false;
-        component.data.config.comboPieceTypes.playerHelper = true;
+        component.data.config.comboPieceTypes.tracker = true;
+        component.data.config.comboPieceTypes.mechanicHelper = false;
+        component.data.config.comboPieceTypes.dungeon = false;
+        component.data.config.comboPieceTypes.initiative = false;
+        component.data.config.comboPieceTypes.ring = false;
         component.data.config.comboPieceTypes.realCard = false;
         component.data.config.decklist = `
             Pestbrood Sloth
@@ -225,6 +237,30 @@ describe('Deck Loading', async () => {
 
         expect(parsedLines.filter(line => /^Pest\b/i.test(line)).length).toBe(1);
         expect(component.data.config.decklist).toContain('Experience [ttdc] 34');
+    });
+
+    test('Feature: Related combo piece generation can import dungeon, initiative, and ring pieces separately.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.comboPieceTypes.token = false;
+        component.data.config.comboPieceTypes.emblem = false;
+        component.data.config.comboPieceTypes.tracker = false;
+        component.data.config.comboPieceTypes.mechanicHelper = false;
+        component.data.config.comboPieceTypes.dungeon = true;
+        component.data.config.comboPieceTypes.initiative = true;
+        component.data.config.comboPieceTypes.ring = true;
+        component.data.config.comboPieceTypes.realCard = false;
+        component.data.config.decklist = `
+            Sefris of the Hidden Ways
+            Goliath Paladin
+            Frodo, Adventurous Hobbit
+        `;
+        await component.ctx.loadCardList();
+        await component.ctx.generateRelatedComboPieces();
+
+        expect(component.data.config.decklist).toContain('Dungeon of the Mad Mage [tafr] 20');
+        expect(component.data.config.decklist).toContain('Undercity // The Initiative [tclb] 20');
+        expect(component.data.config.decklist).toContain('The Ring // The Ring Tempts You [tltr] H13');
     });
 });
 
