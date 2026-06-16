@@ -176,6 +176,15 @@
                   <option value="token-pairs">{{ $t('configuration.cardBacks.tokenPairs') }}</option>
                 </select>
               </label>
+              <div v-if="config.cardBacks === 'all-pages'" style="margin-top: 0.5rem">
+                <label class="form-label">
+                  <i class="form-icon" /> Token backs: 
+                  <select class="form-select select" v-model="config.tokenBackMode" style="width: 100%">
+                    <option value="card">Use regular card back</option>
+                    <option value="opposite">Use token face on opposite side</option>
+                  </select>
+                </label>
+              </div>
             </div>
           </div>
           <div class="column col-12 divider" />
@@ -354,6 +363,7 @@ export default {
                 imageType: "border_crop",
                 scale: "normal",
                 cardBacks: "dfc",
+                tokenBackMode: "card",
                 decklist: "",
             },
             sets: {},
@@ -521,6 +531,18 @@ export default {
                     this.config.imageType,
                 );
             } else {
+              // If all-pages + token opposite mode, use the token's front as the back image
+              if (
+                this.config.cardBacks === "all-pages" &&
+                this.config.tokenBackMode === "opposite" &&
+                card.selectedOption.isToken
+              ) {
+                return setImageVersion(
+                  card.selectedOption.urlFront,
+                  this.config.imageType,
+                );
+              }
+
               if (
                 this.config.cardBacks === "token-pairs" &&
                 card.selectedOption.isToken &&

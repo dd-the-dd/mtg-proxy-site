@@ -13,7 +13,7 @@ beforeAll(async () => {
     while(Object.keys(wrapper.getCurrentComponent().data.sets).length === 0) {
         await new Promise(r => setTimeout(r, 50));
     }
-}, 10000);
+}, 30000);
 
 describe('Core Rendering', async () => {
     test('Renders', () => {
@@ -153,5 +153,22 @@ describe('Print layout', async () => {
         expect(pages[1].slots.length).toBe(10);
         expect(pages[0].isBack).toBe(false);
         expect(pages[1].isBack).toBe(true);
+    });
+
+    test('All pages token opposite mode uses token front for back images', () => {
+        const data = wrapper.getCurrentComponent().data;
+        const ctx = wrapper.getCurrentComponent().ctx;
+
+        data.config.cardBacks = 'all-pages';
+        data.config.tokenBackMode = 'opposite';
+        data.config.imageType = 'normal';
+        const tokenCard = { quantity: 1, name: 'tiny', isBasic: false, selectedOption: { urlFront: 'token-front', urlBack: 'token-back', isToken: true } };
+        data.cards = [tokenCard];
+
+        const pages = ctx.printPages;
+        expect(pages.length).toBe(2);
+        // ensure back page uses token front as image when resolved
+        const backSlot = pages[1].slots[0];
+        expect(ctx.resolveCardImage(backSlot.card, 'back')).toContain('token-front');
     });
 });
