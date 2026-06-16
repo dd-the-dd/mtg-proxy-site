@@ -435,7 +435,7 @@ export default {
                 imageType: "border_crop",
                 scale: "normal",
                 cardBacks: "dfc",
-                tokenBackMode: "card",
+                tokenBackMode: "opposite",
                 cardsPerPage: null,
                 comboPieceConfigOpen: false,
                 comboPieceTypes: {
@@ -706,6 +706,7 @@ export default {
             this.config.imageType = bindStorage('imageType', (v) => v ?? "border_crop");
             this.config.scale = bindStorage('scale', (v) => v ?? "normal");
             this.config.cardBacks = bindStorage('cardBacks', (v) => v ?? "dfc");
+            this.config.tokenBackMode = bindStorage('tokenBackMode', (v) => v ?? "opposite");
             this.config.comboPieceConfigOpen = bindStorage('comboPieceConfigOpen', (v) => v === "true");
             this.config.comboPieceTypes.token = bindStorage('comboPieceToken', (v) => v !== "false");
             this.config.comboPieceTypes.emblem = bindStorage('comboPieceEmblem', (v) => v !== "false");

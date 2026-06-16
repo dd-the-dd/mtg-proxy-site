@@ -13,6 +13,7 @@
 - Associated token completion preserves complete token edition text and manual session selections.
 - Game pieces include tokens, reminders, trackers, mechanic helpers, dungeons, initiative, ring cards, and emblems for print back behavior.
 - Game pieces are paired on opposite sides with different game pieces when possible; identical game pieces leave the opposite side empty instead of duplicating.
+- The default game-piece back mode is opposite-side pairing rather than regular Magic backs.
 - The print controls show open physical card slots and open game piece faces for the current page size.
 - A collapsed combo-piece menu lets users choose which related pieces to auto-import: tokens, emblems, player helpers, and real cards.
 - The combo-piece generation button stays visible while the menu is collapsed, appends only missing related pieces, and reloads the imported images.

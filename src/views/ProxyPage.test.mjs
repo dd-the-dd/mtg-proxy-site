@@ -19,6 +19,10 @@ describe('Core Rendering', async () => {
     test('Renders', () => {
         expect(wrapper.find('#deck-input').exists()).toBe(true);
     });
+
+    test('Feature: Game piece opposite-side pairing is the default token back mode.', () => {
+        expect(wrapper.getCurrentComponent().data.config.tokenBackMode).toBe('opposite');
+    });
 });
 
 describe('Deck Loading', async () => {
