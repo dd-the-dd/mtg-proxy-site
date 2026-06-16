@@ -37,13 +37,21 @@
 
           <div class="form-group btn-group btn-group-block">
             <div id="slot-usage" class="bar">
-              <template v-for="index in 9" :key="index">
+              <template v-for="index in printCapacity.pageSize" :key="index">
                 <div
                   :class="`bar-item ${index <= cardCountWhenPrinting.overflow ? 'consumed' : 'unconsumed'}`"
                   role="progressbar"
                 />
               </template>
             </div>
+          </div>
+          <div
+            v-if="cards.length"
+            id="print-capacity"
+            class="text-small text-gray"
+          >
+            Open: {{ printCapacity.missingCards }} card slot{{ printCapacity.missingCards === 1 ? '' : 's' }}
+            / {{ printCapacity.missingGamePieces }} game piece face{{ printCapacity.missingGamePieces === 1 ? '' : 's' }}
           </div>
 
           <div class="spacer" style="height: 0.4rem" />
@@ -384,18 +392,43 @@ export default {
     },
     computed: {
         cardCountWhenPrinting() {
-            const count = this.printPages.reduce((total, page) => {
-                return total + page.slots.filter(Boolean).length;
-            }, 0);
+            const count = this.printCapacity.physicalCards;
 
-            const overflow = count % 9;
-            const bound = overflow == 0 ? count : count + (9 - (count % 9));
+            const overflow = count % this.printCapacity.pageSize;
+            const bound = overflow == 0 ? count : count + (this.printCapacity.pageSize - overflow);
 
             return {
                 count,
                 overflow,
                 bound,
-                percentage: Math.round((overflow / 9) * 100),
+                percentage: Math.round((overflow / this.printCapacity.pageSize) * 100),
+            };
+        },
+        printCapacity() {
+            const pageSize = this.getPrintPageSize();
+            const frontPages = this.printPages.filter(page => !page.isBack);
+            const usesGamePieceBacks = this.config.cardBacks === "all-pages" &&
+                this.config.tokenBackMode === "opposite";
+            const physicalCards = usesGamePieceBacks
+                ? frontPages.reduce((total, page) => {
+                    return total + page.slots.filter(Boolean).length;
+                }, 0)
+                : this.printSlotsFront.length;
+            const pageCount = Math.max(Math.ceil(physicalCards / pageSize), physicalCards > 0 ? 1 : 0);
+            const physicalCapacity = pageCount * pageSize;
+            const missingCards = Math.max(0, physicalCapacity - physicalCards);
+            const printedFaces = this.printPages.reduce((total, page) => {
+                return total + page.slots.filter(Boolean).length;
+            }, 0);
+            const missingGamePieces = usesGamePieceBacks
+                ? Math.max(0, physicalCapacity * 2 - printedFaces)
+                : missingCards;
+
+            return {
+                pageSize,
+                physicalCards,
+                missingCards,
+                missingGamePieces,
             };
         },
         printSlotsFront() {
@@ -453,12 +486,17 @@ export default {
             }
 
             if (this.config.cardBacks === "all-pages") {
-              const frontSlots = this.printSlotsFront.map((card) => {
-                return { card, face: "front" };
-              });
-              const backSlots = this.printSlotsFront.map((card) => {
-                return { card, face: "back" };
-              });
+              const pairedSlots = this.config.tokenBackMode === "opposite"
+                ? this.buildPairedGamePieceSlots(this.printSlotsFront)
+                : {
+                    frontSlots: this.printSlotsFront.map((card) => {
+                      return { card, face: "front" };
+                    }),
+                    backSlots: this.printSlotsFront.map((card) => {
+                      return { card, face: "back" };
+                    }),
+                  };
+              const { frontSlots, backSlots } = pairedSlots;
 
               const pageSize = this.config.fixedPageSize ? 9 : (this.config.cardsPerPage ?? null);
               const frontPages = toPages(frontSlots, false, pageSize);
@@ -501,6 +539,85 @@ export default {
         this.initConfig();
     },
     methods: {
+        getPrintPageSize() {
+            if (this.config.fixedPageSize) {
+                return 9;
+            }
+
+            return Number.isInteger(this.config.cardsPerPage) && this.config.cardsPerPage > 0
+                ? this.config.cardsPerPage
+                : 9;
+        },
+        isGamePieceCard(card) {
+            return Boolean(card.selectedOption?.isGamePiece);
+        },
+        gamePieceKey(card) {
+            return [
+                card.name,
+                card.selectedOption?.setCode,
+                card.selectedOption?.collectorNumber,
+            ].join("|");
+        },
+        buildPairedGamePieceSlots(cards) {
+            const normalCards = [];
+            const gamePieces = [];
+
+            for (const card of cards) {
+                if (this.isGamePieceCard(card)) {
+                    gamePieces.push(card);
+                } else {
+                    normalCards.push(card);
+                }
+            }
+
+            const pairs = normalCards.map(card => {
+                return {
+                    front: { card, face: "front" },
+                    back: { card, face: "back" },
+                };
+            });
+
+            const groups = new Map();
+            for (const card of gamePieces) {
+                const key = this.gamePieceKey(card);
+                groups.set(key, groups.get(key) ?? []);
+                groups.get(key).push(card);
+            }
+
+            while (groups.size > 0) {
+                const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
+                    return b[1].length - a[1].length;
+                });
+                const [frontKey, frontGroup] = sortedGroups[0];
+                const front = frontGroup.shift();
+                if (frontGroup.length === 0) {
+                    groups.delete(frontKey);
+                }
+
+                const backEntry = Array.from(groups.entries())
+                    .sort((a, b) => b[1].length - a[1].length)
+                    .find(([backKey]) => backKey !== frontKey);
+                let back = null;
+
+                if (backEntry) {
+                    const [backKey, backGroup] = backEntry;
+                    back = backGroup.shift();
+                    if (backGroup.length === 0) {
+                        groups.delete(backKey);
+                    }
+                }
+
+                pairs.push({
+                    front: { card: front, face: "front" },
+                    back: back ? { card: back, face: "front" } : null,
+                });
+            }
+
+            return {
+                frontSlots: pairs.map(pair => pair.front),
+                backSlots: pairs.map(pair => pair.back),
+            };
+        },
         async loadSetList() {
           const dataset = (await ScryfallDatasetAsync());
           this.sets = dataset.sets;
@@ -569,7 +686,7 @@ export default {
               if (
                 this.config.cardBacks === "all-pages" &&
                 this.config.tokenBackMode === "opposite" &&
-                card.selectedOption.isToken
+                card.selectedOption.isGamePiece
               ) {
                 return setImageVersion(
                   card.selectedOption.urlFront,
@@ -579,7 +696,7 @@ export default {
 
               if (
                 this.config.cardBacks === "token-pairs" &&
-                card.selectedOption.isToken &&
+                card.selectedOption.isGamePiece &&
                 card.tokenBackUrl
               ) {
                 return setImageVersion(
@@ -655,10 +772,15 @@ export default {
                             isDigital: option.isDigital,
                             isPromo: option.isPromo,
                             isToken: option.isToken,
+                            isGamePiece: option.isGamePiece,
+                            relatedTokens: option.relatedTokens,
                         };
                     }),
                     isBasic: basicLands.includes(line.name.toLowerCase()),
+                    requestedSet: line.set,
+                    requestedCollectorNumber: line.collectorsNumber,
                     selectedOption: this.sessionSetSelections[line.name]?.[cardIndex],
+                    selectedFromSession: Boolean(this.sessionSetSelections[line.name]?.[cardIndex]),
                 };
 
                 if (!options.selectedOption) {
@@ -670,10 +792,18 @@ export default {
                         })?.[0] ?? undefined;
                     }
 
+                    if (!options.selectedOption && line.set) {
+                        options.selectedOption = options.setOptions.find(option => {
+                            return option.isGamePiece &&
+                                option.setCode === line.set &&
+                                (!line.collectorsNumber || option.collectorNumber == line.collectorsNumber);
+                        });
+                    }
+
                     // If we failed there, then we can set a default based on characteristics.
                     if (!options.selectedOption) {
                         options.selectedOption = options.setOptions.filter(option => {
-                            return !option.isDigital && !option.isPromo && !option.isToken;
+                            return !option.isDigital && !option.isPromo && !option.isGamePiece;
                         })?.[0] ?? options.setOptions[0];
                     }
                 }
@@ -681,15 +811,50 @@ export default {
                 _cards.push(options);
             }
 
+            this.applySessionRelatedTokenSelections(_cards);
+
             this.cards = _cards;
 
             // attach tokenBackUrl when token-pairs mode is enabled
             if (this.config.cardBacks === 'token-pairs') {
               for (const c of this.cards) {
-                if (c.selectedOption && c.selectedOption.isToken) {
+                if (c.selectedOption && c.selectedOption.isGamePiece) {
                   c.tokenBackUrl = this.getTokenPairBackUrl(c.selectedOption.urlFront, c.name);
                 }
               }
+            }
+        },
+        applySessionRelatedTokenSelections(cards) {
+            const relatedTokens = cards
+                .filter(card => !card.selectedOption?.isGamePiece)
+                .flatMap(card => card.selectedOption?.relatedTokens ?? []);
+
+            for (const card of cards) {
+                if (!card.selectedOption?.isGamePiece || card.selectedFromSession) {
+                    continue;
+                }
+
+                if (card.requestedSet && card.requestedCollectorNumber) {
+                    continue;
+                }
+
+                const relatedToken = relatedTokens.find(token => {
+                    return token.name === card.name &&
+                        (!card.requestedSet || token.setCode === card.requestedSet) &&
+                        (!card.requestedCollectorNumber || token.collectorNumber == card.requestedCollectorNumber);
+                });
+
+                if (!relatedToken) {
+                    continue;
+                }
+
+                const selectedOption = card.setOptions.find(option => {
+                    return option.isGamePiece &&
+                        option.setCode === (card.requestedSet ?? relatedToken.setCode) &&
+                        option.collectorNumber == (card.requestedCollectorNumber ?? relatedToken.collectorNumber);
+                });
+
+                card.selectedOption = selectedOption ?? card.selectedOption;
             }
         },
     },

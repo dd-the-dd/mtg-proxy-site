@@ -92,6 +92,33 @@ describe("parseDecklist()", () => {
                 errors: [],
             });
         });
+
+        test("Moxfield tags are ignored after card edition text", () => {
+            expect(
+                parseDecklist(
+                    `
+                        arcane signet (tdc) 105 #!mana_dork #!mana_p
+                        blood artist (soc) 209 #!d_c #!life_p #!ping_p
+                        farseek (fic) 302 #!ramp
+                        mayhem devil (plst) war-204 #!ping_p #!sacrifice_c
+                        open the omenpaths (khm) 143 #!mana_p
+                        smothering abomination (soc) 226 #!card_advantage #!sacrifice_c #!sacrifice_p
+                        vengeful bloodwitch (fdn) 76 #!d_c #!life_p #!ping_p
+                    `,
+                ),
+            ).toStrictEqual({
+                errors: [],
+                lines: [
+                    { name: "arcane signet", quantity: 1, set: "tdc", collectorsNumber: "105" },
+                    { name: "blood artist", quantity: 1, set: "soc", collectorsNumber: "209" },
+                    { name: "farseek", quantity: 1, set: "fic", collectorsNumber: "302" },
+                    { name: "mayhem devil", quantity: 1, set: "plst", collectorsNumber: "war-204" },
+                    { name: "open the omenpaths", quantity: 1, set: "khm", collectorsNumber: "143" },
+                    { name: "smothering abomination", quantity: 1, set: "soc", collectorsNumber: "226" },
+                    { name: "vengeful bloodwitch", quantity: 1, set: "fdn", collectorsNumber: "76" },
+                ],
+            });
+        });
     });
 
     describe("Ignored Lines", () => {
@@ -353,6 +380,25 @@ describe("parseDecklist()", () => {
                     { name: "graveborn", quantity: 1, set: "tcmm" },
                     { name: "graveborn", quantity: 23 },
                     { name: "graveborn", quantity: 1 },
+                ],
+                errors: [],
+            });
+        });
+
+        test("Bracket codes are treated as set codes", () => {
+            const input = `
+                1 Card Name [zen]
+                1 Card Name [mma]
+                1 Pest [tsos]
+                1 Pest [tsos] 9
+            `;
+
+            expect(parseDecklist(input)).toStrictEqual({
+                lines: [
+                    { name: "card name", quantity: 1, set: "zen" },
+                    { name: "card name", quantity: 1, set: "mma" },
+                    { name: "pest", quantity: 1, set: "tsos" },
+                    { name: "pest", quantity: 1, set: "tsos", collectorsNumber: "9" },
                 ],
                 errors: [],
             });

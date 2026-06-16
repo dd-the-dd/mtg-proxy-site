@@ -36,6 +36,135 @@ describe('Deck Loading', async () => {
     test('Has Card Entry', () => {
         expect(wrapper.findAll('.card-select').length).toBe(1);
     })
+
+    test('Feature: Bracketed set code selects token printing.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.matchEditions = false;
+        component.data.config.decklist = 'Pest [tsos]';
+        await component.ctx.loadCardList();
+
+        const cards = component.data.cards;
+
+        expect(cards.length).toBe(1);
+        expect(cards[0].name).toBe('pest');
+        expect(cards[0].selectedOption.isToken).toBe(true);
+        expect(cards[0].selectedOption.isGamePiece).toBe(true);
+        expect(cards[0].selectedOption.setCode).toBe('tsos');
+    });
+
+    test('Feature: Bracketed set code and collector number select exact token printing.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.matchEditions = false;
+        component.data.config.decklist = 'Pest [tsos] 9';
+        await component.ctx.loadCardList();
+
+        const cards = component.data.cards;
+
+        expect(cards.length).toBe(1);
+        expect(cards[0].name).toBe('pest');
+        expect(cards[0].selectedOption.isToken).toBe(true);
+        expect(cards[0].selectedOption.isGamePiece).toBe(true);
+        expect(cards[0].selectedOption.setCode).toBe('tsos');
+        expect(cards[0].selectedOption.collectorNumber).toBe('9');
+    });
+
+    test('Feature: Associated session cards complete missing token edition text.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.matchEditions = false;
+        component.data.config.decklist = `
+            Pestbrood Sloth
+            Pest
+        `;
+        await component.ctx.loadCardList();
+
+        const cards = component.data.cards;
+        const pest = cards.find(card => card.name === 'pest');
+
+        expect(pest.selectedOption.isToken).toBe(true);
+        expect(pest.selectedOption.setCode).toBe('tsos');
+        expect(pest.selectedOption.collectorNumber).toBe('9');
+    });
+
+    test('Feature: Associated session cards complete missing token collector number only.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.matchEditions = false;
+        component.data.config.decklist = `
+            Pestbrood Sloth
+            Pest [tsos]
+        `;
+        await component.ctx.loadCardList();
+
+        const cards = component.data.cards;
+        const pest = cards.find(card => card.name === 'pest');
+
+        expect(pest.selectedOption.isToken).toBe(true);
+        expect(pest.selectedOption.setCode).toBe('tsos');
+        expect(pest.selectedOption.collectorNumber).toBe('9');
+    });
+
+    test('Feature: Associated session cards preserve complete token edition text.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.matchEditions = false;
+        component.data.config.decklist = `
+            Pestbrood Sloth
+            Pest [tsos] 8
+        `;
+        await component.ctx.loadCardList();
+
+        const cards = component.data.cards;
+        const pest = cards.find(card => card.name === 'pest');
+
+        expect(pest.selectedOption.isToken).toBe(true);
+        expect(pest.selectedOption.setCode).toBe('tsos');
+        expect(pest.selectedOption.collectorNumber).toBe('8');
+    });
+
+    test('Feature: Session token selections are preserved over associated token completion.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.matchEditions = false;
+        component.data.sessionSetSelections.pest = [
+            {
+                name: 'Secrets of Strixhaven Tokens (8)',
+                setCode: 'tsos',
+                collectorNumber: '8',
+                isToken: true,
+                urlFront: 'selected-token',
+            },
+        ];
+        component.data.config.decklist = `
+            Pestbrood Sloth
+            Pest
+        `;
+        await component.ctx.loadCardList();
+
+        const cards = component.data.cards;
+        const pest = cards.find(card => card.name === 'pest');
+
+        expect(pest.selectedOption.collectorNumber).toBe('8');
+
+        component.data.sessionSetSelections.pest = undefined;
+    });
+
+    test('Feature: Flavor name imports resolve to original card printings.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.matchEditions = false;
+        component.data.config.decklist = "Aang's Shelter";
+        await component.ctx.loadCardList();
+
+        const cards = component.data.cards;
+
+        expect(cards.length).toBe(1);
+        expect(cards[0].name).toBe("aang's shelter");
+        expect(cards[0].selectedOption.setCode).toBe('tle');
+        expect(cards[0].selectedOption.collectorNumber).toBe('7');
+    });
 });
 
 describe('shouldShowSetOption()', async () => {
@@ -178,20 +307,100 @@ describe('Print layout', async () => {
         expect(pages[3].isBack).toBe(true);
     });
 
-    test('All pages token opposite mode uses token front for back images', () => {
+    test('All pages opposite mode leaves duplicate game piece backs empty', () => {
         const data = wrapper.getCurrentComponent().data;
         const ctx = wrapper.getCurrentComponent().ctx;
 
         data.config.cardBacks = 'all-pages';
         data.config.tokenBackMode = 'opposite';
         data.config.imageType = 'normal';
-        const tokenCard = { quantity: 1, name: 'tiny', isBasic: false, selectedOption: { urlFront: 'token-front', urlBack: 'token-back', isToken: true } };
+        data.config.fixedPageSize = false;
+        data.config.cardsPerPage = null;
+        const tokenCard = { quantity: 1, name: 'tiny', isBasic: false, selectedOption: { urlFront: 'token-front', urlBack: 'token-back', isToken: true, isGamePiece: true } };
         data.cards = [tokenCard];
 
         const pages = ctx.printPages;
         expect(pages.length).toBe(2);
-        // ensure back page uses token front as image when resolved
-        const backSlot = pages[1].slots[0];
-        expect(ctx.resolveCardImage(backSlot.card, 'back')).toContain('token-front');
+        expect(pages[0].slots[0].card.name).toBe('tiny');
+        expect(pages[1].slots[0]).toBe(null);
+    });
+
+    test('All pages opposite mode pairs different game pieces', () => {
+        const data = wrapper.getCurrentComponent().data;
+        const ctx = wrapper.getCurrentComponent().ctx;
+
+        data.config.cardBacks = 'all-pages';
+        data.config.tokenBackMode = 'opposite';
+        data.config.fixedPageSize = true;
+        data.config.cardsPerPage = null;
+        data.cards = [
+            {
+                quantity: 4,
+                name: 'treasure',
+                isBasic: false,
+                selectedOption: { setCode: 'tfin', collectorNumber: '1', urlFront: 'treasure-front', isToken: true, isGamePiece: true },
+            },
+            {
+                quantity: 1,
+                name: 'pest',
+                isBasic: false,
+                selectedOption: { setCode: 'tsos', collectorNumber: '9', urlFront: 'pest-front', isToken: true, isGamePiece: true },
+            },
+            {
+                quantity: 1,
+                name: 'experience',
+                isBasic: false,
+                selectedOption: { setCode: 'tc15', collectorNumber: '0', urlFront: 'experience-front', isGamePiece: true },
+            },
+        ];
+
+        const pages = ctx.printPages;
+        const frontNames = pages[0].slots.filter(Boolean).map(slot => slot.card.name);
+        const backNames = pages[1].slots.filter(Boolean).map(slot => slot.card.name);
+
+        expect(frontNames).toEqual(['treasure', 'treasure', 'treasure', 'treasure']);
+        expect(backNames).toEqual(['pest', 'experience']);
+        expect(pages[1].slots.slice(2).every(slot => slot === null)).toBe(true);
+        expect(ctx.printCapacity.missingCards).toBe(5);
+        expect(ctx.printCapacity.missingGamePieces).toBe(12);
+    });
+
+    test('All pages game piece opposite mode uses paired front images on backs', async () => {
+        const data = wrapper.getCurrentComponent().data;
+        const ctx = wrapper.getCurrentComponent().ctx;
+
+        data.config.cardBacks = 'all-pages';
+        data.config.tokenBackMode = 'opposite';
+        data.config.imageType = 'normal';
+        data.config.fixedPageSize = false;
+        data.config.cardsPerPage = null;
+        data.config.decklist = 'Experience';
+        await ctx.loadCardList();
+
+        const experience = data.cards[0];
+
+        expect(experience.selectedOption.isToken).toBe(undefined);
+        expect(experience.selectedOption.isGamePiece).toBe(true);
+        expect(ctx.resolveCardImage({ selectedOption: experience.selectedOption }, 'front')).toContain('73805b39-7624-4fbd-bcc0-4241e733a97f');
+    });
+
+    test('Single-sided printing reports one game piece face per empty physical card', () => {
+        const data = wrapper.getCurrentComponent().data;
+        const ctx = wrapper.getCurrentComponent().ctx;
+
+        data.config.cardBacks = 'none';
+        data.config.fixedPageSize = true;
+        data.config.cardsPerPage = null;
+        data.cards = [
+            {
+                quantity: 6,
+                name: 'treasure',
+                isBasic: false,
+                selectedOption: { urlFront: 'treasure-front', isToken: true, isGamePiece: true },
+            },
+        ];
+
+        expect(ctx.printCapacity.missingCards).toBe(3);
+        expect(ctx.printCapacity.missingGamePieces).toBe(3);
     });
 });
