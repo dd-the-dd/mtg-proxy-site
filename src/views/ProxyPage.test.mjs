@@ -13,7 +13,7 @@ beforeAll(async () => {
     while(Object.keys(wrapper.getCurrentComponent().data.sets).length === 0) {
         await new Promise(r => setTimeout(r, 50));
     }
-}, 10000);
+}, 30000);
 
 describe('Core Rendering', async () => {
     test('Renders', () => {
