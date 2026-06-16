@@ -173,6 +173,7 @@
                   <option value="dfc">{{ $t('configuration.cardBacks.dfcs') }}</option>
                   <option value="all">{{ $t('configuration.cardBacks.all') }}</option>
                   <option value="all-pages">{{ $t('configuration.cardBacks.allPages') }}</option>
+                  <option value="token-pairs">{{ $t('configuration.cardBacks.tokenPairs') }}</option>
                 </select>
               </label>
             </div>
@@ -356,6 +357,8 @@ export default {
                 decklist: "",
             },
             sets: {},
+            tokenPool: [],
+            nextTokenBackIndex: 0,
             cards: [],
             errors: [],
             sessionSetSelections: {},
@@ -455,9 +458,18 @@ export default {
     },
     methods: {
         async loadSetList() {
-            const dataset = (await ScryfallDatasetAsync());
-            this.sets = dataset.sets;
-            console.log(`Loaded ${Object.keys(dataset.cards).length} distinct cards from ${Object.keys(dataset.sets).length} sets.`)
+          const dataset = (await ScryfallDatasetAsync());
+          this.sets = dataset.sets;
+          console.log(`Loaded ${Object.keys(dataset.cards).length} distinct cards from ${Object.keys(dataset.sets).length} sets.`)
+          // Build token pool for token-pairs mode
+          this.tokenPool = Object.values(dataset.cards)
+            .flat()
+            .filter((c) => c.cardFaces && c.cardFaces.length === 1 && c.cardFaces[0].type_line && /token/i.test(c.cardFaces[0].type_line))
+            .map((c) => ({
+              name: c.name,
+              urlBack: c.image_uris && c.image_uris.normal ? c.image_uris.normal : undefined,
+            }))
+            .filter((t) => t.urlBack);
         },
         initConfig() {
             this.config.includeDigital = bindStorage('includeDigital', (v) => v === "true");
@@ -488,9 +500,9 @@ export default {
             }
 
             if (face === "back") {
-                if (this.config.cardBacks === "all" || this.config.cardBacks === "all-pages") {
-                    return true;
-                }
+              if (this.config.cardBacks === "all" || this.config.cardBacks === "all-pages" || this.config.cardBacks === "token-pairs") {
+                return true;
+              }
 
                 if (
                     this.config.cardBacks === "none" ||
@@ -509,16 +521,38 @@ export default {
                     this.config.imageType,
                 );
             } else {
-                if (card.selectedOption.urlBack !== undefined) {
-                    return setImageVersion(
-                        card.selectedOption.urlBack,
-                        this.config.imageType,
-                    );
-                } else {
-                    return `./card_back_${this.config.imageType}.jpg`;
-                }
+              if (
+                this.config.cardBacks === "token-pairs" &&
+                card.selectedOption.isToken &&
+                card.tokenBackUrl
+              ) {
+                return setImageVersion(
+                  card.tokenBackUrl,
+                  this.config.imageType,
+                );
+              }
+
+              if (card.selectedOption.urlBack !== undefined) {
+                return setImageVersion(
+                  card.selectedOption.urlBack,
+                  this.config.imageType,
+                );
+              } else {
+                return `./card_back_${this.config.imageType}.jpg`;
+              }
             }
         },
+
+          getTokenPairBackUrl(frontUrl, cardName) {
+            if (!this.tokenPool || !this.tokenPool.length) return undefined;
+
+            const pool = this.tokenPool.filter((t) => t.urlBack !== frontUrl && t.name !== cardName);
+            if (!pool.length) return undefined;
+
+            const idx = this.nextTokenBackIndex % pool.length;
+            this.nextTokenBackIndex += 1;
+            return pool[idx].urlBack;
+          },
         updateSessionSet(cardName, setOption, cardIndex) {
             const deckIndex = this.cards.filter((v, i) => { return v.name === cardName && i <= cardIndex; }).length - 1;
             this.sessionSetSelections[cardName] = this.sessionSetSelections[cardName] ?? {};
@@ -533,6 +567,7 @@ export default {
 
             const { lines, errors } = parseDecklist(this.config.decklist);
             this.errors = errors;
+            
 
             const _cards = [];
 
@@ -590,6 +625,15 @@ export default {
             }
 
             this.cards = _cards;
+
+            // attach tokenBackUrl when token-pairs mode is enabled
+            if (this.config.cardBacks === 'token-pairs') {
+              for (const c of this.cards) {
+                if (c.selectedOption && c.selectedOption.isToken) {
+                  c.tokenBackUrl = this.getTokenPairBackUrl(c.selectedOption.urlFront, c.name);
+                }
+              }
+            }
         },
     },
 };
