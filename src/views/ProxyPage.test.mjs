@@ -155,6 +155,29 @@ describe('Print layout', async () => {
         expect(pages[1].isBack).toBe(true);
     });
 
+    test('All pages mode alternates front and back pages when fixed page size is used', () => {
+        const data = wrapper.getCurrentComponent().data;
+        const ctx = wrapper.getCurrentComponent().ctx;
+
+        data.config.cardBacks = 'all-pages';
+        data.config.fixedPageSize = true;
+        data.cards = Array.from({ length: 10 }, (_, i) => {
+            return {
+                quantity: 1,
+                name: `card-${i + 1}`,
+                isBasic: false,
+                selectedOption: { urlFront: `front-${i + 1}`, urlBack: `back-${i + 1}` },
+            };
+        });
+
+        const pages = ctx.printPages;
+        expect(pages.length).toBe(4);
+        expect(pages[0].isBack).toBe(false);
+        expect(pages[1].isBack).toBe(true);
+        expect(pages[2].isBack).toBe(false);
+        expect(pages[3].isBack).toBe(true);
+    });
+
     test('All pages token opposite mode uses token front for back images', () => {
         const data = wrapper.getCurrentComponent().data;
         const ctx = wrapper.getCurrentComponent().ctx;
