@@ -172,9 +172,15 @@
                   <option value="none">{{ $t('configuration.cardBacks.none') }}</option>
                   <option value="dfc">{{ $t('configuration.cardBacks.dfcs') }}</option>
                   <option value="all">{{ $t('configuration.cardBacks.all') }}</option>
-                  <option value="all-pages">{{ $t('configuration.cardBacks.allPages') }}</option>
+                    <option value="all-pages">{{ $t('configuration.cardBacks.allPages') }}</option>
                 </select>
               </label>
+                <div v-if="config.cardBacks === 'all-pages' && !config.fixedPageSize" style="margin-top:0.5rem">
+                  <label class="form-label">
+                    <i class="form-icon" /> Cards per page (leave empty to group all fronts/backs):
+                    <input type="number" min="1" max="36" class="form-input" v-model.number="config.cardsPerPage" style="width:100%" />
+                  </label>
+                </div>
             </div>
           </div>
           <div class="column col-12 divider" />
@@ -353,6 +359,7 @@ export default {
                 imageType: "border_crop",
                 scale: "normal",
                 cardBacks: "dfc",
+                   cardsPerPage: null,
                 decklist: "",
             },
             sets: {},
@@ -393,19 +400,34 @@ export default {
             return slots;
         },
         printPages() {
-            const toPages = (slots, isBack) => {
-                if (this.config.fixedPageSize) {
-                    const pages = [];
-                    for (let i = 0; i < slots.length; i += 9) {
-                        const page = slots.slice(i, i + 9);
-                        while (page.length < 9) {
-                            page.push(null);
-                        }
-                        pages.push({ slots: page, isBack });
-                    }
-                    return pages.length ? pages : [];
+            const toPages = (slots, isBack, pageSize = null) => {
+              // If a pageSize is provided (number), paginate into that size.
+              if (pageSize && Number.isInteger(pageSize) && pageSize > 0) {
+                const pages = [];
+                for (let i = 0; i < slots.length; i += pageSize) {
+                  const page = slots.slice(i, i + pageSize);
+                  while (page.length < pageSize) {
+                    page.push(null);
+                  }
+                  pages.push({ slots: page, isBack });
                 }
-                return [{ slots, isBack }];
+                return pages.length ? pages : [];
+              }
+
+              // Fallback to old behavior: if fixedPageSize true, use 9 slots; otherwise return a single page.
+              if (this.config.fixedPageSize) {
+                const pages = [];
+                for (let i = 0; i < slots.length; i += 9) {
+                  const page = slots.slice(i, i + 9);
+                  while (page.length < 9) {
+                    page.push(null);
+                  }
+                  pages.push({ slots: page, isBack });
+                }
+                return pages.length ? pages : [];
+              }
+
+              return [{ slots, isBack }];
             };
 
             if (this.config.cardBacks === "none") {
@@ -424,8 +446,9 @@ export default {
                 return { card, face: "back" };
               });
 
-              const frontPages = toPages(frontSlots, false);
-              const backPages = toPages(backSlots, true);
+              const pageSize = this.config.fixedPageSize ? 9 : (this.config.cardsPerPage ?? null);
+              const frontPages = toPages(frontSlots, false, pageSize);
+              const backPages = toPages(backSlots, true, pageSize);
               const pages = [];
 
               for (let i = 0; i < Math.max(frontPages.length, backPages.length); i += 1) {
