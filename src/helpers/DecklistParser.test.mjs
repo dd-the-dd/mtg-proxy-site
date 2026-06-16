@@ -333,4 +333,29 @@ describe("parseDecklist()", () => {
             });
         });
     });
+
+    describe("Bracketed set codes and quantity variants", () => {
+        test("Various bracket and quantity forms", () => {
+            const input = `
+                1x Graveborn [tcmm]
+                1x Graveborn
+                1 Graveborn [tcmm]
+                Graveborn [tcmm]
+                23 Graveborn
+                Graveborn
+            `;
+
+            expect(parseDecklist(input)).toStrictEqual({
+                lines: [
+                    { name: "graveborn", quantity: 1, set: "tcmm" },
+                    { name: "graveborn", quantity: 1 },
+                    { name: "graveborn", quantity: 1, set: "tcmm" },
+                    { name: "graveborn", quantity: 1, set: "tcmm" },
+                    { name: "graveborn", quantity: 23 },
+                    { name: "graveborn", quantity: 1 },
+                ],
+                errors: [],
+            });
+        });
+    });
 });
