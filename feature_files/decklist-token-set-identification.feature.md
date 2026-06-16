@@ -17,6 +17,7 @@
 - The print controls show open physical card slots and open game piece faces for the current page size.
 - A collapsed combo-piece menu lets users choose which related pieces to auto-import: tokens, emblems, trackers, mechanic helpers, dungeons, initiative, ring cards, and real cards.
 - The combo-piece generation button stays visible while the menu is collapsed, appends only missing related pieces, and reloads the imported images.
+- Real-card combo piece links can be one-way when Scryfall lists both directions; a basic land linked from a source card should not import that source card back.
 - Moxfield tags such as `#!ramp` are ignored after card edition text.
 - Flavor names such as `Aang's Shelter` resolve to the original Scryfall card printing.
 - If no matching token printing is found, import falls back to the existing default selection behavior.
@@ -31,6 +32,7 @@
 - Printing four `Treasure`, one `Pest`, and one `Experience` uses four physical cards, with two empty opposite-side faces.
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
 - Generating combo pieces skips disabled categories and does not duplicate related pieces already in the decklist.
+- Generating real-card combo pieces for `Gilt-Leaf Alchemist` appends `Forest [ecl] 283`, but generating from `Forest [ecl] 283` does not append `Gilt-Leaf Alchemist`.
 - Importing `Aang's Shelter` selects `Teferi's Protection` from `TLE` collector number `7`.
 - Importing a token without set information keeps using the existing default.
 

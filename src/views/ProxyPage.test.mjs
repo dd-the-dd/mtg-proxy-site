@@ -262,6 +262,30 @@ describe('Deck Loading', async () => {
         expect(component.data.config.decklist).toContain('Undercity // The Initiative [tclb] 20');
         expect(component.data.config.decklist).toContain('The Ring // The Ring Tempts You [tltr] H13');
     });
+
+    test('Feature: Related real-card combo pieces are one-way from source cards to their helper card.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.comboPieceTypes.token = false;
+        component.data.config.comboPieceTypes.emblem = false;
+        component.data.config.comboPieceTypes.tracker = false;
+        component.data.config.comboPieceTypes.mechanicHelper = false;
+        component.data.config.comboPieceTypes.dungeon = false;
+        component.data.config.comboPieceTypes.initiative = false;
+        component.data.config.comboPieceTypes.ring = false;
+        component.data.config.comboPieceTypes.realCard = true;
+        component.data.config.decklist = 'Forest [ecl] 283';
+        await component.ctx.loadCardList();
+        await component.ctx.generateRelatedComboPieces();
+
+        expect(component.data.config.decklist).not.toContain('Gilt-Leaf Alchemist');
+
+        component.data.config.decklist = 'Gilt-Leaf Alchemist';
+        await component.ctx.loadCardList();
+        await component.ctx.generateRelatedComboPieces();
+
+        expect(component.data.config.decklist).toContain('Forest [ecl] 283');
+    });
 });
 
 describe('shouldShowSetOption()', async () => {

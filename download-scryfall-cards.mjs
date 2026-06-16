@@ -132,6 +132,16 @@ function comboPieceCategory(card, part) {
     return 'realCard';
 }
 
+function shouldIncludeRelatedGamePiece(sourceCard, relatedCard, part) {
+    const category = comboPieceCategory(relatedCard, part);
+
+    if (category === 'realCard' && sourceCard.type_line?.includes('Basic Land')) {
+        return false;
+    }
+
+    return true;
+}
+
 const stripped = cards.filter(card => {
     // Process the exclusions.
     return includedSets.includes(card.set) ||
@@ -181,6 +191,7 @@ const stripped = cards.filter(card => {
         })
         .filter(({ card }) => card)
         .filter(({ card }) => normalizeCardName(card.name) !== normalizedCardName)
+        .filter(({ part, card: relatedCard }) => shouldIncludeRelatedGamePiece(card, relatedCard, part))
         .map(({ part, card }) => {
             return {
                 name: normalizeCardName(card.name),
