@@ -417,17 +417,27 @@ export default {
             }
 
             if (this.config.cardBacks === "all-pages") {
-                const frontSlots = this.printSlotsFront.map((card) => {
-                    return { card, face: "front" };
-                });
-                const backSlots = this.printSlotsFront.map((card) => {
-                    return { card, face: "back" };
-                });
+              const frontSlots = this.printSlotsFront.map((card) => {
+                return { card, face: "front" };
+              });
+              const backSlots = this.printSlotsFront.map((card) => {
+                return { card, face: "back" };
+              });
 
-                return [
-                    ...toPages(frontSlots, false),
-                    ...toPages(backSlots, true),
-                ];
+              const frontPages = toPages(frontSlots, false);
+              const backPages = toPages(backSlots, true);
+              const pages = [];
+
+              for (let i = 0; i < Math.max(frontPages.length, backPages.length); i += 1) {
+                if (frontPages[i]) {
+                  pages.push(frontPages[i]);
+                }
+                if (backPages[i]) {
+                  pages.push(backPages[i]);
+                }
+              }
+
+              return pages;
             }
 
             const slots = [];
