@@ -43,6 +43,19 @@ describe("parseDecklist()", () => {
             });
         });
 
+        test("Bracketed Set Code", () => {
+            expect(
+                parseDecklist(
+                    `
+                    1x Graveborn [tcmm]
+                    `,
+                ),
+            ).toStrictEqual({
+                lines: [{ name: "graveborn", quantity: 1, set: "tcmm" }],
+                errors: [],
+            });
+        });
+
         test("Double Digit", () => {
             expect(
                 parseDecklist(
