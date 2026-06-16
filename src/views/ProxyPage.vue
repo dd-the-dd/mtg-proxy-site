@@ -117,13 +117,7 @@
                 <i class="form-icon" /> Fixed page size (3×3)
               </label>
             </div>
-            <div class="column col-12">
-              <label class="form-label">
-                <i class="form-icon" /> Cards per page
-                <input type="number" min="1" max="36" class="form-input" v-model.number="config.cardsPerPage" placeholder="9" style="width:100%" />
-                <small class="form-help">Used when <strong>Card backs</strong> = All pages and Fixed page size is unchecked.</small>
-              </label>
-            </div>
+            
           </div>
           <div class="column col-12 divider" />
           <div class="columns">
