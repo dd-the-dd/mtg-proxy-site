@@ -23,11 +23,13 @@ export function parseDecklist(decklist) {
             continue;
         }
 
+        line = line.replace(/\s+#!\S+/g, "").trim();
+
         // Extract the quantity and card name.
         // Cockatrice prefixes lines with "SB:" for sideboard cards, so optionally matching that.
         // Last I knew MTGA's export format puts the set and collector number in the line. ex. Arid Mesa (ZEN) 211
         const extract =
-            /^(?:SB:\s+)?(?:(\d+)?x?\s)?(.+?)\s*(?:\(([^()]*)\)\s+([-\w★]+))?$/i.exec(
+            /^(?:SB:\s+)?(?:(\d+)\s*x?\s)?(.+?)\s*(?:\(([^()]*)\)\s+([-\w★]+)|\[([^\]]+)\](?:\s+([-\w★]+))?)?$/i.exec(
                 line,
             );
 
@@ -41,9 +43,14 @@ export function parseDecklist(decklist) {
             ,
             quantity,
             inputCardName,
-            setName = undefined,
-            collectorsNumber = undefined,
+            parenSet = undefined,
+            collectorsNumberFromParen = undefined,
+            bracketSet = undefined,
+            collectorsNumberFromBracket = undefined,
         ] = extract;
+
+        const setName = parenSet || bracketSet;
+        const collectorsNumber = collectorsNumberFromParen || collectorsNumberFromBracket;
 
         if (quantity === undefined) {
             quantity = 1;

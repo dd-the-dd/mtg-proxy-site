@@ -37,6 +37,8 @@ for await (const { value } of pipeline) {
     cards.push(value);
 }
 
+const cardsById = new Map(cards.map(card => [card.id, card]));
+
 const customPromoSetTypes = [
     'from_the_vault',
     'spellbook',
@@ -86,6 +88,14 @@ const excludedLayouts = [
     'art_series',
 ];
 
+function isGamePiece(card) {
+    return card.layout === 'token' ||
+        card.layout === 'double_faced_token' ||
+        card.layout === 'emblem' ||
+        card.type_line === 'Card' ||
+        /(^| — | \/\/ )(Dungeon|Emblem|Plane|Scheme)( — | \/\/ |$)/.test(card.type_line);
+}
+
 const stripped = cards.filter(card => {
     // Process the exclusions.
     return includedSets.includes(card.set) ||
@@ -113,12 +123,24 @@ const stripped = cards.filter(card => {
     }
 
     const applicablePromoTypes = (card.promo_types || []).filter(pt => !notPromoTypes.includes(pt));
+    const relatedTokens = card.all_parts
+        ?.filter(part => part.component === 'token')
+        .map(part => cardsById.get(part.id))
+        .filter(token => token && (token.layout === 'token' || token.layout === 'double_faced_token'))
+        .map(token => {
+            return {
+                name: normalizeCardName(token.name),
+                setCode: token.set,
+                collectorNumber: token.collector_number,
+            };
+        });
 
     return {
         id: card.id,
         oracleId: card.oracle_id,
         oracleName: card.name,
         name: normalizeCardName(card.name),
+        flavorName: card.flavor_name ? normalizeCardName(card.flavor_name) : undefined,
         releaseDate: card.released_at,
         set: {
             name: card.set_name,
@@ -128,6 +150,8 @@ const stripped = cards.filter(card => {
         isDigital: card.digital,
         isPromo: !customNotPromoSets.includes(card.set) && (card.promo || applicablePromoTypes.length > 0 || customPromoSetTypes.includes(card.set_type) || customPromoSets.includes(card.set)),
         isToken: card.layout === 'token' || card.layout === 'double_faced_token',
+        isGamePiece: isGamePiece(card),
+        relatedTokens: relatedTokens?.length ? relatedTokens : undefined,
         imageUris: {
             front: `https://cards.scryfall.io/border_crop/${card.reversible_face || 'front'}/${card.id.charAt(0)}/${card.id.charAt(1)}/${card.id}.jpg`,
             back: cardBackUri,
@@ -136,14 +160,17 @@ const stripped = cards.filter(card => {
 }).flatMap(card => {
     // Create two entries for any adventure/dfc to allow for both naming conventions.
     // A more compact option would be to create some alias map, but this is simpler.
+    const aliases = [ card ];
+
     if (card.name.includes(" // ")) {
-        return [
-            card,
-            { ...card, name: card.name.split(" // ")[0] },
-        ]
+        aliases.push({ ...card, name: card.name.split(" // ")[0] });
     }
 
-    return [ card ];
+    if (card.flavorName) {
+        aliases.push({ ...card, name: card.flavorName });
+    }
+
+    return aliases;
 });
 
 stripped.push({
@@ -193,6 +220,8 @@ const minimized = stripped.sort((a, b) => {
             isDigital: card.isDigital ? true : undefined,
             isPromo: card.isPromo ? true : undefined,
             isToken: card.isToken ? true : undefined,
+            ...(card.isGamePiece ? { isGamePiece: true } : {}),
+            ...(card.relatedTokens ? { relatedTokens: card.relatedTokens } : {}),
 
             urlFront: card.imageUris.front,
             urlBack: card.imageUris.back,
