@@ -107,6 +107,16 @@
                 <i class="form-icon" /> {{ $t('configuration.showCutLines') }}
               </label>
             </div>
+            <div class="column col-12">
+              <label class="form-switch">
+                <input
+                  type="checkbox"
+                  name="fixed-page-size"
+                  v-model="config.fixedPageSize"
+                >
+                <i class="form-icon" /> Fixed page size (3×3)
+              </label>
+            </div>
           </div>
           <div class="column col-12 divider" />
           <div class="columns">
@@ -162,6 +172,7 @@
                   <option value="none">{{ $t('configuration.cardBacks.none') }}</option>
                   <option value="dfc">{{ $t('configuration.cardBacks.dfcs') }}</option>
                   <option value="all">{{ $t('configuration.cardBacks.all') }}</option>
+                  <option value="all-pages">{{ $t('configuration.cardBacks.allPages') }}</option>
                 </select>
               </label>
             </div>
@@ -270,17 +281,18 @@
       { 'with-cut-lines': config.showCutLines },
     ]"
   >
-    <template v-for="(card, index) in cards" :key="index">
-      <template v-for="n in card.quantity" :key="n">
-        <img
-          :src="resolveCardImage(card)"
-          v-show="shouldShowCard(card)"
-        >
-        <img
-          :src="resolveCardImage(card, 'back')"
-          v-show="shouldShowCard(card, 'back')"
-        >
-      </template>
+    <template v-for="(page, pageIndex) in printPages" :key="`page-${pageIndex}`">
+      <div class="print-page">
+        <div class="print-grid" :class="{ 'print-grid-backs': page.isBack }">
+          <template v-for="(slot, slotIndex) in page.slots" :key="`page-${pageIndex}-${slotIndex}`">
+            <img
+              v-if="slot"
+              :src="resolveCardImage(slot.card, slot.face)"
+            >
+            <div v-else class="print-slot" />
+          </template>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -311,10 +323,12 @@ const basicLands = [
 ];
 
 function setImageVersion(url, version) {
-    if (/scryfall/.test(url)) {
-        var url = new URL(url);
-        url.searchParams.set("version", version);
-        return url.href;
+    if (/cards\.scryfall\.io/.test(url)) {
+        return url.replace(/\/(border_crop|normal|large|small|art_crop|png)\//, `/${version}/`);
+    } else if (/api\.scryfall\.com/.test(url)) {
+        var parsedUrl = new URL(url);
+        parsedUrl.searchParams.set("version", version);
+        return parsedUrl.href;
     } else {
         return url;
     }
@@ -335,6 +349,7 @@ export default {
                 matchEditions: false,
                 includeBasics: false,
                 showCutLines: false,
+                fixedPageSize: false,
                 imageType: "border_crop",
                 scale: "normal",
                 cardBacks: "dfc",
@@ -348,13 +363,8 @@ export default {
     },
     computed: {
         cardCountWhenPrinting() {
-            const count = this.cards.reduce((total, c) => {
-                return (
-                    total +
-                    c.quantity *
-                        ((this.shouldShowCard(c, "front") ? 1 : 0) +
-                            (this.shouldShowCard(c, "back") ? 1 : 0))
-                );
+            const count = this.printPages.reduce((total, page) => {
+                return total + page.slots.filter(Boolean).length;
             }, 0);
 
             const overflow = count % 9;
@@ -366,6 +376,76 @@ export default {
                 bound,
                 percentage: Math.round((overflow / 9) * 100),
             };
+        },
+        printSlotsFront() {
+            const slots = [];
+
+            for (const card of this.cards) {
+                if (!this.shouldShowCard(card, "front")) {
+                    continue;
+                }
+
+                for (let i = 0; i < card.quantity; i += 1) {
+                    slots.push(card);
+                }
+            }
+
+            return slots;
+        },
+        printPages() {
+            const toPages = (slots, isBack) => {
+                if (this.config.fixedPageSize) {
+                    const pages = [];
+                    for (let i = 0; i < slots.length; i += 9) {
+                        const page = slots.slice(i, i + 9);
+                        while (page.length < 9) {
+                            page.push(null);
+                        }
+                        pages.push({ slots: page, isBack });
+                    }
+                    return pages.length ? pages : [];
+                }
+                return [{ slots, isBack }];
+            };
+
+            if (this.config.cardBacks === "none") {
+                const slots = this.printSlotsFront.map((card) => {
+                    return { card, face: "front" };
+                });
+
+                return toPages(slots, false);
+            }
+
+            if (this.config.cardBacks === "all-pages") {
+                const frontSlots = this.printSlotsFront.map((card) => {
+                    return { card, face: "front" };
+                });
+                const backSlots = this.printSlotsFront.map((card) => {
+                    return { card, face: "back" };
+                });
+
+                return [
+                    ...toPages(frontSlots, false),
+                    ...toPages(backSlots, true),
+                ];
+            }
+
+            const slots = [];
+            for (const card of this.cards) {
+                if (!this.shouldShowCard(card, "front")) {
+                    continue;
+                }
+
+                for (let i = 0; i < card.quantity; i += 1) {
+                    slots.push({ card, face: "front" });
+
+                    if (this.shouldShowCard(card, "back")) {
+                        slots.push({ card, face: "back" });
+                    }
+                }
+            }
+
+            return toPages(slots, false);
         },
     },
     mounted() {
@@ -385,6 +465,7 @@ export default {
             this.config.matchEditions = bindStorage('matchEditions', (v) => v === "true");
             this.config.includeBasics = bindStorage('includeBasics', (v) => v === "true");
             this.config.showCutLines = bindStorage('showCutLines', (v) => v === "true");
+            this.config.fixedPageSize = bindStorage('fixedPageSize', (v) => v === "true");
             this.config.imageType = bindStorage('imageType', (v) => v ?? "border_crop");
             this.config.scale = bindStorage('scale', (v) => v ?? "normal");
             this.config.cardBacks = bindStorage('cardBacks', (v) => v ?? "dfc");
@@ -407,7 +488,7 @@ export default {
             }
 
             if (face === "back") {
-                if (this.config.cardBacks === "all") {
+                if (this.config.cardBacks === "all" || this.config.cardBacks === "all-pages") {
                     return true;
                 }
 
@@ -579,17 +660,28 @@ html.dark-theme {
 
 #print-content {
     display: none;
-}
-
-#print-content {
     line-height: 0;
+    --card-width: 60mm;
+    --card-height: 85mm;
 }
 
-#print-content img {
-    width: 60mm;
-    height: 85mm;
+#print-content img,
+#print-content .print-slot {
+    width: var(--card-width);
+    height: var(--card-height);
     margin: 0;
     padding: 0;
+    break-inside: avoid;
+}
+
+#print-content .print-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+}
+
+#print-content .print-grid-backs {
+    direction: rtl;
 }
 
 @media print {
@@ -631,34 +723,33 @@ html.dark-theme {
         line-height: 0;
     }
 
-    #print-content img {
-        width: 60mm;
-        height: 85mm;
-        margin: 0;
-        padding: 0;
+    #print-content.scale-large {
+        --card-width: calc(60mm * 1.02);
+        --card-height: calc(85mm * 1.02);
     }
 
-    #print-content.with-cut-lines img {
-        margin: 0 1px 1px 0;
+    #print-content.scale-small {
+        --card-width: calc(60mm * 0.98);
+        --card-height: calc(85mm * 0.98);
     }
 
-    #print-content.scale-large img {
-        width: calc(60mm * 1.02);
-        height: calc(85mm * 1.02);
+    #print-content.scale-actual {
+        --card-width: 63mm;
+        --card-height: 88mm;
     }
 
-    #print-content.scale-small img {
-        width: calc(60mm * 0.98);
-        height: calc(85mm * 0.98);
+    #print-content.with-cut-lines .print-grid {
+        gap: 1px;
     }
 
-    #print-content.scale-actual img {
-        width: 63mm;
-        height: 88mm;
+    .print-page {
+        width: 100%;
+        display: flex;
+        justify-content: center;
     }
 
-    img {
-        break-inside: avoid;
+    .print-page + .print-page {
+        break-before: page;
     }
 }
 </style>

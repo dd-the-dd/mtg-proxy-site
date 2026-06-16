@@ -1,6 +1,8 @@
 import fs from 'fs';
+import { createReadStream } from 'fs';
 import axios from 'axios';
 import { strict as assert } from 'assert';
+import { withParserAsStream } from 'stream-json/streamers/stream-array.js';
 import { normalizeCardName } from './src/helpers/CardNames.mjs';
 
 if (!fs.existsSync('./data/default-cards.json') || process.argv[2] == "--update") {
@@ -27,7 +29,13 @@ if (!fs.existsSync('./data/default-cards.json') || process.argv[2] == "--update"
     console.log('Using existing card data.');
 }
 
-const cards = JSON.parse(fs.readFileSync('./data/default-cards.json'));
+// Stream-parse the large JSON array to avoid V8's string length limit.
+const cards = [];
+const pipeline = createReadStream('./data/default-cards.json')
+    .pipe(withParserAsStream());
+for await (const { value } of pipeline) {
+    cards.push(value);
+}
 
 const customPromoSetTypes = [
     'from_the_vault',
@@ -121,7 +129,7 @@ const stripped = cards.filter(card => {
         isPromo: !customNotPromoSets.includes(card.set) && (card.promo || applicablePromoTypes.length > 0 || customPromoSetTypes.includes(card.set_type) || customPromoSets.includes(card.set)),
         isToken: card.layout === 'token' || card.layout === 'double_faced_token',
         imageUris: {
-            front: `https://api.scryfall.com/cards/${card.set}/${card.collector_number}?format=image&face=${card.reversible_face ?? 'front'}`,
+            front: `https://cards.scryfall.io/border_crop/${card.reversible_face || 'front'}/${card.id.charAt(0)}/${card.id.charAt(1)}/${card.id}.jpg`,
             back: cardBackUri,
         },
     };
@@ -212,7 +220,7 @@ assert.deepStrictEqual(
             "isDigital": undefined,
             "isPromo": undefined,
             "isToken": undefined,
-            "urlFront": "https://api.scryfall.com/cards/khm/154?format=image&face=front",
+            "urlFront": "https://cards.scryfall.io/border_crop/front/2/2/22a6a5f1-1405-4efb-af3e-e1f58d664e99.jpg",
             "urlBack": "https://api.scryfall.com/cards/khm/154?format=image&face=back",
           },
           {
@@ -221,7 +229,7 @@ assert.deepStrictEqual(
             "isDigital": undefined,
             "isPromo": true,
             "isToken": undefined,
-            "urlFront": "https://api.scryfall.com/cards/pkhm/154s?format=image&face=front",
+            "urlFront": "https://cards.scryfall.io/border_crop/front/5/6/56169747-9603-431e-bd88-bfa6982f029c.jpg",
             "urlBack": "https://api.scryfall.com/cards/pkhm/154s?format=image&face=back",
           },
           {
@@ -230,7 +238,7 @@ assert.deepStrictEqual(
             "isDigital": undefined,
             "isPromo": true,
             "isToken": undefined,
-            "urlFront": "https://api.scryfall.com/cards/khm/313?format=image&face=front",
+            "urlFront": "https://cards.scryfall.io/border_crop/front/5/a/5af80f3b-229d-43f8-976e-50bee70b32e7.jpg",
             "urlBack": "https://api.scryfall.com/cards/khm/313?format=image&face=back",
           },
           {
@@ -239,7 +247,7 @@ assert.deepStrictEqual(
             "isDigital": true,
             "isPromo": true,
             "isToken": undefined,
-            "urlFront": "https://api.scryfall.com/cards/prm/88302?format=image&face=front",
+            "urlFront": "https://cards.scryfall.io/border_crop/front/e/7/e71fdafd-7548-4be6-a6a6-146c4d4ca0b3.jpg",
             "urlBack": "https://api.scryfall.com/cards/prm/88302?format=image&face=back",
           },
     ],
