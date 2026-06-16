@@ -15,6 +15,7 @@
 - Game pieces are paired on opposite sides with different game pieces when possible; identical game pieces leave the opposite side empty instead of duplicating.
 - The default game-piece back mode is opposite-side pairing rather than regular Magic backs.
 - The print controls show open physical card slots and open game piece faces for the current page size.
+- Print controls can include or exclude regular cards and game pieces independently after a decklist has been loaded.
 - A collapsed combo-piece menu lets users choose which related pieces to auto-import: tokens, emblems, trackers, mechanic helpers, dungeons, initiative, ring cards, and real cards.
 - The combo-piece generation button stays visible while the menu is collapsed, appends only missing related pieces, and reloads the imported images.
 - Real-card combo piece links can be one-way when Scryfall lists both directions; a basic land linked from a source card should not import that source card back.
@@ -31,6 +32,7 @@
 - Importing `Pestbrood Sloth` and `Pest [tsos] 8` keeps `Pest` on collector number `8`.
 - Printing `Experience` in token-opposite back mode uses its front image on the opposite side.
 - Printing four `Treasure`, one `Pest`, and one `Experience` uses four physical cards, with two empty opposite-side faces.
+- Printing can be narrowed to only game pieces from a loaded deck, or only regular cards from that same loaded deck.
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
 - Generating combo pieces skips disabled categories and does not duplicate related pieces already in the decklist.
 - Generating real-card combo pieces for `Gilt-Leaf Alchemist` appends `Forest [ecl] 283`, but generating from `Forest [ecl] 283` does not append `Gilt-Leaf Alchemist`.

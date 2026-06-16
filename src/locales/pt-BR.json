@@ -11,6 +11,8 @@
         "showPromoPrintings": null,
         "matchInputEditions": null,
         "includeBasicLands": null,
+        "includeCards": null,
+        "includeGamePieces": null,
         "showCutLines": null,
         "imageType": {
             "label": "Tipo de Imagem",

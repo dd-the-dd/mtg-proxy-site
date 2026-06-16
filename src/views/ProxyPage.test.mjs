@@ -63,6 +63,11 @@ describe('Deck Loading', async () => {
         expect(wrapper.find('input[name="combo-piece-real-card"]').exists()).toBe(true);
     });
 
+    test('Feature: Print content type filters are exposed beside the basic land filter.', async () => {
+        expect(wrapper.find('input[name="include-cards"]').exists()).toBe(true);
+        expect(wrapper.find('input[name="include-game-pieces"]').exists()).toBe(true);
+    });
+
     test('Feature: Bracketed set code selects token printing.', async () => {
         const component = wrapper.getCurrentComponent();
 
@@ -547,5 +552,75 @@ describe('Print layout', async () => {
 
         expect(ctx.printCapacity.missingCards).toBe(3);
         expect(ctx.printCapacity.missingGamePieces).toBe(3);
+    });
+
+    test('Feature: Print content type filters can print only game pieces from a loaded deck.', () => {
+        const data = wrapper.getCurrentComponent().data;
+        const ctx = wrapper.getCurrentComponent().ctx;
+
+        data.config.cardBacks = 'none';
+        data.config.includeCards = false;
+        data.config.includeGamePieces = true;
+        data.config.includeBasics = true;
+        data.cards = [
+            {
+                quantity: 1,
+                name: 'forest',
+                isBasic: true,
+                selectedOption: { urlFront: 'forest-front' },
+            },
+            {
+                quantity: 1,
+                name: 'lightning bolt',
+                isBasic: false,
+                selectedOption: { urlFront: 'bolt-front' },
+            },
+            {
+                quantity: 2,
+                name: 'treasure',
+                isBasic: false,
+                selectedOption: { urlFront: 'treasure-front', isToken: true, isGamePiece: true },
+            },
+        ];
+
+        expect(ctx.printSlotsFront.map(card => card.name)).toEqual(['treasure', 'treasure']);
+
+        data.config.includeCards = true;
+        data.config.includeBasics = false;
+    });
+
+    test('Feature: Print content type filters can print only regular cards from a loaded deck.', () => {
+        const data = wrapper.getCurrentComponent().data;
+        const ctx = wrapper.getCurrentComponent().ctx;
+
+        data.config.cardBacks = 'none';
+        data.config.includeCards = true;
+        data.config.includeGamePieces = false;
+        data.config.includeBasics = true;
+        data.cards = [
+            {
+                quantity: 1,
+                name: 'forest',
+                isBasic: true,
+                selectedOption: { urlFront: 'forest-front' },
+            },
+            {
+                quantity: 1,
+                name: 'lightning bolt',
+                isBasic: false,
+                selectedOption: { urlFront: 'bolt-front' },
+            },
+            {
+                quantity: 2,
+                name: 'treasure',
+                isBasic: false,
+                selectedOption: { urlFront: 'treasure-front', isToken: true, isGamePiece: true },
+            },
+        ];
+
+        expect(ctx.printSlotsFront.map(card => card.name)).toEqual(['forest', 'lightning bolt']);
+
+        data.config.includeGamePieces = true;
+        data.config.includeBasics = false;
     });
 });

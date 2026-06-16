@@ -109,6 +109,28 @@
               <label class="form-switch">
                 <input
                   type="checkbox"
+                  name="include-cards"
+                  v-model="config.includeCards"
+                >
+                <i class="form-icon" /> {{ $t('configuration.includeCards') }}
+              </label>
+            </div>
+
+            <div class="column col-12">
+              <label class="form-switch">
+                <input
+                  type="checkbox"
+                  name="include-game-pieces"
+                  v-model="config.includeGamePieces"
+                >
+                <i class="form-icon" /> {{ $t('configuration.includeGamePieces') }}
+              </label>
+            </div>
+
+            <div class="column col-12">
+              <label class="form-switch">
+                <input
+                  type="checkbox"
                   name="show-cut-lines"
                   v-model="config.showCutLines"
                 >
@@ -462,6 +484,8 @@ export default {
                 includePromo: false,
                 matchEditions: false,
                 includeBasics: false,
+                includeCards: true,
+                includeGamePieces: true,
                 showCutLines: false,
                 fixedPageSize: false,
                 imageType: "border_crop",
@@ -737,6 +761,8 @@ export default {
             this.config.includePromo = bindStorage('includePromo', (v) => v === "true");
             this.config.matchEditions = bindStorage('matchEditions', (v) => v === "true");
             this.config.includeBasics = bindStorage('includeBasics', (v) => v === "true");
+            this.config.includeCards = bindStorage('includeCards', (v) => v !== "false");
+            this.config.includeGamePieces = bindStorage('includeGamePieces', (v) => v !== "false");
             this.config.showCutLines = bindStorage('showCutLines', (v) => v === "true");
             this.config.fixedPageSize = bindStorage('fixedPageSize', (v) => v === "true");
             this.config.imageType = bindStorage('imageType', (v) => v ?? "border_crop");
@@ -811,6 +837,14 @@ export default {
         },
         shouldShowCard(card, face = "front") {
             if (!this.config.includeBasics && card.isBasic) {
+                return false;
+            }
+
+            if (card.selectedOption?.isGamePiece) {
+                if (!this.config.includeGamePieces) {
+                    return false;
+                }
+            } else if (!this.config.includeCards) {
                 return false;
             }
 
