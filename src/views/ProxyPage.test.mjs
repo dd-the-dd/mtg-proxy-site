@@ -37,6 +37,24 @@ describe('Deck Loading', async () => {
         expect(wrapper.findAll('.card-select').length).toBe(1);
     })
 
+    test('Feature: Related combo piece config is collapsible while generation stays available.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.comboPieceConfigOpen = false;
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('#generate-combo-pieces').exists()).toBe(true);
+        expect(wrapper.find('#combo-piece-config').exists()).toBe(false);
+
+        await wrapper.find('#toggle-combo-piece-config').trigger('click');
+
+        expect(wrapper.find('#generate-combo-pieces').exists()).toBe(true);
+        expect(wrapper.find('#combo-piece-config').exists()).toBe(true);
+        expect(wrapper.find('input[name="combo-piece-token"]').exists()).toBe(true);
+        expect(wrapper.find('input[name="combo-piece-player-helper"]').exists()).toBe(true);
+        expect(wrapper.find('input[name="combo-piece-real-card"]').exists()).toBe(true);
+    });
+
     test('Feature: Bracketed set code selects token printing.', async () => {
         const component = wrapper.getCurrentComponent();
 
@@ -164,6 +182,45 @@ describe('Deck Loading', async () => {
         expect(cards[0].name).toBe("aang's shelter");
         expect(cards[0].selectedOption.setCode).toBe('tle');
         expect(cards[0].selectedOption.collectorNumber).toBe('7');
+    });
+
+    test('Feature: Related combo piece generation appends missing selected piece types.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.comboPieceTypes.token = true;
+        component.data.config.comboPieceTypes.emblem = false;
+        component.data.config.comboPieceTypes.playerHelper = false;
+        component.data.config.comboPieceTypes.realCard = false;
+        component.data.config.decklist = 'Pestbrood Sloth';
+        await component.ctx.loadCardList();
+        await component.ctx.generateRelatedComboPieces();
+
+        expect(component.data.config.decklist).toContain('Pest [tsos] 9');
+        expect(component.data.cards.some(card => card.name === 'pest')).toBe(true);
+    });
+
+    test('Feature: Related combo piece generation skips disabled types and existing pieces.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.comboPieceTypes.token = false;
+        component.data.config.comboPieceTypes.emblem = false;
+        component.data.config.comboPieceTypes.playerHelper = true;
+        component.data.config.comboPieceTypes.realCard = false;
+        component.data.config.decklist = `
+            Pestbrood Sloth
+            Pest [tsos] 8
+            Katara, Waterbending Master
+        `;
+        await component.ctx.loadCardList();
+        await component.ctx.generateRelatedComboPieces();
+
+        const parsedLines = component.data.config.decklist
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean);
+
+        expect(parsedLines.filter(line => /^Pest\b/i.test(line)).length).toBe(1);
+        expect(component.data.config.decklist).toContain('Experience [ttdc] 34');
     });
 });
 

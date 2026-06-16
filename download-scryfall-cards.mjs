@@ -96,6 +96,22 @@ function isGamePiece(card) {
         /(^| — | \/\/ )(Dungeon|Emblem|Plane|Scheme)( — | \/\/ |$)/.test(card.type_line);
 }
 
+function comboPieceCategory(card, part) {
+    if (part.component === 'token') {
+        return 'token';
+    }
+
+    if (card.layout === 'emblem' || (card.type_line ?? '').includes('Emblem')) {
+        return 'emblem';
+    }
+
+    if (isGamePiece(card)) {
+        return 'playerHelper';
+    }
+
+    return 'realCard';
+}
+
 const stripped = cards.filter(card => {
     // Process the exclusions.
     return includedSets.includes(card.set) ||
@@ -134,6 +150,26 @@ const stripped = cards.filter(card => {
                 collectorNumber: token.collector_number,
             };
         });
+    const normalizedCardName = normalizeCardName(card.name);
+    const relatedGamePieces = isGamePiece(card) ? undefined : card.all_parts
+        ?.filter(part => ['combo_piece', 'token'].includes(part.component) && part.id !== card.id)
+        .map(part => {
+            return {
+                part,
+                card: cardsById.get(part.id),
+            };
+        })
+        .filter(({ card }) => card)
+        .filter(({ card }) => normalizeCardName(card.name) !== normalizedCardName)
+        .map(({ part, card }) => {
+            return {
+                name: normalizeCardName(card.name),
+                displayName: card.name,
+                setCode: card.set,
+                collectorNumber: card.collector_number,
+                category: comboPieceCategory(card, part),
+            };
+        });
 
     return {
         id: card.id,
@@ -152,6 +188,7 @@ const stripped = cards.filter(card => {
         isToken: card.layout === 'token' || card.layout === 'double_faced_token',
         isGamePiece: isGamePiece(card),
         relatedTokens: relatedTokens?.length ? relatedTokens : undefined,
+        relatedGamePieces: relatedGamePieces?.length ? relatedGamePieces : undefined,
         imageUris: {
             front: `https://cards.scryfall.io/border_crop/${card.reversible_face || 'front'}/${card.id.charAt(0)}/${card.id.charAt(1)}/${card.id}.jpg`,
             back: cardBackUri,
@@ -222,6 +259,7 @@ const minimized = stripped.sort((a, b) => {
             isToken: card.isToken ? true : undefined,
             ...(card.isGamePiece ? { isGamePiece: true } : {}),
             ...(card.relatedTokens ? { relatedTokens: card.relatedTokens } : {}),
+            ...(card.relatedGamePieces ? { relatedGamePieces: card.relatedGamePieces } : {}),
 
             urlFront: card.imageUris.front,
             urlBack: card.imageUris.back,

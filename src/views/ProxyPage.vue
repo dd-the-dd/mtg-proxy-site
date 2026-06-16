@@ -129,6 +129,63 @@
           </div>
           <div class="column col-12 divider" />
           <div class="columns">
+            <div class="column col-12 btn-group btn-group-block">
+              <button
+                id="toggle-combo-piece-config"
+                class="btn"
+                @click="config.comboPieceConfigOpen = !config.comboPieceConfigOpen"
+              >
+                {{ config.comboPieceConfigOpen ? 'Hide' : 'Show' }} Combo Pieces
+              </button>
+              <button
+                id="generate-combo-pieces"
+                class="btn btn-primary"
+                @click="generateRelatedComboPieces"
+              >
+                Generate
+              </button>
+            </div>
+            <div
+              v-if="config.comboPieceConfigOpen"
+              id="combo-piece-config"
+              class="column col-12"
+            >
+              <label class="form-switch">
+                <input
+                  type="checkbox"
+                  name="combo-piece-token"
+                  v-model="config.comboPieceTypes.token"
+                >
+                <i class="form-icon" /> Tokens
+              </label>
+              <label class="form-switch">
+                <input
+                  type="checkbox"
+                  name="combo-piece-emblem"
+                  v-model="config.comboPieceTypes.emblem"
+                >
+                <i class="form-icon" /> Emblems
+              </label>
+              <label class="form-switch">
+                <input
+                  type="checkbox"
+                  name="combo-piece-player-helper"
+                  v-model="config.comboPieceTypes.playerHelper"
+                >
+                <i class="form-icon" /> Player helpers
+              </label>
+              <label class="form-switch">
+                <input
+                  type="checkbox"
+                  name="combo-piece-real-card"
+                  v-model="config.comboPieceTypes.realCard"
+                >
+                <i class="form-icon" /> Real cards
+              </label>
+            </div>
+          </div>
+          <div class="column col-12 divider" />
+          <div class="columns">
             <div class="column col-12">
               <label class="form-label">
                 <span
@@ -380,6 +437,13 @@ export default {
                 cardBacks: "dfc",
                 tokenBackMode: "card",
                 cardsPerPage: null,
+                comboPieceConfigOpen: false,
+                comboPieceTypes: {
+                    token: true,
+                    emblem: true,
+                    playerHelper: true,
+                    realCard: false,
+                },
                 decklist: "",
             },
             sets: {},
@@ -642,6 +706,55 @@ export default {
             this.config.imageType = bindStorage('imageType', (v) => v ?? "border_crop");
             this.config.scale = bindStorage('scale', (v) => v ?? "normal");
             this.config.cardBacks = bindStorage('cardBacks', (v) => v ?? "dfc");
+            this.config.comboPieceConfigOpen = bindStorage('comboPieceConfigOpen', (v) => v === "true");
+            this.config.comboPieceTypes.token = bindStorage('comboPieceToken', (v) => v !== "false");
+            this.config.comboPieceTypes.emblem = bindStorage('comboPieceEmblem', (v) => v !== "false");
+            this.config.comboPieceTypes.playerHelper = bindStorage('comboPiecePlayerHelper', (v) => v !== "false");
+            this.config.comboPieceTypes.realCard = bindStorage('comboPieceRealCard', (v) => v === "true");
+        },
+        formatRelatedGamePieceLine(gamePiece) {
+            return `${gamePiece.displayName ?? gamePiece.name} [${gamePiece.setCode}] ${gamePiece.collectorNumber}`;
+        },
+        getExistingDecklistNames() {
+            return new Set(parseDecklist(this.config.decklist).lines.map(line => line.name));
+        },
+        getMissingRelatedGamePieces() {
+            const existingNames = this.getExistingDecklistNames();
+            const addedNames = new Set();
+            const missingGamePieces = [];
+
+            for (const card of this.cards) {
+                for (const gamePiece of card.selectedOption?.relatedGamePieces ?? []) {
+                    if (!this.config.comboPieceTypes[gamePiece.category]) {
+                        continue;
+                    }
+
+                    if (existingNames.has(gamePiece.name) || addedNames.has(gamePiece.name)) {
+                        continue;
+                    }
+
+                    missingGamePieces.push(gamePiece);
+                    addedNames.add(gamePiece.name);
+                }
+            }
+
+            return missingGamePieces;
+        },
+        async generateRelatedComboPieces() {
+            if (this.cards.length === 0 && this.config.decklist.trim()) {
+                await this.loadCardList();
+            }
+
+            const missingGamePieces = this.getMissingRelatedGamePieces();
+            if (missingGamePieces.length > 0) {
+                const additions = missingGamePieces.map(piece => this.formatRelatedGamePieceLine(piece));
+                this.config.decklist = [
+                    this.config.decklist.trimEnd(),
+                    additions.join("\n"),
+                ].filter(Boolean).join("\n");
+            }
+
+            await this.loadCardList();
         },
         shouldShowSetOption(card, option) {
             // FIXME: Need a better filter method to detect promo-only garbage.
@@ -741,12 +854,13 @@ export default {
 
             const { lines, errors } = parseDecklist(this.config.decklist);
             this.errors = errors;
+            const dataset = await ScryfallDatasetAsync();
             
 
             const _cards = [];
 
             for (let line of lines) {
-                let cardLookup = (await ScryfallDatasetAsync()).cards[line.name];
+                let cardLookup = dataset.cards[line.name];
 
                 if (!cardLookup) {
                     this.errors.push(line.name);
@@ -774,6 +888,7 @@ export default {
                             isToken: option.isToken,
                             isGamePiece: option.isGamePiece,
                             relatedTokens: option.relatedTokens,
+                            relatedGamePieces: option.relatedGamePieces,
                         };
                     }),
                     isBasic: basicLands.includes(line.name.toLowerCase()),

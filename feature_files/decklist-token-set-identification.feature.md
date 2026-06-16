@@ -14,6 +14,8 @@
 - Game pieces include tokens, reminders, trackers, mechanic helpers, dungeons, initiative, ring cards, and emblems for print back behavior.
 - Game pieces are paired on opposite sides with different game pieces when possible; identical game pieces leave the opposite side empty instead of duplicating.
 - The print controls show open physical card slots and open game piece faces for the current page size.
+- A collapsed combo-piece menu lets users choose which related pieces to auto-import: tokens, emblems, player helpers, and real cards.
+- The combo-piece generation button stays visible while the menu is collapsed, appends only missing related pieces, and reloads the imported images.
 - Moxfield tags such as `#!ramp` are ignored after card edition text.
 - Flavor names such as `Aang's Shelter` resolve to the original Scryfall card printing.
 - If no matching token printing is found, import falls back to the existing default selection behavior.
@@ -26,6 +28,8 @@
 - Importing `Pestbrood Sloth` and `Pest [tsos] 8` keeps `Pest` on collector number `8`.
 - Printing `Experience` in token-opposite back mode uses its front image on the opposite side.
 - Printing four `Treasure`, one `Pest`, and one `Experience` uses four physical cards, with two empty opposite-side faces.
+- Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
+- Generating combo pieces skips disabled categories and does not duplicate related pieces already in the decklist.
 - Importing `Aang's Shelter` selects `Teferi's Protection` from `TLE` collector number `7`.
 - Importing a token without set information keeps using the existing default.
 
@@ -41,3 +45,4 @@
 - Feature: Bracketed set code and collector number select exact token printing.
 - Feature: Associated session cards complete missing token edition text.
 - Feature: Flavor name imports resolve to original card printings.
+- Feature: Related combo piece generation appends missing selected piece types.
