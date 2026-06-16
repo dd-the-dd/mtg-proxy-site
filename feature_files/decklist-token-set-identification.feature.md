@@ -18,6 +18,7 @@
 - A collapsed combo-piece menu lets users choose which related pieces to auto-import: tokens, emblems, trackers, mechanic helpers, dungeons, initiative, ring cards, and real cards.
 - The combo-piece generation button stays visible while the menu is collapsed, appends only missing related pieces, and reloads the imported images.
 - Real-card combo piece links can be one-way when Scryfall lists both directions; a basic land linked from a source card should not import that source card back.
+- Real-card combo links to cards with `conjure` in their oracle text are one-way; non-conjure cards do not import the cards that conjure them, while conjure cards can import the cards they create.
 - Moxfield tags such as `#!ramp` are ignored after card edition text.
 - Flavor names such as `Aang's Shelter` resolve to the original Scryfall card printing.
 - If no matching token printing is found, import falls back to the existing default selection behavior.
@@ -33,6 +34,7 @@
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
 - Generating combo pieces skips disabled categories and does not duplicate related pieces already in the decklist.
 - Generating real-card combo pieces for `Gilt-Leaf Alchemist` appends `Forest [ecl] 283`, but generating from `Forest [ecl] 283` does not append `Gilt-Leaf Alchemist`.
+- Generating real-card combo pieces for `Perforator Crocodile [ymkm] 11` appends `Stab Wound [pio] 111`, but generating from `Stab Wound [pio] 111` does not append `Perforator Crocodile`.
 - Importing `Aang's Shelter` selects `Teferi's Protection` from `TLE` collector number `7`.
 - Importing a token without set information keeps using the existing default.
 

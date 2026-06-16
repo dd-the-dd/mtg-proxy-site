@@ -132,10 +132,25 @@ function comboPieceCategory(card, part) {
     return 'realCard';
 }
 
+function cardOracleText(card) {
+    return [
+        card.oracle_text,
+        ...(card.card_faces ?? []).map(face => face.oracle_text),
+    ].filter(Boolean).join('\n');
+}
+
+function hasConjureText(card) {
+    return /conjure/i.test(cardOracleText(card));
+}
+
 function shouldIncludeRelatedGamePiece(sourceCard, relatedCard, part) {
     const category = comboPieceCategory(relatedCard, part);
 
     if (category === 'realCard' && sourceCard.type_line?.includes('Basic Land')) {
+        return false;
+    }
+
+    if (category === 'realCard' && hasConjureText(relatedCard) && !hasConjureText(sourceCard)) {
         return false;
     }
 

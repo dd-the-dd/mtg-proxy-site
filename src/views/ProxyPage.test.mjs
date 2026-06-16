@@ -286,6 +286,30 @@ describe('Deck Loading', async () => {
 
         expect(component.data.config.decklist).toContain('Forest [ecl] 283');
     });
+
+    test('Feature: Related conjure real cards are one-way from conjuring cards to conjured cards.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.comboPieceTypes.token = false;
+        component.data.config.comboPieceTypes.emblem = false;
+        component.data.config.comboPieceTypes.tracker = false;
+        component.data.config.comboPieceTypes.mechanicHelper = false;
+        component.data.config.comboPieceTypes.dungeon = false;
+        component.data.config.comboPieceTypes.initiative = false;
+        component.data.config.comboPieceTypes.ring = false;
+        component.data.config.comboPieceTypes.realCard = true;
+        component.data.config.decklist = 'Stab Wound [pio] 111';
+        await component.ctx.loadCardList();
+        await component.ctx.generateRelatedComboPieces();
+
+        expect(component.data.config.decklist).not.toContain('Perforator Crocodile');
+
+        component.data.config.decklist = 'Perforator Crocodile [ymkm] 11';
+        await component.ctx.loadCardList();
+        await component.ctx.generateRelatedComboPieces();
+
+        expect(component.data.config.decklist).toContain('Stab Wound [pio] 111');
+    });
 });
 
 describe('shouldShowSetOption()', async () => {
