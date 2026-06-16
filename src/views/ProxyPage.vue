@@ -543,14 +543,15 @@ export default {
                     this.config.imageType,
                 );
             } else {
-                if (card.selectedOption.urlBack !== undefined) {
-                    return setImageVersion(
-                        card.selectedOption.urlBack,
-                        this.config.imageType,
-                    );
-                } else {
-                    return `./card_back_${this.config.imageType}.jpg`;
-                }
+              if (card.selectedOption.urlBack !== undefined) {
+                return setImageVersion(
+                  card.selectedOption.urlBack,
+                  this.config.imageType,
+                );
+              } else {
+                console.warn(`No urlBack for ${card.name}, using default back image`);
+                return `/card_back_${this.config.imageType}.jpg`;
+              }
             }
         },
         updateSessionSet(cardName, setOption, cardIndex) {
