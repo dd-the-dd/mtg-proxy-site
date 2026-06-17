@@ -42,6 +42,7 @@
 - Confirming an advanced order for opposite-side game-piece printing preserves that chosen order by pairing slots in sequence instead of recalculating automatic token pairs.
 - In opposite-side game-piece mode, the advanced order preview and the printed pages show the same front page slots and back page slots.
 - Local app sessions store the deck text, loaded cards, selected printings, print settings, errors, and chosen print order under a user-visible session name.
+- Local app sessions persist deck text quantity edits by synchronizing loaded card quantities from the current deck text before saving.
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
 - Generating combo pieces skips disabled categories and does not duplicate related pieces already in the decklist.
 - Generating real-card combo pieces for `Gilt-Leaf Alchemist` appends `Forest [ecl] 283`, but generating from `Forest [ecl] 283` does not append `Gilt-Leaf Alchemist`.

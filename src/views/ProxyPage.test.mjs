@@ -70,6 +70,43 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Local app sessions persist quantity edits from deck text into loaded cards.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        while(!component.data.activeSessionId) {
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        component.data.config.decklist = '1 Pest [tsos] 9';
+        component.data.cards = [
+            {
+                quantity: 1,
+                name: 'pest',
+                requestedSet: 'tsos',
+                requestedCollectorNumber: '9',
+                isBasic: false,
+                selectedOption: {
+                    urlFront: 'pest-front',
+                    isGamePiece: true,
+                    isToken: true,
+                },
+            },
+        ];
+        await component.ctx.saveActiveSession();
+        const savedSessionId = component.data.activeSessionId;
+
+        component.data.config.decklist = '4 Pest [tsos] 9';
+        await component.ctx.saveActiveSession();
+        await component.ctx.createLocalSession();
+        await component.ctx.loadLocalSession(savedSessionId);
+
+        expect(component.data.config.decklist).toBe('4 Pest [tsos] 9');
+        expect(component.data.cards[0].quantity).toBe(4);
+
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
     test('Feature: Local app startup restores the first saved session from storage.', async () => {
         globalThis.__resetLocalSessions();
         globalThis.__localSessionStore.sessions.push({

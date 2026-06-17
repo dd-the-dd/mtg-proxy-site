@@ -911,10 +911,46 @@ export default {
             const restored = indexes.map(index => baseSlots[index]).filter(Boolean);
             this.customPrintOrderCards = restored.length === baseSlots.length ? restored : [];
         },
+        applyDeckTextQuantities(cards) {
+            const { lines } = parseDecklist(this.config.decklist);
+            const usedLineIndexes = new Set();
+
+            for (const card of cards) {
+                const lineIndex = lines.findIndex((line, index) => {
+                    if (usedLineIndexes.has(index) || line.name !== card.name) {
+                        return false;
+                    }
+
+                    if (line.set && card.requestedSet && line.set !== card.requestedSet) {
+                        return false;
+                    }
+
+                    if (
+                        line.collectorsNumber &&
+                        card.requestedCollectorNumber &&
+                        String(line.collectorsNumber).toLowerCase() !== String(card.requestedCollectorNumber).toLowerCase()
+                    ) {
+                        return false;
+                    }
+
+                    return true;
+                });
+
+                if (lineIndex === -1) {
+                    continue;
+                }
+
+                usedLineIndexes.add(lineIndex);
+                card.quantity = lines[lineIndex].quantity;
+            }
+        },
         captureSessionState() {
+            const cards = this.cloneForStorage(this.cards);
+            this.applyDeckTextQuantities(cards);
+
             return {
                 config: this.cloneForStorage(this.config),
-                cards: this.cloneForStorage(this.cards),
+                cards,
                 errors: this.cloneForStorage(this.errors),
                 sessionSetSelections: this.cloneForStorage(this.sessionSetSelections),
                 printOrderIndexes: this.capturePrintOrderIndexes(),
