@@ -487,8 +487,9 @@
             Reset
           </button>
           <button
+            id="apply-print-order"
             class="btn btn-primary"
-            @click="closePrintOrderModal"
+            @click="applyPrintOrder"
           >
             Done
           </button>
@@ -602,6 +603,7 @@ export default {
             printOrderModalOpen: false,
             selectedPrintOrderSlotIndex: null,
             customPrintOrderCards: [],
+            printOrderDraftCards: [],
         };
     },
     computed: {
@@ -682,7 +684,7 @@ export default {
         printOrderPreviewPages() {
             const pageSize = this.getPrintPageSize();
             const pages = [];
-            const slots = this.printSlotsFront;
+            const slots = this.printOrderModalOpen ? this.printOrderDraftCards : this.printSlotsFront;
 
             for (let i = 0; i < slots.length; i += pageSize) {
                 const page = slots.slice(i, i + pageSize).map((card, offset) => {
@@ -777,17 +779,11 @@ export default {
             }
 
             const slots = [];
-            for (const card of this.cards) {
-                if (!this.shouldShowCard(card, "front")) {
-                    continue;
-                }
+            for (const card of this.printSlotsFront) {
+                slots.push({ card, face: "front" });
 
-                for (let i = 0; i < card.quantity; i += 1) {
-                    slots.push({ card, face: "front" });
-
-                    if (this.shouldShowCard(card, "back")) {
-                        slots.push({ card, face: "back" });
-                    }
+                if (this.shouldShowCard(card, "back")) {
+                    slots.push({ card, face: "back" });
                 }
             }
 
@@ -820,12 +816,15 @@ export default {
             ].join("|");
         },
         isCustomPrintOrderCurrent(baseSlots) {
-            if (this.customPrintOrderCards.length !== baseSlots.length || baseSlots.length === 0) {
+            return this.isPrintOrderCurrent(this.customPrintOrderCards, baseSlots);
+        },
+        isPrintOrderCurrent(orderCards, baseSlots) {
+            if (orderCards.length !== baseSlots.length || baseSlots.length === 0) {
                 return false;
             }
 
             const remainingSlots = [...baseSlots];
-            return this.customPrintOrderCards.every(card => {
+            return orderCards.every(card => {
                 const index = remainingSlots.indexOf(card);
                 if (index === -1) {
                     return false;
@@ -842,23 +841,35 @@ export default {
         },
         openPrintOrderModal() {
             this.ensureCustomPrintOrder();
+            this.printOrderDraftCards = [...this.printSlotsFront];
             this.selectedPrintOrderSlotIndex = null;
             this.printOrderModalOpen = true;
         },
         closePrintOrderModal() {
             this.selectedPrintOrderSlotIndex = null;
+            this.printOrderDraftCards = [];
             this.printOrderModalOpen = false;
         },
         resetPrintOrder() {
             this.customPrintOrderCards = [];
+            this.printOrderDraftCards = this.printOrderModalOpen ? [...this.printSlotsFrontBase] : [];
             this.selectedPrintOrderSlotIndex = null;
+        },
+        applyPrintOrder() {
+            if (this.isPrintOrderCurrent(this.printOrderDraftCards, this.printSlotsFrontBase)) {
+                this.customPrintOrderCards = [...this.printOrderDraftCards];
+            }
+
+            this.closePrintOrderModal();
         },
         selectPrintOrderSlot(slotIndex) {
             if (slotIndex === null) {
                 return;
             }
 
-            this.ensureCustomPrintOrder();
+            if (!this.isPrintOrderCurrent(this.printOrderDraftCards, this.printSlotsFrontBase)) {
+                this.printOrderDraftCards = [...this.printSlotsFront];
+            }
 
             if (this.selectedPrintOrderSlotIndex === null) {
                 this.selectedPrintOrderSlotIndex = slotIndex;
@@ -870,9 +881,9 @@ export default {
                 return;
             }
 
-            const selectedCard = this.customPrintOrderCards[this.selectedPrintOrderSlotIndex];
-            this.customPrintOrderCards[this.selectedPrintOrderSlotIndex] = this.customPrintOrderCards[slotIndex];
-            this.customPrintOrderCards[slotIndex] = selectedCard;
+            const selectedCard = this.printOrderDraftCards[this.selectedPrintOrderSlotIndex];
+            this.printOrderDraftCards[this.selectedPrintOrderSlotIndex] = this.printOrderDraftCards[slotIndex];
+            this.printOrderDraftCards[slotIndex] = selectedCard;
             this.selectedPrintOrderSlotIndex = null;
         },
         buildPairedGamePieceSlots(cards) {

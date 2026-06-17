@@ -17,6 +17,7 @@
 - The print controls show open physical card slots and open game piece faces for the current page size.
 - Print controls can include or exclude regular cards and game pieces independently after a decklist has been loaded.
 - Loaded cards can be reordered before printing in an advanced print-order modal by selecting one print-slot preview and then another, so users can recover alignment or place specific cards on specific print slots without editing the deck text.
+- The advanced print-order modal applies its draft order back to the parent print state only when confirmed, and the Print button uses that applied order.
 - A collapsed combo-piece menu lets users choose which related pieces to auto-import: tokens, emblems, trackers, mechanic helpers, dungeons, initiative, ring cards, and real cards.
 - The combo-piece generation button stays visible while the menu is collapsed, appends only missing related pieces, and reloads the imported images.
 - Real-card combo piece links can be one-way when Scryfall lists both directions; a basic land linked from a source card should not import that source card back.

@@ -82,12 +82,62 @@ describe('Deck Loading', async () => {
 
         await slots[2].trigger('click');
 
-        expect(component.ctx.printSlotsFront.map(card => card.name)).toEqual(['charlie', 'bravo', 'alpha']);
+        expect(component.data.printOrderDraftCards.map(card => card.name)).toEqual(['charlie', 'bravo', 'alpha']);
+        expect(component.ctx.printSlotsFront.map(card => card.name)).toEqual(['alpha', 'bravo', 'charlie']);
         expect(component.data.cards.map(card => card.name)).toEqual(['alpha', 'bravo', 'charlie']);
         expect(component.data.selectedPrintOrderSlotIndex).toBe(null);
         expect(component.data.printOrderModalOpen).toBe(true);
 
-        component.ctx.closePrintOrderModal();
+        await wrapper.find('#apply-print-order').trigger('click');
+
+        expect(component.data.printOrderModalOpen).toBe(false);
+        expect(component.ctx.printSlotsFront.map(card => card.name)).toEqual(['charlie', 'bravo', 'alpha']);
+
+        component.ctx.resetPrintOrder();
+    });
+
+    test('Feature: Applied advanced print order is used when print is clicked.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const originalPrint = window.print;
+        const printedOrders = [];
+
+        window.print = () => {
+            printedOrders.push(component.ctx.printPages[0].slots.map(slot => slot.card.name));
+        };
+
+        component.data.config.cardBacks = 'dfc';
+        component.data.config.fixedPageSize = false;
+        component.data.config.cardsPerPage = null;
+        component.data.cards = [
+            {
+                quantity: 1,
+                name: 'alpha',
+                isBasic: false,
+                selectedOption: { urlFront: 'alpha-front' },
+            },
+            {
+                quantity: 1,
+                name: 'bravo',
+                isBasic: false,
+                selectedOption: { urlFront: 'bravo-front' },
+            },
+            {
+                quantity: 1,
+                name: 'charlie',
+                isBasic: false,
+                selectedOption: { urlFront: 'charlie-front' },
+            },
+        ];
+
+        component.ctx.openPrintOrderModal();
+        component.ctx.selectPrintOrderSlot(0);
+        component.ctx.selectPrintOrderSlot(2);
+        component.ctx.applyPrintOrder();
+        component.ctx.printList();
+
+        expect(printedOrders).toEqual([['charlie', 'bravo', 'alpha']]);
+
+        window.print = originalPrint;
         component.ctx.resetPrintOrder();
     });
 
