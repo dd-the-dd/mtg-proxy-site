@@ -3,6 +3,51 @@
     <HelpModal ref="helpModal" />
 
     <div class="columns">
+      <div
+        v-if="localAppEnabled"
+        id="local-session-menu"
+        class="column col-2 col-sm-12 mb-2"
+        :class="{ 'local-session-menu-collapsed': !sessionsMenuOpen }"
+      >
+        <button
+          id="toggle-session-menu"
+          class="btn btn-block"
+          @click="sessionsMenuOpen = !sessionsMenuOpen"
+        >
+          {{ sessionsMenuOpen ? 'Sessions' : 'Sessions >' }}
+        </button>
+        <div v-if="sessionsMenuOpen" class="local-session-menu-body">
+          <button
+            id="new-local-session"
+            class="btn btn-primary btn-block"
+            @click="createLocalSession"
+          >
+            + New Session
+          </button>
+          <div v-if="activeSessionId" class="form-group mt-2">
+            <label class="form-label" for="local-session-name">Name</label>
+            <input
+              id="local-session-name"
+              class="form-input"
+              type="text"
+              v-model="activeSessionName"
+              @change="scheduleSessionSave"
+            >
+          </div>
+          <div class="menu local-session-list">
+            <button
+              v-for="session in localSessions"
+              :key="session.id"
+              type="button"
+              class="menu-item btn btn-link local-session-item"
+              :class="{ active: session.id === activeSessionId }"
+              @click="loadLocalSession(session.id)"
+            >
+              {{ session.name }}
+            </button>
+          </div>
+        </div>
+      </div>
       <div class="column col-3 col-sm-12 mb-2" style="z-index: 300">
         <div id="config" class="form-group p-sticky">
           <div class="form-group">
@@ -349,7 +394,10 @@
         </div>
       </div>
 
-      <div class="column col-9 col-sm-12">
+      <div
+        class="column col-sm-12"
+        :class="localAppEnabled ? 'col-7' : 'col-9'"
+      >
         <div
           class="empty"
           v-show="cards.length === 0 && errors.length === 0"
@@ -536,6 +584,7 @@
 
 <script>
 import { parseDecklist } from "../helpers/DecklistParser.mjs";
+import { createSessionStorage } from "../helpers/SessionStorage.mjs";
 import { bindStorage } from "../helpers/VueLocalStorage.mjs";
 import ImageLoader from "../components/ImageLoader.vue";
 import HelpModal from "../components/HelpModal.vue";
@@ -559,6 +608,37 @@ const basicLands = [
     "snow-covered mountain",
 ];
 
+function createDefaultConfig() {
+    return {
+        includeDigital: false,
+        includePromo: false,
+        matchEditions: false,
+        includeBasics: false,
+        includeCards: true,
+        includeGamePieces: true,
+        showCutLines: false,
+        fixedPageSize: false,
+        imageType: "border_crop",
+        scale: "normal",
+        cardBacks: "dfc",
+        tokenBackMode: "opposite",
+        tokenPlacementMode: "auto",
+        cardsPerPage: null,
+        comboPieceConfigOpen: false,
+        comboPieceTypes: {
+            token: true,
+            emblem: true,
+            tracker: true,
+            mechanicHelper: true,
+            dungeon: true,
+            initiative: true,
+            ring: true,
+            realCard: false,
+        },
+        decklist: "",
+    };
+}
+
 function setImageVersion(url, version) {
     if (/cards\.scryfall\.io/.test(url)) {
         return url.replace(/\/(border_crop|normal|large|small|art_crop|png)\//, `/${version}/`);
@@ -580,34 +660,7 @@ export default {
     },
     data() {
         return {
-            config: {
-                includeDigital: false,
-                includePromo: false,
-                matchEditions: false,
-                includeBasics: false,
-                includeCards: true,
-                includeGamePieces: true,
-                showCutLines: false,
-                fixedPageSize: false,
-                imageType: "border_crop",
-                scale: "normal",
-                cardBacks: "dfc",
-                tokenBackMode: "opposite",
-                tokenPlacementMode: "auto",
-                cardsPerPage: null,
-                comboPieceConfigOpen: false,
-                comboPieceTypes: {
-                    token: true,
-                    emblem: true,
-                    tracker: true,
-                    mechanicHelper: true,
-                    dungeon: true,
-                    initiative: true,
-                    ring: true,
-                    realCard: false,
-                },
-                decklist: "",
-            },
+            config: createDefaultConfig(),
             sets: {},
             tokenPool: [],
             nextTokenBackIndex: 0,
@@ -618,7 +671,50 @@ export default {
             selectedPrintOrderSlotIndex: null,
             customPrintOrderCards: [],
             printOrderDraftCards: [],
+            localAppEnabled: import.meta.env.VITE_LOCAL_APP === 'true',
+            sessionsMenuOpen: true,
+            localSessionStorage: createSessionStorage(),
+            localSessions: [],
+            activeSessionId: null,
+            activeSessionName: '',
+            sessionSaveTimer: null,
+            restoringSession: false,
         };
+    },
+    watch: {
+        config: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        cards: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        errors: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        sessionSetSelections: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        customPrintOrderCards: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        activeSessionName() {
+            this.scheduleSessionSave();
+        },
     },
     computed: {
         cardCountWhenPrinting() {
@@ -784,12 +880,159 @@ export default {
             return toPages(slots, false);
         },
     },
-    mounted() {
+    async mounted() {
         // Trigger an immediate load of the card list + set names.
         this.loadSetList();
         this.initConfig();
+        await this.initLocalSessions();
+    },
+    beforeUnmount() {
+        clearTimeout(this.sessionSaveTimer);
     },
     methods: {
+        cloneForStorage(value) {
+            return JSON.parse(JSON.stringify(value));
+        },
+        capturePrintOrderIndexes() {
+            const baseSlots = [...this.printSlotsFrontBase];
+
+            return this.customPrintOrderCards.map(card => {
+                const index = baseSlots.indexOf(card);
+                if (index === -1) {
+                    return null;
+                }
+
+                baseSlots[index] = null;
+                return index;
+            });
+        },
+        restorePrintOrderIndexes(indexes = []) {
+            const baseSlots = this.printSlotsFrontBase;
+            const restored = indexes.map(index => baseSlots[index]).filter(Boolean);
+            this.customPrintOrderCards = restored.length === baseSlots.length ? restored : [];
+        },
+        captureSessionState() {
+            return {
+                config: this.cloneForStorage(this.config),
+                cards: this.cloneForStorage(this.cards),
+                errors: this.cloneForStorage(this.errors),
+                sessionSetSelections: this.cloneForStorage(this.sessionSetSelections),
+                printOrderIndexes: this.capturePrintOrderIndexes(),
+                nextTokenBackIndex: this.nextTokenBackIndex,
+            };
+        },
+        async restoreSessionState(state) {
+            this.restoringSession = true;
+
+            const config = {
+                ...createDefaultConfig(),
+                ...(state?.config ?? {}),
+                comboPieceTypes: {
+                    ...createDefaultConfig().comboPieceTypes,
+                    ...(state?.config?.comboPieceTypes ?? {}),
+                },
+            };
+
+            for (const [key, value] of Object.entries(config)) {
+                this.config[key] = value;
+            }
+
+            this.cards = this.cloneForStorage(state?.cards ?? []);
+            this.errors = this.cloneForStorage(state?.errors ?? []);
+            this.sessionSetSelections = this.cloneForStorage(state?.sessionSetSelections ?? {});
+            this.nextTokenBackIndex = state?.nextTokenBackIndex ?? 0;
+            this.printOrderDraftCards = [];
+            this.selectedPrintOrderSlotIndex = null;
+            this.printOrderModalOpen = false;
+            this.restorePrintOrderIndexes(state?.printOrderIndexes ?? []);
+
+            await this.$nextTick();
+            this.restoringSession = false;
+        },
+        async initLocalSessions() {
+            if (!this.localAppEnabled || !(await this.localSessionStorage.isEnabled())) {
+                return;
+            }
+
+            this.localSessions = await this.localSessionStorage.listSessions();
+            if (this.localSessions.length > 0) {
+                await this.loadLocalSession(this.localSessions[0].id);
+                return;
+            }
+
+            await this.createLocalSession();
+        },
+        async createLocalSession() {
+            if (!this.localAppEnabled) {
+                return;
+            }
+
+            await this.flushPendingSessionSave();
+            const name = `Session ${this.localSessions.length + 1}`;
+            await this.restoreSessionState(null);
+            const session = await this.localSessionStorage.createSession(name, this.captureSessionState());
+            this.activeSessionId = session.id;
+            this.activeSessionName = session.name;
+            this.localSessions = await this.localSessionStorage.listSessions();
+        },
+        async loadLocalSession(id) {
+            if (!this.localAppEnabled) {
+                return;
+            }
+
+            if (id === this.activeSessionId) {
+                return;
+            }
+
+            await this.flushPendingSessionSave();
+            const session = await this.localSessionStorage.loadSession(id);
+            this.restoringSession = true;
+            this.activeSessionId = session.id;
+            this.activeSessionName = session.name;
+            await this.restoreSessionState(session.state);
+        },
+        async flushPendingSessionSave() {
+            if (!this.sessionSaveTimer) {
+                return;
+            }
+
+            clearTimeout(this.sessionSaveTimer);
+            this.sessionSaveTimer = null;
+            await this.saveActiveSession();
+        },
+        scheduleSessionSave() {
+            if (
+                import.meta.env.MODE === 'test' ||
+                !this.localAppEnabled ||
+                !this.activeSessionId ||
+                this.restoringSession
+            ) {
+                return;
+            }
+
+            clearTimeout(this.sessionSaveTimer);
+            this.sessionSaveTimer = setTimeout(() => {
+                this.sessionSaveTimer = null;
+                this.saveActiveSession();
+            }, 350);
+        },
+        async saveActiveSession() {
+            if (!this.localAppEnabled || !this.activeSessionId || this.restoringSession) {
+                return;
+            }
+
+            const session = await this.localSessionStorage.saveSession({
+                id: this.activeSessionId,
+                name: this.activeSessionName || 'Untitled Session',
+                state: this.captureSessionState(),
+            });
+
+            this.localSessions = this.localSessions.map(localSession => {
+                return localSession.id === session.id
+                    ? { id: session.id, name: session.name, updatedAt: session.updatedAt }
+                    : localSession;
+            });
+        },
         buildPrintOrderPreviewPages(indexedSlots) {
             const toPreviewPages = (slots, isBack, pageSize = null) => {
                 const buildSlot = (slot, pageStart, offset) => {
@@ -1394,6 +1637,50 @@ export default {
 
 #config {
     top: 0.6rem;
+}
+
+#local-session-menu {
+    position: sticky;
+    top: 0.6rem;
+    z-index: 320;
+}
+
+.local-session-menu-body {
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    margin-top: 0.4rem;
+    padding: 0.4rem;
+}
+
+.local-session-list {
+    margin-top: 0.4rem;
+    max-height: 18rem;
+    overflow-y: auto;
+}
+
+.local-session-item {
+    display: block;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+
+    &.active {
+        background: #f1f1fc;
+        color: #5755d9;
+        font-weight: 600;
+    }
+}
+
+html.dark-theme {
+    .local-session-menu-body {
+        border-color: #667085;
+    }
+
+    .local-session-item.active {
+        background: #303742;
+    }
 }
 
 #slot-usage {

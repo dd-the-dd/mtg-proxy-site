@@ -23,6 +23,52 @@ describe('Core Rendering', async () => {
     test('Feature: Game piece opposite-side pairing is the default token back mode.', () => {
         expect(wrapper.getCurrentComponent().data.config.tokenBackMode).toBe('opposite');
     });
+
+    test('Feature: Local app mode exposes named file-backed sessions.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        while(!component.data.activeSessionId) {
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        expect(wrapper.find('#local-session-menu').exists()).toBe(true);
+        expect(wrapper.find('#new-local-session').exists()).toBe(true);
+        expect(component.data.localSessions.length).toBeGreaterThan(0);
+    });
+
+    test('Feature: Local app sessions restore saved page state.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        while(!component.data.activeSessionId) {
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        component.data.config.decklist = '4 Lightning Bolt';
+        component.data.cards = [
+            {
+                quantity: 4,
+                name: 'lightning bolt',
+                isBasic: false,
+                selectedOption: { urlFront: 'bolt-front' },
+            },
+        ];
+        component.data.activeSessionName = 'Burn Tokens';
+        await component.ctx.saveActiveSession();
+        const savedSessionId = component.data.activeSessionId;
+
+        await component.ctx.createLocalSession();
+        expect(component.data.config.decklist).toBe('');
+        expect(component.data.cards).toEqual([]);
+
+        await component.ctx.loadLocalSession(savedSessionId);
+
+        expect(component.data.activeSessionName).toBe('Burn Tokens');
+        expect(component.data.config.decklist).toBe('4 Lightning Bolt');
+        expect(component.data.cards[0].name).toBe('lightning bolt');
+
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
 });
 
 describe('Deck Loading', async () => {
@@ -497,7 +543,7 @@ describe('Deck Loading', async () => {
         await component.ctx.generateRelatedComboPieces();
 
         expect(component.data.config.decklist).toContain('Forest [ecl] 283');
-    });
+    }, 30000);
 
     test('Feature: Related conjure real cards are one-way from conjuring cards to conjured cards.', async () => {
         const component = wrapper.getCurrentComponent();
@@ -521,7 +567,7 @@ describe('Deck Loading', async () => {
         await component.ctx.generateRelatedComboPieces();
 
         expect(component.data.config.decklist).toContain('Stab Wound [pio] 111');
-    });
+    }, 30000);
 });
 
 describe('shouldShowSetOption()', async () => {

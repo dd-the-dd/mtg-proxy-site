@@ -20,6 +20,7 @@
 - The advanced print-order modal applies its draft order back to the parent print state only when confirmed, and the Print button uses that applied order.
 - Game-piece opposite-side printing can use automatic token placement or the confirmed advanced print order; confirming advanced placement switches token placement to the chosen order.
 - The advanced print-order modal previews the same front/back page structure as printing, including mirrored back pages, rather than showing only the raw source order.
+- When local app mode is enabled by environment variable, a collapsible session menu stores named page states in local file-backed storage and restores them after reload.
 - A collapsed combo-piece menu lets users choose which related pieces to auto-import: tokens, emblems, trackers, mechanic helpers, dungeons, initiative, ring cards, and real cards.
 - The combo-piece generation button stays visible while the menu is collapsed, appends only missing related pieces, and reloads the imported images.
 - Real-card combo piece links can be one-way when Scryfall lists both directions; a basic land linked from a source card should not import that source card back.
@@ -40,6 +41,7 @@
 - Clicking one print-slot preview in the advanced order modal highlights it; clicking a second preview swaps their print order while preserving their selected printings.
 - Confirming an advanced order for opposite-side game-piece printing preserves that chosen order by pairing slots in sequence instead of recalculating automatic token pairs.
 - In opposite-side game-piece mode, the advanced order preview and the printed pages show the same front page slots and back page slots.
+- Local app sessions store the deck text, loaded cards, selected printings, print settings, errors, and chosen print order under a user-visible session name.
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
 - Generating combo pieces skips disabled categories and does not duplicate related pieces already in the decklist.
 - Generating real-card combo pieces for `Gilt-Leaf Alchemist` appends `Forest [ecl] 283`, but generating from `Forest [ecl] 283` does not append `Gilt-Leaf Alchemist`.
