@@ -34,6 +34,16 @@
               <span class="icon-print" /> {{ $t('buttons.print') }}
             </button>
           </div>
+          <div class="form-group">
+            <button
+              id="open-print-order"
+              class="btn btn-block"
+              @click="openPrintOrderModal"
+              :disabled="printSlotsFrontBase.length == 0"
+            >
+              Print Order
+            </button>
+          </div>
 
           <div class="form-group btn-group btn-group-block">
             <div id="slot-usage" class="bar">
@@ -408,6 +418,83 @@
         <ArnoldsApproval id="arnold" :cards="cards" />
       </div>
     </div>
+
+    <div
+      v-if="printOrderModalOpen"
+      id="print-order-modal"
+      class="modal active"
+    >
+      <a
+        class="modal-overlay"
+        href="#close"
+        aria-label="Close"
+        @click.prevent="closePrintOrderModal"
+      />
+      <div class="modal-container print-order-modal-container">
+        <div class="modal-header">
+          <button
+            class="btn btn-clear float-right"
+            aria-label="Close"
+            @click="closePrintOrderModal"
+          />
+          <div class="modal-title h5">
+            Print Order
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="content">
+            <div
+              v-for="(page, pageIndex) in printOrderPreviewPages"
+              :key="`print-order-page-${pageIndex}`"
+              class="print-order-page"
+            >
+              <div class="text-small text-gray mb-2">
+                Page
+                {{ pageIndex + 1 }}
+              </div>
+              <div
+                class="print-order-grid"
+                :style="{ gridTemplateColumns: `repeat(${printOrderGridColumns}, minmax(0, 1fr))` }"
+              >
+                <button
+                  v-for="slot in page"
+                  :key="slot.key"
+                  type="button"
+                  class="print-order-slot"
+                  :class="{ 'print-order-slot-selected': selectedPrintOrderSlotIndex === slot.index }"
+                  :disabled="!slot.card"
+                  @click="selectPrintOrderSlot(slot.index)"
+                >
+                  <template v-if="slot.card">
+                    <ImageLoader
+                      class="print-order-image"
+                      :src="resolveCardImage(slot.card)"
+                      placeholder="./card_back_border_crop.jpg"
+                      :alt="slot.card.name"
+                    />
+                    <span class="print-order-index">{{ slot.index + 1 }}</span>
+                  </template>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="btn"
+            @click="resetPrintOrder"
+          >
+            Reset
+          </button>
+          <button
+            class="btn btn-primary"
+            @click="closePrintOrderModal"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div
@@ -512,6 +599,9 @@ export default {
             cards: [],
             errors: [],
             sessionSetSelections: {},
+            printOrderModalOpen: false,
+            selectedPrintOrderSlotIndex: null,
+            customPrintOrderCards: [],
         };
     },
     computed: {
@@ -555,7 +645,7 @@ export default {
                 missingGamePieces,
             };
         },
-        printSlotsFront() {
+        printSlotsFrontBase() {
             const slots = [];
 
             for (const card of this.cards) {
@@ -569,6 +659,53 @@ export default {
             }
 
             return slots;
+        },
+        printSlotsFront() {
+            const baseSlots = this.printSlotsFrontBase;
+
+            if (this.isCustomPrintOrderCurrent(baseSlots)) {
+                return this.customPrintOrderCards;
+            }
+
+            return baseSlots;
+        },
+        printOrderGridColumns() {
+            const pageSize = this.getPrintPageSize();
+            const columnsByPageSize = {
+                6: 3,
+                8: 2,
+                9: 3,
+            };
+
+            return columnsByPageSize[pageSize] ?? Math.ceil(Math.sqrt(pageSize));
+        },
+        printOrderPreviewPages() {
+            const pageSize = this.getPrintPageSize();
+            const pages = [];
+            const slots = this.printSlotsFront;
+
+            for (let i = 0; i < slots.length; i += pageSize) {
+                const page = slots.slice(i, i + pageSize).map((card, offset) => {
+                    const index = i + offset;
+                    return {
+                        key: `slot-${index}`,
+                        index,
+                        card,
+                    };
+                });
+
+                while (page.length < pageSize) {
+                    page.push({
+                        key: `empty-${i}-${page.length}`,
+                        index: null,
+                        card: null,
+                    });
+                }
+
+                pages.push(page);
+            }
+
+            return pages;
         },
         printPages() {
             const toPages = (slots, isBack, pageSize = null) => {
@@ -681,6 +818,62 @@ export default {
                 card.selectedOption?.setCode,
                 card.selectedOption?.collectorNumber,
             ].join("|");
+        },
+        isCustomPrintOrderCurrent(baseSlots) {
+            if (this.customPrintOrderCards.length !== baseSlots.length || baseSlots.length === 0) {
+                return false;
+            }
+
+            const remainingSlots = [...baseSlots];
+            return this.customPrintOrderCards.every(card => {
+                const index = remainingSlots.indexOf(card);
+                if (index === -1) {
+                    return false;
+                }
+
+                remainingSlots.splice(index, 1);
+                return true;
+            });
+        },
+        ensureCustomPrintOrder() {
+            if (!this.isCustomPrintOrderCurrent(this.printSlotsFrontBase)) {
+                this.customPrintOrderCards = [...this.printSlotsFrontBase];
+            }
+        },
+        openPrintOrderModal() {
+            this.ensureCustomPrintOrder();
+            this.selectedPrintOrderSlotIndex = null;
+            this.printOrderModalOpen = true;
+        },
+        closePrintOrderModal() {
+            this.selectedPrintOrderSlotIndex = null;
+            this.printOrderModalOpen = false;
+        },
+        resetPrintOrder() {
+            this.customPrintOrderCards = [];
+            this.selectedPrintOrderSlotIndex = null;
+        },
+        selectPrintOrderSlot(slotIndex) {
+            if (slotIndex === null) {
+                return;
+            }
+
+            this.ensureCustomPrintOrder();
+
+            if (this.selectedPrintOrderSlotIndex === null) {
+                this.selectedPrintOrderSlotIndex = slotIndex;
+                return;
+            }
+
+            if (this.selectedPrintOrderSlotIndex === slotIndex) {
+                this.selectedPrintOrderSlotIndex = null;
+                return;
+            }
+
+            const selectedCard = this.customPrintOrderCards[this.selectedPrintOrderSlotIndex];
+            this.customPrintOrderCards[this.selectedPrintOrderSlotIndex] = this.customPrintOrderCards[slotIndex];
+            this.customPrintOrderCards[slotIndex] = selectedCard;
+            this.selectedPrintOrderSlotIndex = null;
         },
         buildPairedGamePieceSlots(cards) {
             const normalCards = [];
@@ -926,6 +1119,7 @@ export default {
         async loadCardList() {
             this.cards = [];
             this.errors = [];
+            this.resetPrintOrder();
 
             const { lines, errors } = parseDecklist(this.config.decklist);
             this.errors = errors;
@@ -1104,6 +1298,67 @@ html.dark-theme {
     left: 0.6rem;
     padding: 0.2rem;
     line-height: 1rem;
+}
+
+.print-order-modal-container {
+    max-width: 58rem;
+}
+
+.print-order-page + .print-order-page {
+    margin-top: 1rem;
+}
+
+.print-order-grid {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.print-order-slot {
+    aspect-ratio: 63 / 88;
+    background: #eef0f3;
+    border: 2px solid #bcc3ce;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 0;
+    overflow: hidden;
+    padding: 0;
+    position: relative;
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.45;
+    }
+}
+
+.print-order-slot-selected {
+    border-color: #5755d9;
+    box-shadow: 0 0 0 3px rgba(87, 85, 217, 0.24);
+}
+
+.print-order-image {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+}
+
+.print-order-index {
+    background: rgba(48, 55, 66, 0.84);
+    border-radius: 2px;
+    color: #fff;
+    font-size: 0.65rem;
+    left: 0.25rem;
+    line-height: 1;
+    padding: 0.18rem 0.24rem;
+    position: absolute;
+    top: 0.25rem;
+}
+
+html.dark-theme {
+    .print-order-slot {
+        background: #303742;
+        border-color: #667085;
+    }
 }
 
 #arnold {

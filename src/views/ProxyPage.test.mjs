@@ -41,6 +41,71 @@ describe('Deck Loading', async () => {
         expect(wrapper.findAll('.card-select').length).toBe(1);
     })
 
+    test('Feature: Advanced print order opens a page-shaped grid and swaps two print slots.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.cards = [
+            {
+                quantity: 1,
+                name: 'alpha',
+                isBasic: false,
+                selectedOption: { urlFront: 'alpha-front' },
+            },
+            {
+                quantity: 1,
+                name: 'bravo',
+                isBasic: false,
+                selectedOption: { urlFront: 'bravo-front' },
+            },
+            {
+                quantity: 1,
+                name: 'charlie',
+                isBasic: false,
+                selectedOption: { urlFront: 'charlie-front' },
+            },
+        ];
+        component.data.config.fixedPageSize = true;
+        component.data.config.cardsPerPage = null;
+        await wrapper.vm.$nextTick();
+
+        await wrapper.find('#open-print-order').trigger('click');
+
+        expect(wrapper.find('#print-order-modal').exists()).toBe(true);
+        expect(component.ctx.printOrderGridColumns).toBe(3);
+        expect(component.ctx.printOrderPreviewPages[0].length).toBe(9);
+
+        const slots = wrapper.findAll('.print-order-slot');
+        await slots[0].trigger('click');
+
+        expect(component.data.selectedPrintOrderSlotIndex).toBe(0);
+        expect(slots[0].classes()).toContain('print-order-slot-selected');
+
+        await slots[2].trigger('click');
+
+        expect(component.ctx.printSlotsFront.map(card => card.name)).toEqual(['charlie', 'bravo', 'alpha']);
+        expect(component.data.cards.map(card => card.name)).toEqual(['alpha', 'bravo', 'charlie']);
+        expect(component.data.selectedPrintOrderSlotIndex).toBe(null);
+        expect(component.data.printOrderModalOpen).toBe(true);
+
+        component.ctx.closePrintOrderModal();
+        component.ctx.resetPrintOrder();
+    });
+
+    test('Feature: Advanced print order grid dimensions match the configured page size.', () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.fixedPageSize = false;
+
+        component.data.config.cardsPerPage = 8;
+        expect(component.ctx.printOrderGridColumns).toBe(2);
+
+        component.data.config.cardsPerPage = 6;
+        expect(component.ctx.printOrderGridColumns).toBe(3);
+
+        component.data.config.fixedPageSize = false;
+        component.data.config.cardsPerPage = null;
+    });
+
     test('Feature: Related combo piece config is collapsible while generation stays available.', async () => {
         const component = wrapper.getCurrentComponent();
 
