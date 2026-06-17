@@ -141,6 +141,46 @@ describe('Deck Loading', async () => {
         component.ctx.resetPrintOrder();
     });
 
+    test('Feature: Applying advanced print order disables automatic token placement for opposite backs.', () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.cardBacks = 'all-pages';
+        component.data.config.tokenBackMode = 'opposite';
+        component.data.config.tokenPlacementMode = 'auto';
+        component.data.config.fixedPageSize = true;
+        component.data.config.cardsPerPage = null;
+        component.data.cards = [
+            {
+                quantity: 2,
+                name: 'treasure',
+                isBasic: false,
+                selectedOption: { setCode: 'tfin', collectorNumber: '1', urlFront: 'treasure-front', isToken: true, isGamePiece: true },
+            },
+            {
+                quantity: 1,
+                name: 'pest',
+                isBasic: false,
+                selectedOption: { setCode: 'tsos', collectorNumber: '9', urlFront: 'pest-front', isToken: true, isGamePiece: true },
+            },
+        ];
+
+        component.ctx.openPrintOrderModal();
+        component.ctx.selectPrintOrderSlot(1);
+        component.ctx.selectPrintOrderSlot(2);
+        component.ctx.applyPrintOrder();
+
+        const pages = component.ctx.printPages;
+        const frontNames = pages[0].slots.filter(Boolean).map(slot => slot.card.name);
+        const backNames = pages[1].slots.filter(Boolean).map(slot => slot.card.name);
+
+        expect(component.data.config.tokenPlacementMode).toBe('chosen');
+        expect(frontNames).toEqual(['treasure', 'treasure']);
+        expect(backNames).toEqual(['pest']);
+
+        component.data.config.tokenPlacementMode = 'auto';
+        component.ctx.resetPrintOrder();
+    });
+
     test('Feature: Advanced print order grid dimensions match the configured page size.', () => {
         const component = wrapper.getCurrentComponent();
 

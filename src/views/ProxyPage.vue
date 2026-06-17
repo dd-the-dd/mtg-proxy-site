@@ -315,6 +315,17 @@
                   </select>
                 </label>
               </div>
+              <div v-if="config.cardBacks === 'all-pages' && config.tokenBackMode === 'opposite'" style="margin-top: 0.5rem">
+                <label class="form-switch">
+                  <input
+                    type="checkbox"
+                    name="automatic-token-placement"
+                    :checked="config.tokenPlacementMode === 'auto'"
+                    @change="config.tokenPlacementMode = $event.target.checked ? 'auto' : 'chosen'"
+                  >
+                  <i class="form-icon" /> Automatic token placement
+                </label>
+              </div>
               <div v-if="config.cardBacks === 'all-pages' && !config.fixedPageSize" style="margin-top:0.5rem">
                 <label class="form-label">
                   <i class="form-icon" /> Cards per page (leave empty to group all fronts/backs):
@@ -580,6 +591,7 @@ export default {
                 scale: "normal",
                 cardBacks: "dfc",
                 tokenBackMode: "opposite",
+                tokenPlacementMode: "auto",
                 cardsPerPage: null,
                 comboPieceConfigOpen: false,
                 comboPieceTypes: {
@@ -750,7 +762,7 @@ export default {
 
             if (this.config.cardBacks === "all-pages") {
               const pairedSlots = this.config.tokenBackMode === "opposite"
-                ? this.buildPairedGamePieceSlots(this.printSlotsFront)
+                ? this.buildOppositeGamePieceSlots(this.printSlotsFront)
                 : {
                     frontSlots: this.printSlotsFront.map((card) => {
                       return { card, face: "front" };
@@ -815,6 +827,31 @@ export default {
                 card.selectedOption?.collectorNumber,
             ].join("|");
         },
+        buildOppositeGamePieceSlots(cards) {
+            if (this.config.tokenPlacementMode === 'chosen') {
+                return this.buildChosenGamePieceSlots(cards);
+            }
+
+            return this.buildPairedGamePieceSlots(cards);
+        },
+        buildChosenGamePieceSlots(cards) {
+            const pairs = [];
+
+            for (let i = 0; i < cards.length; i += 2) {
+                pairs.push({
+                    front: { card: cards[i], face: "front" },
+                    back: cards[i + 1] ? { card: cards[i + 1], face: "back" } : null,
+                });
+            }
+
+            return this.pairsToSlots(pairs);
+        },
+        pairsToSlots(pairs) {
+            return {
+                frontSlots: pairs.map(pair => pair.front),
+                backSlots: pairs.map(pair => pair.back),
+            };
+        },
         isCustomPrintOrderCurrent(baseSlots) {
             return this.isPrintOrderCurrent(this.customPrintOrderCards, baseSlots);
         },
@@ -858,6 +895,7 @@ export default {
         applyPrintOrder() {
             if (this.isPrintOrderCurrent(this.printOrderDraftCards, this.printSlotsFrontBase)) {
                 this.customPrintOrderCards = [...this.printOrderDraftCards];
+                this.config.tokenPlacementMode = 'chosen';
             }
 
             this.closePrintOrderModal();
@@ -941,10 +979,7 @@ export default {
                 });
             }
 
-            return {
-                frontSlots: pairs.map(pair => pair.front),
-                backSlots: pairs.map(pair => pair.back),
-            };
+            return this.pairsToSlots(pairs);
         },
         async loadSetList() {
           const dataset = (await ScryfallDatasetAsync());
@@ -973,6 +1008,7 @@ export default {
             this.config.scale = bindStorage('scale', (v) => v ?? "normal");
             this.config.cardBacks = bindStorage('cardBacks', (v) => v ?? "dfc");
             this.config.tokenBackMode = bindStorage('tokenBackMode', (v) => v ?? "opposite");
+            this.config.tokenPlacementMode = bindStorage('tokenPlacementMode', (v) => v ?? "auto");
             this.config.comboPieceConfigOpen = bindStorage('comboPieceConfigOpen', (v) => v === "true");
             this.config.comboPieceTypes.token = bindStorage('comboPieceToken', (v) => v !== "false");
             this.config.comboPieceTypes.emblem = bindStorage('comboPieceEmblem', (v) => v !== "false");
