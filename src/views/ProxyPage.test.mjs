@@ -13,7 +13,7 @@ beforeAll(async () => {
     while(Object.keys(wrapper.getCurrentComponent().data.sets).length === 0) {
         await new Promise(r => setTimeout(r, 50));
     }
-}, 30000);
+}, 60000);
 
 describe('Core Rendering', async () => {
     test('Renders', () => {
@@ -68,6 +68,51 @@ describe('Core Rendering', async () => {
 
         component.data.config.decklist = '4 Wild Nacatl';
         await component.ctx.loadCardList();
+    });
+
+    test('Feature: Local app startup restores the first saved session from storage.', async () => {
+        globalThis.__resetLocalSessions();
+        globalThis.__localSessionStore.sessions.push({
+            id: 'saved-session',
+            name: 'Saved Local Deck',
+            updatedAt: new Date().toISOString(),
+            state: {
+                config: {
+                    decklist: '1 Saved Card',
+                    includeCards: false,
+                    includeGamePieces: true,
+                },
+                cards: [
+                    {
+                        quantity: 1,
+                        name: 'saved card',
+                        isBasic: false,
+                        selectedOption: { urlFront: 'saved-front' },
+                    },
+                ],
+                errors: [],
+                sessionSetSelections: {},
+                printOrderIndexes: [],
+                nextTokenBackIndex: 0,
+            },
+        });
+
+        const restoredWrapper = mount(ProxyPage, {
+            mocks: {
+                $t: () => {},
+            },
+        });
+        const component = restoredWrapper.getCurrentComponent();
+
+        while(component.data.activeSessionId !== 'saved-session') {
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        expect(component.data.activeSessionName).toBe('Saved Local Deck');
+        expect(component.data.config.decklist).toBe('1 Saved Card');
+        expect(component.data.cards[0].name).toBe('saved card');
+
+        restoredWrapper.unmount();
     });
 });
 

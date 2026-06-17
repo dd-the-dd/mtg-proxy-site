@@ -25,6 +25,11 @@ const localSessionStore = {
     sessions: [],
 };
 
+globalThis.__localSessionStore = localSessionStore;
+globalThis.__resetLocalSessions = () => {
+    localSessionStore.sessions = [];
+};
+
 globalThis.fetch = vi.fn(async (url, options = {}) => {
     const parsedUrl = new URL(url, 'http://localhost');
     if (!parsedUrl.pathname.startsWith('/api/local-sessions')) {

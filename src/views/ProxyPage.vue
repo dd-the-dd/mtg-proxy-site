@@ -980,10 +980,6 @@ export default {
                 return;
             }
 
-            if (id === this.activeSessionId) {
-                return;
-            }
-
             await this.flushPendingSessionSave();
             const session = await this.localSessionStorage.loadSession(id);
             this.restoringSession = true;
