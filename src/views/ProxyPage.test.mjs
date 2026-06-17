@@ -72,7 +72,7 @@ describe('Deck Loading', async () => {
 
         expect(wrapper.find('#print-order-modal').exists()).toBe(true);
         expect(component.ctx.printOrderGridColumns).toBe(3);
-        expect(component.ctx.printOrderPreviewPages[0].length).toBe(9);
+        expect(component.ctx.printOrderPreviewPages[0].slots.length).toBe(9);
 
         const slots = wrapper.findAll('.print-order-slot');
         await slots[0].trigger('click');
@@ -176,6 +176,58 @@ describe('Deck Loading', async () => {
         expect(component.data.config.tokenPlacementMode).toBe('chosen');
         expect(frontNames).toEqual(['treasure', 'treasure']);
         expect(backNames).toEqual(['pest']);
+
+        component.data.config.tokenPlacementMode = 'auto';
+        component.ctx.resetPrintOrder();
+    });
+
+    test('Feature: Advanced print order preview matches opposite-side token print pages.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.cardBacks = 'all-pages';
+        component.data.config.tokenBackMode = 'opposite';
+        component.data.config.tokenPlacementMode = 'auto';
+        component.data.config.fixedPageSize = true;
+        component.data.config.cardsPerPage = null;
+        component.data.cards = [
+            {
+                quantity: 2,
+                name: 'treasure',
+                isBasic: false,
+                selectedOption: { setCode: 'tfin', collectorNumber: '1', urlFront: 'treasure-front', isToken: true, isGamePiece: true },
+            },
+            {
+                quantity: 1,
+                name: 'pest',
+                isBasic: false,
+                selectedOption: { setCode: 'tsos', collectorNumber: '9', urlFront: 'pest-front', isToken: true, isGamePiece: true },
+            },
+        ];
+        await wrapper.vm.$nextTick();
+
+        await wrapper.find('#open-print-order').trigger('click');
+
+        let previewPages = component.ctx.printOrderPreviewPages;
+        expect(previewPages[0].slots.filter(slot => slot.card).map(slot => slot.card.name)).toEqual(['treasure', 'pest']);
+        expect(previewPages[1].isBack).toBe(true);
+        expect(wrapper.find('.print-order-grid-backs').exists()).toBe(true);
+
+        const slots = wrapper.findAll('.print-order-slot');
+        await slots[9].trigger('click');
+        await slots[1].trigger('click');
+
+        previewPages = component.ctx.printOrderPreviewPages;
+        const previewFrontNames = previewPages[0].slots.filter(slot => slot.card).map(slot => slot.card.name);
+        const previewBackNames = previewPages[1].slots.filter(slot => slot.card).map(slot => slot.card.name);
+
+        await wrapper.find('#apply-print-order').trigger('click');
+
+        const printPages = component.ctx.printPages;
+        const printFrontNames = printPages[0].slots.filter(slot => slot?.card).map(slot => slot.card.name);
+        const printBackNames = printPages[1].slots.filter(slot => slot?.card).map(slot => slot.card.name);
+
+        expect(previewFrontNames).toEqual(printFrontNames);
+        expect(previewBackNames).toEqual(printBackNames);
 
         component.data.config.tokenPlacementMode = 'auto';
         component.ctx.resetPrintOrder();

@@ -462,13 +462,15 @@
               <div class="text-small text-gray mb-2">
                 Page
                 {{ pageIndex + 1 }}
+                <span v-if="page.isBack">(back)</span>
               </div>
               <div
                 class="print-order-grid"
+                :class="{ 'print-order-grid-backs': page.isBack }"
                 :style="{ gridTemplateColumns: `repeat(${printOrderGridColumns}, minmax(0, 1fr))` }"
               >
                 <button
-                  v-for="slot in page"
+                  v-for="slot in page.slots"
                   :key="slot.key"
                   type="button"
                   class="print-order-slot"
@@ -479,7 +481,7 @@
                   <template v-if="slot.card">
                     <ImageLoader
                       class="print-order-image"
-                      :src="resolveCardImage(slot.card)"
+                      :src="resolveCardImage(slot.card, slot.face)"
                       placeholder="./card_back_border_crop.jpg"
                       :alt="slot.card.name"
                     />
@@ -694,32 +696,12 @@ export default {
             return columnsByPageSize[pageSize] ?? Math.ceil(Math.sqrt(pageSize));
         },
         printOrderPreviewPages() {
-            const pageSize = this.getPrintPageSize();
-            const pages = [];
             const slots = this.printOrderModalOpen ? this.printOrderDraftCards : this.printSlotsFront;
+            const indexedSlots = slots.map((card, index) => {
+                return { card, index };
+            });
 
-            for (let i = 0; i < slots.length; i += pageSize) {
-                const page = slots.slice(i, i + pageSize).map((card, offset) => {
-                    const index = i + offset;
-                    return {
-                        key: `slot-${index}`,
-                        index,
-                        card,
-                    };
-                });
-
-                while (page.length < pageSize) {
-                    page.push({
-                        key: `empty-${i}-${page.length}`,
-                        index: null,
-                        card: null,
-                    });
-                }
-
-                pages.push(page);
-            }
-
-            return pages;
+            return this.buildPrintOrderPreviewPages(indexedSlots);
         },
         printPages() {
             const toPages = (slots, isBack, pageSize = null) => {
@@ -808,6 +790,99 @@ export default {
         this.initConfig();
     },
     methods: {
+        buildPrintOrderPreviewPages(indexedSlots) {
+            const toPreviewPages = (slots, isBack, pageSize = null) => {
+                const buildSlot = (slot, pageStart, offset) => {
+                    if (!slot) {
+                        return {
+                            key: `empty-${isBack ? 'back' : 'front'}-${pageStart}-${offset}`,
+                            index: null,
+                            card: null,
+                            face: "front",
+                        };
+                    }
+
+                    return {
+                        key: `slot-${isBack ? 'back' : 'front'}-${slot.index}-${pageStart}-${offset}`,
+                        index: slot.index,
+                        card: slot.card,
+                        face: slot.face,
+                    };
+                };
+
+                if (pageSize && Number.isInteger(pageSize) && pageSize > 0) {
+                    const pages = [];
+                    for (let i = 0; i < slots.length; i += pageSize) {
+                        const pageSlots = slots.slice(i, i + pageSize).map((slot, offset) => buildSlot(slot, i, offset));
+                        while (pageSlots.length < pageSize) {
+                            pageSlots.push(buildSlot(null, i, pageSlots.length));
+                        }
+                        pages.push({ slots: pageSlots, isBack });
+                    }
+                    return pages.length ? pages : [];
+                }
+
+                if (this.config.fixedPageSize) {
+                    const pages = [];
+                    for (let i = 0; i < slots.length; i += 9) {
+                        const pageSlots = slots.slice(i, i + 9).map((slot, offset) => buildSlot(slot, i, offset));
+                        while (pageSlots.length < 9) {
+                            pageSlots.push(buildSlot(null, i, pageSlots.length));
+                        }
+                        pages.push({ slots: pageSlots, isBack });
+                    }
+                    return pages.length ? pages : [];
+                }
+
+                return [{
+                    slots: slots.map((slot, offset) => buildSlot(slot, 0, offset)),
+                    isBack,
+                }];
+            };
+
+            if (this.config.cardBacks === "none") {
+                const slots = indexedSlots.map(slot => {
+                    return { ...slot, face: "front" };
+                });
+
+                return toPreviewPages(slots, false);
+            }
+
+            if (this.config.cardBacks === "all-pages") {
+                const pairedSlots = this.config.tokenBackMode === "opposite"
+                    ? this.buildChosenPreviewGamePieceSlots(indexedSlots)
+                    : {
+                        frontSlots: indexedSlots.map(slot => ({ ...slot, face: "front" })),
+                        backSlots: indexedSlots.map(slot => ({ ...slot, face: "back" })),
+                    };
+                const pageSize = this.config.fixedPageSize ? 9 : (this.config.cardsPerPage ?? null);
+                const frontPages = toPreviewPages(pairedSlots.frontSlots, false, pageSize);
+                const backPages = toPreviewPages(pairedSlots.backSlots, true, pageSize);
+                const pages = [];
+
+                for (let i = 0; i < Math.max(frontPages.length, backPages.length); i += 1) {
+                    if (frontPages[i]) {
+                        pages.push(frontPages[i]);
+                    }
+                    if (backPages[i]) {
+                        pages.push(backPages[i]);
+                    }
+                }
+
+                return pages;
+            }
+
+            const slots = [];
+            for (const slot of indexedSlots) {
+                slots.push({ ...slot, face: "front" });
+
+                if (this.shouldShowCard(slot.card, "back")) {
+                    slots.push({ ...slot, face: "back" });
+                }
+            }
+
+            return toPreviewPages(slots, false);
+        },
         getPrintPageSize() {
             if (this.config.fixedPageSize) {
                 return 9;
@@ -845,6 +920,20 @@ export default {
             }
 
             return this.pairsToSlots(pairs);
+        },
+        buildChosenPreviewGamePieceSlots(indexedSlots) {
+            const frontSlots = [];
+            const backSlots = [];
+
+            for (let i = 0; i < indexedSlots.length; i += 2) {
+                frontSlots.push({ ...indexedSlots[i], face: "front" });
+                backSlots.push(indexedSlots[i + 1] ? { ...indexedSlots[i + 1], face: "back" } : null);
+            }
+
+            return {
+                frontSlots,
+                backSlots,
+            };
         },
         pairsToSlots(pairs) {
             return {
@@ -1358,6 +1447,10 @@ html.dark-theme {
 .print-order-grid {
     display: grid;
     gap: 0.35rem;
+}
+
+.print-order-grid-backs {
+    direction: rtl;
 }
 
 .print-order-slot {
