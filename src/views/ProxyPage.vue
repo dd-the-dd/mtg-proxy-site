@@ -1103,6 +1103,7 @@ export default {
         },
         analysisColumns() {
             const sessions = this.selectedMetaDeckStates;
+            const selectedCardTotal = this.countCards(sessions.flatMap(session => session.state?.cards ?? []));
 
             if (this.config.analysisColumnMode === "manaValue") {
                 const columns = Array.from({ length: 10 }, (_, manaValue) => {
@@ -1113,6 +1114,7 @@ export default {
                         sortValue: manaValue,
                         label: isNinePlus ? '9+ mana' : `${manaValue} mana`,
                         creatures: [],
+                        totalCards: selectedCardTotal,
                     };
                 });
 
@@ -1135,6 +1137,7 @@ export default {
                     key: session.id,
                     label: session.name,
                     creatures: (session.state?.cards ?? []).filter(card => isCreatureCard(card)),
+                    totalCards: this.countCards(session.state?.cards ?? []),
                 };
             });
         },
@@ -1200,7 +1203,7 @@ export default {
         cardAnalysisCell(card, category, column) {
             const matchedCreatures = [];
             let matchedQuantity = 0;
-            const columnTotal = this.countCards(column.creatures);
+            const denominator = column.totalCards ?? this.countCards(column.creatures);
 
             for (const creature of column.creatures) {
                 const summary = summarizeCreatureInteractions([card], creature);
@@ -1220,7 +1223,7 @@ export default {
 
             return {
                 active: true,
-                display: this.formatAnalysisValue(card, matchedQuantity, columnTotal),
+                display: this.formatAnalysisValue(card, matchedQuantity, denominator),
                 title: matchedCreatures.join(', '),
             };
         },

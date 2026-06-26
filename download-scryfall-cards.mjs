@@ -193,6 +193,12 @@ const stripped = cards.filter(card => {
                 name: normalizeCardName(token.name),
                 setCode: token.set,
                 collectorNumber: token.collector_number,
+                typeLine: token.type_line,
+                oracleText: cardOracleText(token) || undefined,
+                manaCost: token.mana_cost,
+                manaValue: token.cmc,
+                power: token.power,
+                toughness: token.toughness,
             };
         });
     const normalizedCardName = normalizeCardName(card.name);

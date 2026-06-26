@@ -246,6 +246,28 @@ function emptyCombatSummary() {
     };
 }
 
+function combatRepresentatives(card) {
+    if (isCreatureCard(card)) {
+        return [card];
+    }
+
+    return (selected(card).relatedTokens ?? [])
+        .filter(token => /\bCreature\b/i.test(token.typeLine ?? ''))
+        .map(token => {
+            return {
+                name: card.name,
+                quantity: card.quantity,
+                selectedOption: token,
+            };
+        });
+}
+
+function pushOnce(cards, card) {
+    if (!cards.includes(card)) {
+        cards.push(card);
+    }
+}
+
 export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
     const summary = {
         instantRemoval: [],
@@ -263,15 +285,15 @@ export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
             summary[speed === 'instant' ? 'instantRemoval' : 'sorceryRemoval'].push(card);
         }
 
-        if (isCreatureCard(card)) {
-            const attackingOutcome = combatOutcome(card, enemyCreature);
+        for (const combatCard of combatRepresentatives(card)) {
+            const attackingOutcome = combatOutcome(combatCard, enemyCreature);
             if (attackingOutcome) {
-                summary.combat.attacking[attackingOutcome].push(card);
+                pushOnce(summary.combat.attacking[attackingOutcome], card);
             }
 
-            const defendingOutcome = combatOutcome(enemyCreature, card);
+            const defendingOutcome = combatOutcome(enemyCreature, combatCard);
             if (defendingOutcome) {
-                summary.combat.defending[defendingOutcome].push(card);
+                pushOnce(summary.combat.defending[defendingOutcome], card);
             }
         }
 

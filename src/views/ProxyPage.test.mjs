@@ -334,6 +334,67 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Analysis percentages use the selected meta deck card total.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const burstLightning = {
+            quantity: 1,
+            name: 'burst lightning',
+            selectedOption: {
+                typeLine: 'Instant',
+                oracleText: 'Burst Lightning deals 2 damage to any target.',
+            },
+        };
+        const targetCreature = {
+            quantity: 5,
+            name: 'target creature',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Creature - Mouse',
+                oracleText: '',
+                power: '1',
+                toughness: '2',
+            },
+        };
+        const otherCard = {
+            quantity: 55,
+            name: 'other card',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Instant',
+                oracleText: 'Draw a card.',
+            },
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisMetric = 'percent';
+        component.data.config.analysisColumnMode = 'manaValue';
+        component.data.config.analysisMatchupSessionId = 'all';
+        component.data.cards = [burstLightning];
+        component.data.metaDeckStates = [
+            {
+                id: 'meta-percent',
+                name: 'Meta Percent',
+                state: {
+                    cards: [targetCreature, otherCard],
+                },
+            },
+        ];
+
+        const cell = component.ctx.cardAnalysisCell(
+            burstLightning,
+            component.proxy.analysisCategories[0],
+            component.proxy.analysisColumns.find(column => column.key === '1'),
+        );
+
+        expect(cell.display).toBe('8.3%');
+
+        component.data.config.analysisMode = false;
+        component.data.config.analysisMetric = 'count';
+        component.data.metaDeckStates = [];
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
     test('Feature: Local app startup restores the first saved session from storage.', async () => {
         globalThis.__resetLocalSessions();
         globalThis.__localSessionStore.sessions.push({

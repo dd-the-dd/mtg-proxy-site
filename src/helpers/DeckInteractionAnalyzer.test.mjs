@@ -118,4 +118,31 @@ describe('DeckInteractionAnalyzer', () => {
         expect(summary.combat.attacking.attackerSurvives.map(item => item.name)).toEqual(['ground creature']);
         expect(summary.combat.defending.damageOnPlayer.map(item => item.name)).toEqual(['ground creature']);
     });
+
+    test('Feature: Token generators are analyzed in combat using generated creature token stats.', () => {
+        const tokenMaker = card('raise the alarm', {
+            typeLine: 'Instant',
+            oracleText: 'Create two 1/1 white Soldier creature tokens.',
+            relatedTokens: [
+                {
+                    name: 'soldier',
+                    typeLine: 'Token Creature - Soldier',
+                    oracleText: '',
+                    power: '1',
+                    toughness: '1',
+                },
+            ],
+        });
+        const enemyCreature = card('small attacker', {
+            typeLine: 'Creature - Goblin',
+            oracleText: '',
+            power: '1',
+            toughness: '1',
+        });
+
+        const summary = summarizeCreatureInteractions([tokenMaker], enemyCreature);
+
+        expect(summary.combat.attacking.bothDie.map(item => item.name)).toEqual(['raise the alarm']);
+        expect(summary.combat.defending.bothDie.map(item => item.name)).toEqual(['raise the alarm']);
+    });
 });
