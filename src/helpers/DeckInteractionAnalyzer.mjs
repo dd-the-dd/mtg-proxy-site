@@ -16,6 +16,22 @@ function manaCostOf(card) {
     return selected(card).manaCost ?? '';
 }
 
+function manaCostValue(cost) {
+    let total = 0;
+    const matches = cost.matchAll(/\{([^}]+)\}/g);
+
+    for (const match of matches) {
+        const symbol = match[1];
+        if (/^\d+$/.test(symbol)) {
+            total += parseInt(symbol, 10);
+        } else if (!/^X$/i.test(symbol)) {
+            total += 1;
+        }
+    }
+
+    return total;
+}
+
 function statValue(value) {
     const parsed = parseInt(value, 10);
     return Number.isFinite(parsed) ? parsed : null;
@@ -347,6 +363,56 @@ export function synergyTriggerCost(card, relatedCard, categoryKey) {
     return /\.sources$/.test(categoryKey)
         ? manaCostOf(relatedCard)
         : manaCostOf(card);
+}
+
+function classLevelCost(card, targetLevel) {
+    const selectedCard = selected(card);
+    let total = manaCostValue(manaCostOf(card));
+    const levelCosts = [...textOf(card).matchAll(/((?:\{[^}]+\})+):\s*Level\s+(\d+)/gi)]
+        .map(match => {
+            return {
+                cost: manaCostValue(match[1]),
+                level: parseInt(match[2], 10),
+            };
+        })
+        .sort((a, b) => a.level - b.level);
+
+    if (!/\bClass\b/i.test(selectedCard.typeLine ?? '') || levelCosts.length === 0) {
+        return total;
+    }
+
+    for (const levelCost of levelCosts) {
+        if (levelCost.level <= targetLevel) {
+            total += levelCost.cost;
+        }
+    }
+
+    return total;
+}
+
+function synergySourceAndFeeder(card, relatedCard, categoryKey) {
+    return /\.feeders$/.test(categoryKey)
+        ? { source: relatedCard, feeder: card }
+        : { source: card, feeder: relatedCard };
+}
+
+export function synergyInteractionDetail(card, relatedCard, categoryKey) {
+    const { source, feeder } = synergySourceAndFeeder(card, relatedCard, categoryKey);
+
+    if (/^synergy\.combat\./.test(categoryKey)) {
+        const speed = spellSpeed(feeder) === 'instant' ? 'I' : 'S';
+        return `${speed}:Feed 1+1 UED cost ${manaCostValue(manaCostOf(feeder))}`;
+    }
+
+    if (/^synergy\.graveyardPlay\./.test(categoryKey)) {
+        return `S:Grave to hand cost ${classLevelCost(source, 2)}`;
+    }
+
+    if (/^synergy\.creatureTokens\./.test(categoryKey)) {
+        return `S:Token engine cost ${classLevelCost(source, 3)}`;
+    }
+
+    return '';
 }
 
 export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {

@@ -439,7 +439,7 @@ describe('Core Rendering', async () => {
             selectedOption: {
                 manaValue: 1,
                 typeLine: 'Enchantment - Class',
-                oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.\nWhen this Class becomes level 2, return target instant or sorcery card from your graveyard to your hand.\nWhenever you cast an instant or sorcery spell, create a 1/1 Otter creature token with prowess.',
+                oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.\n{3}{U}: Level 2\nWhen this Class becomes level 2, return target instant or sorcery card from your graveyard to your hand.\n{5}{U}: Level 3\nWhenever you cast an instant or sorcery spell, create a 1/1 Otter creature token with prowess.',
                 manaCost: '{U}',
                 relatedTokens: [
                     {
@@ -491,7 +491,21 @@ describe('Core Rendering', async () => {
         expect(visibleLabels).toContain('Synergy tokens');
         expect(visibleLabels).not.toContain('Kill inst.');
         expect(cell.display).toBe('4');
-        expect(cell.title).toContain('4x opt ({U})');
+        expect(cell.title).toContain('4x opt - I:Feed 1+1 UED cost 1');
+
+        const graveCell = component.ctx.cardAnalysisCell(
+            stormchaserTalent,
+            component.proxy.analysisCategories.find(category => category.key === 'synergy.graveyardPlay.sources'),
+            component.proxy.analysisColumns[0],
+        );
+        const tokenCell = component.ctx.cardAnalysisCell(
+            stormchaserTalent,
+            component.proxy.analysisCategories.find(category => category.key === 'synergy.creatureTokens.sources'),
+            component.proxy.analysisColumns[0],
+        );
+
+        expect(graveCell.title).toContain('4x opt - S:Grave to hand cost 5');
+        expect(tokenCell.title).toContain('4x opt - S:Token engine cost 11');
 
         component.data.config.analysisMode = false;
         component.data.metaDeckStates = [];

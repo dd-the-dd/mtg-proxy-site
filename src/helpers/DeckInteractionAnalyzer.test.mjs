@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
     combatOutcome,
-    summarizeCreatureInteractions
+    summarizeCreatureInteractions,
+    synergyInteractionDetail
 } from './DeckInteractionAnalyzer.mjs';
 
 const card = (name, selectedOption) => {
@@ -149,7 +150,7 @@ describe('DeckInteractionAnalyzer', () => {
     test('Feature: Stormchaser-style cards separate synergy sources from synergy feeders.', () => {
         const stormchaserTalent = card("stormchaser's talent", {
             typeLine: 'Enchantment - Class',
-            oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.\nWhen this Class becomes level 2, return target instant or sorcery card from your graveyard to your hand.\nWhenever you cast an instant or sorcery spell, create a 1/1 Otter creature token with prowess.',
+            oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.\n{3}{U}: Level 2\nWhen this Class becomes level 2, return target instant or sorcery card from your graveyard to your hand.\n{5}{U}: Level 3\nWhenever you cast an instant or sorcery spell, create a 1/1 Otter creature token with prowess.',
             manaCost: '{U}',
             relatedTokens: [
                 {
@@ -176,5 +177,8 @@ describe('DeckInteractionAnalyzer', () => {
         expect(feederSummary.synergy.combat.feeders.map(item => item.name)).toEqual(['opt']);
         expect(feederSummary.synergy.graveyardPlay.feeders.map(item => item.name)).toEqual(['opt']);
         expect(feederSummary.synergy.creatureTokens.feeders.map(item => item.name)).toEqual(['opt']);
+        expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.combat.feeders')).toBe('I:Feed 1+1 UED cost 1');
+        expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.graveyardPlay.feeders')).toBe('S:Grave to hand cost 5');
+        expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.creatureTokens.feeders')).toBe('S:Token engine cost 11');
     });
 });

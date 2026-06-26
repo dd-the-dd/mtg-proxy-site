@@ -755,7 +755,7 @@ import {
     cardAnalysisCharacteristics,
     isCreatureCard,
     summarizeCreatureInteractions,
-    synergyTriggerCost
+    synergyInteractionDetail
 } from "../helpers/DeckInteractionAnalyzer.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
 import { bindStorage } from "../helpers/VueLocalStorage.mjs";
@@ -1235,10 +1235,10 @@ export default {
             for (const targetCard of targets) {
                 const summary = summarizeCreatureInteractions([card], targetCard);
                 if (this.cardsForAnalysisCategory(summary, category.key).length > 0) {
-                    const cost = synergyTriggerCost(card, targetCard, category.key);
-                    const costText = cost ? ` (${cost})` : '';
+                    const detail = synergyInteractionDetail(card, targetCard, category.key);
+                    const detailText = detail ? ` - ${detail}` : '';
                     matchedQuantity += targetCard.quantity ?? 1;
-                    matchedCards.push(`${targetCard.quantity ?? 1}x ${targetCard.name}${costText}`);
+                    matchedCards.push(`${targetCard.quantity ?? 1}x ${targetCard.name}${detailText}`);
                 }
             }
 
