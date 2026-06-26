@@ -65,6 +65,40 @@ describe('DeckInteractionAnalyzer', () => {
         expect(combatOutcome(flyer, groundCreature)).toBe('damageOnPlayer');
     });
 
+    test('Feature: Creature combat analysis treats first strike plus deathtouch as lethal before normal damage.', () => {
+        const firstStrikeTouch = card('knife fighter', {
+            typeLine: 'Creature - Human Assassin',
+            oracleText: 'First strike, deathtouch',
+            power: '1',
+            toughness: '1',
+        });
+        const largeCreature = card('large creature', {
+            typeLine: 'Creature - Beast',
+            oracleText: '',
+            power: '8',
+            toughness: '8',
+        });
+
+        expect(combatOutcome(firstStrikeTouch, largeCreature)).toBe('attackerSurvives');
+    });
+
+    test('Feature: Creature combat analysis lets double strike deal damage in both combat damage steps.', () => {
+        const doubleStriker = card('two-step attacker', {
+            typeLine: 'Creature - Human Warrior',
+            oracleText: 'Double strike',
+            power: '2',
+            toughness: '4',
+        });
+        const defender = card('blocking creature', {
+            typeLine: 'Creature - Beast',
+            oracleText: '',
+            power: '4',
+            toughness: '4',
+        });
+
+        expect(combatOutcome(doubleStriker, defender)).toBe('bothDie');
+    });
+
     test('Feature: Creature interaction analysis separates attacking combat from defensive blocking.', () => {
         const flyer = card('slickshot show-off', {
             typeLine: 'Creature - Bird Wizard',

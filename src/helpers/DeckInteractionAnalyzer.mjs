@@ -1,3 +1,5 @@
+const characteristicCache = new WeakMap();
+
 function selected(card) {
     return card.selectedOption ?? card;
 }
@@ -15,8 +17,29 @@ function statValue(value) {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
+function keywordsOf(card) {
+    const selectedCard = selected(card);
+    const listedKeywords = selectedCard.keywords ?? [];
+    const textKeywords = [
+        'deathtouch',
+        'defender',
+        'double strike',
+        'first strike',
+        'flying',
+        'indestructible',
+        'menace',
+        'reach',
+        'trample',
+        'vigilance',
+    ].filter(keyword => {
+        return new RegExp(`\\b${keyword}\\b`, 'i').test(textOf(card));
+    });
+
+    return new Set([...listedKeywords, ...textKeywords].map(keyword => keyword.toLowerCase()));
+}
+
 function hasKeyword(card, keyword) {
-    return new RegExp(`\\b${keyword}\\b`, 'i').test(textOf(card));
+    return creatureCharacteristics(card).keywords.has(keyword.toLowerCase());
 }
 
 export function isCreatureCard(card) {
@@ -27,6 +50,40 @@ export function creatureStats(card) {
     return {
         power: statValue(selected(card).power),
         toughness: statValue(selected(card).toughness),
+    };
+}
+
+export function creatureCharacteristics(card) {
+    const selectedCard = selected(card);
+
+    if (characteristicCache.has(selectedCard)) {
+        return characteristicCache.get(selectedCard);
+    }
+
+    const savedCharacteristics = selectedCard.analysisCharacteristics;
+    const characteristics = savedCharacteristics
+        ? {
+            ...savedCharacteristics,
+            keywords: new Set(Array.isArray(savedCharacteristics.keywords) ? savedCharacteristics.keywords : []),
+        }
+        : {
+            isCreature: isCreatureCard(card),
+            keywords: keywordsOf(card),
+            power: statValue(selectedCard.power),
+            toughness: statValue(selectedCard.toughness),
+            unblockable: /can't be blocked|can’t be blocked|unblockable/i.test(textOf(card)),
+        };
+
+    characteristicCache.set(selectedCard, characteristics);
+    return characteristics;
+}
+
+export function cardAnalysisCharacteristics(card) {
+    const characteristics = creatureCharacteristics(card);
+
+    return {
+        ...characteristics,
+        keywords: [...characteristics.keywords],
     };
 }
 
@@ -66,11 +123,41 @@ export function canDestroyCreatureWithSpell(card, creature) {
 }
 
 export function canBlock(attacker, defender) {
-    const attackerFlying = hasKeyword(attacker, 'flying');
-    const defenderFlying = hasKeyword(defender, 'flying');
-    const defenderReach = hasKeyword(defender, 'reach');
+    const attackerCharacteristics = creatureCharacteristics(attacker);
+    const defenderCharacteristics = creatureCharacteristics(defender);
+    const attackerFlying = attackerCharacteristics.keywords.has('flying');
+    const attackerMenace = attackerCharacteristics.keywords.has('menace');
+    const defenderFlying = defenderCharacteristics.keywords.has('flying');
+    const defenderReach = defenderCharacteristics.keywords.has('reach');
+
+    if (attackerCharacteristics.unblockable || attackerMenace) {
+        return false;
+    }
 
     return !attackerFlying || defenderFlying || defenderReach;
+}
+
+function dealsLethalDamage(attackerCharacteristics, defenderCharacteristics, assignedDamage) {
+    if (assignedDamage <= 0) {
+        return false;
+    }
+
+    if (defenderCharacteristics.keywords.has('indestructible')) {
+        return false;
+    }
+
+    return attackerCharacteristics.keywords.has('deathtouch') ||
+        assignedDamage >= defenderCharacteristics.toughness;
+}
+
+function canAssignFirstStrikeDamage(characteristics) {
+    return characteristics.keywords.has('first strike') ||
+        characteristics.keywords.has('double strike');
+}
+
+function canAssignNormalDamage(characteristics) {
+    return characteristics.keywords.has('double strike') ||
+        (!characteristics.keywords.has('first strike') && !characteristics.keywords.has('double strike'));
 }
 
 export function combatOutcome(attacker, defender) {
@@ -82,8 +169,8 @@ export function combatOutcome(attacker, defender) {
         return 'damageOnPlayer';
     }
 
-    const attackerStats = creatureStats(attacker);
-    const defenderStats = creatureStats(defender);
+    const attackerStats = creatureCharacteristics(attacker);
+    const defenderStats = creatureCharacteristics(defender);
     if (
         attackerStats.power === null ||
         attackerStats.toughness === null ||
@@ -93,8 +180,40 @@ export function combatOutcome(attacker, defender) {
         return 'unknown';
     }
 
-    const attackerDies = defenderStats.power >= attackerStats.toughness;
-    const defenderDies = attackerStats.power >= defenderStats.toughness;
+    let attackerDamage = 0;
+    let defenderDamage = 0;
+    let attackerDies = false;
+    let defenderDies = false;
+    const hasFirstStrikeStep = canAssignFirstStrikeDamage(attackerStats) ||
+        canAssignFirstStrikeDamage(defenderStats);
+
+    if (hasFirstStrikeStep) {
+        const attackerFirstStrikeDamage = canAssignFirstStrikeDamage(attackerStats)
+            ? attackerStats.power
+            : 0;
+        const defenderFirstStrikeDamage = canAssignFirstStrikeDamage(defenderStats)
+            ? defenderStats.power
+            : 0;
+
+        attackerDamage += defenderFirstStrikeDamage;
+        defenderDamage += attackerFirstStrikeDamage;
+        attackerDies = dealsLethalDamage(defenderStats, attackerStats, attackerDamage);
+        defenderDies = dealsLethalDamage(attackerStats, defenderStats, defenderDamage);
+    }
+
+    if (!attackerDies && !defenderDies) {
+        const attackerNormalDamage = canAssignNormalDamage(attackerStats)
+            ? attackerStats.power
+            : 0;
+        const defenderNormalDamage = canAssignNormalDamage(defenderStats)
+            ? defenderStats.power
+            : 0;
+
+        attackerDamage += defenderNormalDamage;
+        defenderDamage += attackerNormalDamage;
+        attackerDies = dealsLethalDamage(defenderStats, attackerStats, attackerDamage);
+        defenderDies = dealsLethalDamage(attackerStats, defenderStats, defenderDamage);
+    }
 
     if (attackerDies && defenderDies) {
         return 'bothDie';

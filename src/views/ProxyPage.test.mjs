@@ -234,8 +234,99 @@ describe('Core Rendering', async () => {
         );
 
         expect(wrapper.find('#analysis-card-list').exists()).toBe(true);
-        expect(cell.display).toBe('+2');
+        expect(cell.display).toBe('+4');
         expect(cell.title).toContain('slickshot show-off');
+
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
+    test('Feature: Mana-value analysis cells sum matching meta cards inside fixed mana columns.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const burstLightning = {
+            quantity: 1,
+            name: 'burst lightning',
+            selectedOption: {
+                typeLine: 'Instant',
+                oracleText: 'Burst Lightning deals 2 damage to any target.',
+            },
+        };
+        const oneManaCreature = {
+            quantity: 3,
+            name: 'one mana target',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Creature - Mouse',
+                oracleText: '',
+                power: '1',
+                toughness: '2',
+            },
+        };
+        const secondOneManaCreature = {
+            quantity: 2,
+            name: 'second one mana target',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Creature - Rabbit',
+                oracleText: '',
+                power: '2',
+                toughness: '2',
+            },
+        };
+        const twoManaCreature = {
+            quantity: 4,
+            name: 'two mana target',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Creature - Bird',
+                oracleText: 'Flying',
+                power: '1',
+                toughness: '3',
+            },
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisMetric = 'count';
+        component.data.config.analysisColumnMode = 'manaValue';
+        component.data.config.analysisMatchupSessionId = 'all';
+        component.data.cards = [burstLightning];
+        component.data.metaDeckStates = [
+            {
+                id: 'meta-one',
+                name: 'Meta One',
+                state: {
+                    cards: [oneManaCreature, secondOneManaCreature, twoManaCreature],
+                },
+            },
+        ];
+
+        const columns = component.proxy.analysisColumns;
+        const oneManaColumn = columns.find(column => column.key === '1');
+        const ninePlusColumn = columns.find(column => column.key === '9-plus');
+        const cell = component.ctx.cardAnalysisCell(
+            burstLightning,
+            component.proxy.analysisCategories[0],
+            oneManaColumn,
+        );
+
+        expect(columns.map(column => column.label)).toEqual([
+            '0 mana',
+            '1 mana',
+            '2 mana',
+            '3 mana',
+            '4 mana',
+            '5 mana',
+            '6 mana',
+            '7 mana',
+            '8 mana',
+            '9+ mana',
+        ]);
+        expect(cell.display).toBe('5');
+        expect(cell.title).toContain('3x one mana target');
+        expect(cell.title).toContain('2x second one mana target');
+        expect(ninePlusColumn.creatures).toEqual([]);
 
         component.data.config.analysisMode = false;
         component.data.metaDeckStates = [];

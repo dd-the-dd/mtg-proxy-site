@@ -746,6 +746,7 @@
 <script>
 import { parseDecklist } from "../helpers/DecklistParser.mjs";
 import {
+    cardAnalysisCharacteristics,
     isCreatureCard,
     summarizeCreatureInteractions
 } from "../helpers/DeckInteractionAnalyzer.mjs";
@@ -1104,23 +1105,29 @@ export default {
             const sessions = this.selectedMetaDeckStates;
 
             if (this.config.analysisColumnMode === "manaValue") {
-                const groups = new Map();
+                const columns = Array.from({ length: 10 }, (_, manaValue) => {
+                    const isNinePlus = manaValue === 9;
+
+                    return {
+                        key: isNinePlus ? '9-plus' : String(manaValue),
+                        sortValue: manaValue,
+                        label: isNinePlus ? '9+ mana' : `${manaValue} mana`,
+                        creatures: [],
+                    };
+                });
+
                 for (const session of sessions) {
                     for (const creature of (session.state?.cards ?? []).filter(card => isCreatureCard(card))) {
-                        const manaValue = creature.selectedOption?.manaValue ?? 'unknown';
-                        const key = String(manaValue);
-                        const group = groups.get(key) ?? {
-                            key,
-                            sortValue: Number.isFinite(Number(manaValue)) ? Number(manaValue) : 999,
-                            label: key === 'unknown' ? 'MV ?' : `MV ${key}`,
-                            creatures: [],
-                        };
-                        group.creatures.push(creature);
-                        groups.set(key, group);
+                        const manaValue = Number(creature.selectedOption?.manaValue);
+                        if (!Number.isFinite(manaValue) || manaValue < 0) {
+                            continue;
+                        }
+
+                        columns[Math.min(Math.floor(manaValue), 9)].creatures.push(creature);
                     }
                 }
 
-                return [...groups.values()].sort((a, b) => a.sortValue - b.sortValue || a.label.localeCompare(b.label));
+                return columns;
             }
 
             return sessions.map(session => {
@@ -1178,30 +1185,32 @@ export default {
                 return value?.[part];
             }, summary) ?? [];
         },
-        formatAnalysisValue(card) {
-            const quantity = card.quantity ?? 1;
+        formatAnalysisValue(card, quantity, total) {
+            const prefix = card.isSideboard ? '+' : '';
 
             if (this.config.analysisMetric === "percent") {
-                const percent = this.analysisCardTotal > 0
-                    ? quantity / this.analysisCardTotal * 100
+                const percent = total > 0
+                    ? quantity / total * 100
                     : 0;
-                const value = `${percent.toFixed(1)}%`;
-                return card.isSideboard ? `+${value}` : value;
+                return `${prefix}${percent.toFixed(1)}%`;
             }
 
-            return card.isSideboard ? `+${quantity}` : String(quantity);
+            return `${prefix}${quantity}`;
         },
         cardAnalysisCell(card, category, column) {
             const matchedCreatures = [];
+            let matchedQuantity = 0;
+            const columnTotal = this.countCards(column.creatures);
 
             for (const creature of column.creatures) {
                 const summary = summarizeCreatureInteractions([card], creature);
                 if (this.cardsForAnalysisCategory(summary, category.key).length > 0) {
+                    matchedQuantity += creature.quantity ?? 1;
                     matchedCreatures.push(`${creature.quantity ?? 1}x ${creature.name}`);
                 }
             }
 
-            if (matchedCreatures.length === 0) {
+            if (matchedQuantity === 0) {
                 return {
                     active: false,
                     display: '-',
@@ -1211,7 +1220,7 @@ export default {
 
             return {
                 active: true,
-                display: this.formatAnalysisValue(card),
+                display: this.formatAnalysisValue(card, matchedQuantity, columnTotal),
                 title: matchedCreatures.join(', '),
             };
         },
@@ -1937,6 +1946,7 @@ export default {
                                 manaValue: option.manaValue,
                                 power: option.power,
                                 toughness: option.toughness,
+                                analysisCharacteristics: cardAnalysisCharacteristics(option),
                                 relatedTokens: option.relatedTokens,
                                 relatedGamePieces: option.relatedGamePieces,
                             };
