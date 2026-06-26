@@ -12,6 +12,10 @@ function typeLineOf(card) {
     return selected(card).typeLine ?? '';
 }
 
+function manaCostOf(card) {
+    return selected(card).manaCost ?? '';
+}
+
 function statValue(value) {
     const parsed = parseInt(value, 10);
     return Number.isFinite(parsed) ? parsed : null;
@@ -44,6 +48,17 @@ function hasKeyword(card, keyword) {
 
 export function isCreatureCard(card) {
     return /\bCreature\b/i.test(typeLineOf(card));
+}
+
+function isInstantOrSorcery(card) {
+    return /\b(?:Instant|Sorcery)\b/i.test(typeLineOf(card));
+}
+
+function isNonCreatureNonLandSpell(card) {
+    const typeLine = typeLineOf(card);
+    return typeLine !== '' &&
+        !/\bCreature\b/i.test(typeLine) &&
+        !/\bLand\b/i.test(typeLine);
 }
 
 export function creatureStats(card) {
@@ -235,6 +250,21 @@ export function hasCreatureSynergy(card) {
     return /target creature|creatures? you control|whenever (?:a|another|one or more) creatures?|creature spell/i.test(oracleText);
 }
 
+function emptySynergySummary() {
+    return {
+        sources: [],
+        feeders: [],
+    };
+}
+
+function createSynergySummary() {
+    return {
+        combat: emptySynergySummary(),
+        graveyardPlay: emptySynergySummary(),
+        creatureTokens: emptySynergySummary(),
+    };
+}
+
 function emptyCombatSummary() {
     return {
         bothSurvive: [],
@@ -268,6 +298,57 @@ function pushOnce(cards, card) {
     }
 }
 
+function tokenHasProwess(card) {
+    return (selected(card).relatedTokens ?? []).some(token => {
+        return /\bCreature\b/i.test(token.typeLine ?? '') &&
+            /\bProwess\b/i.test(token.oracleText ?? '');
+    });
+}
+
+function isCombatSynergySource(card) {
+    return /\bProwess\b/i.test(textOf(card)) || tokenHasProwess(card);
+}
+
+function isGraveyardPlaySynergySource(card) {
+    return /return target instant or sorcery card from your graveyard to your hand/i.test(textOf(card));
+}
+
+function isCreatureTokenSynergySource(card) {
+    return /whenever you cast an instant or sorcery spell, create/i.test(textOf(card));
+}
+
+function addSynergyMatches(summary, card, relatedCard) {
+    if (isCombatSynergySource(card) && isNonCreatureNonLandSpell(relatedCard)) {
+        pushOnce(summary.synergy.combat.sources, card);
+    }
+
+    if (isCombatSynergySource(relatedCard) && isNonCreatureNonLandSpell(card)) {
+        pushOnce(summary.synergy.combat.feeders, card);
+    }
+
+    if (isGraveyardPlaySynergySource(card) && isInstantOrSorcery(relatedCard)) {
+        pushOnce(summary.synergy.graveyardPlay.sources, card);
+    }
+
+    if (isGraveyardPlaySynergySource(relatedCard) && isInstantOrSorcery(card)) {
+        pushOnce(summary.synergy.graveyardPlay.feeders, card);
+    }
+
+    if (isCreatureTokenSynergySource(card) && isInstantOrSorcery(relatedCard)) {
+        pushOnce(summary.synergy.creatureTokens.sources, card);
+    }
+
+    if (isCreatureTokenSynergySource(relatedCard) && isInstantOrSorcery(card)) {
+        pushOnce(summary.synergy.creatureTokens.feeders, card);
+    }
+}
+
+export function synergyTriggerCost(card, relatedCard, categoryKey) {
+    return /\.sources$/.test(categoryKey)
+        ? manaCostOf(relatedCard)
+        : manaCostOf(card);
+}
+
 export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
     const summary = {
         instantRemoval: [],
@@ -277,6 +358,7 @@ export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
             defending: emptyCombatSummary(),
         },
         synergies: [],
+        synergy: createSynergySummary(),
     };
 
     for (const card of evaluatedCards) {
@@ -300,6 +382,8 @@ export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
         if (hasCreatureSynergy(card)) {
             summary.synergies.push(card);
         }
+
+        addSynergyMatches(summary, card, enemyCreature);
     }
 
     return summary;

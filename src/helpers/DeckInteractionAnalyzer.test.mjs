@@ -145,4 +145,36 @@ describe('DeckInteractionAnalyzer', () => {
         expect(summary.combat.attacking.bothDie.map(item => item.name)).toEqual(['raise the alarm']);
         expect(summary.combat.defending.bothDie.map(item => item.name)).toEqual(['raise the alarm']);
     });
+
+    test('Feature: Stormchaser-style cards separate synergy sources from synergy feeders.', () => {
+        const stormchaserTalent = card("stormchaser's talent", {
+            typeLine: 'Enchantment - Class',
+            oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.\nWhen this Class becomes level 2, return target instant or sorcery card from your graveyard to your hand.\nWhenever you cast an instant or sorcery spell, create a 1/1 Otter creature token with prowess.',
+            manaCost: '{U}',
+            relatedTokens: [
+                {
+                    name: 'otter',
+                    typeLine: 'Token Creature - Otter',
+                    oracleText: 'Prowess',
+                    power: '1',
+                    toughness: '1',
+                },
+            ],
+        });
+        const opt = card('opt', {
+            typeLine: 'Instant',
+            oracleText: 'Scry 1. Draw a card.',
+            manaCost: '{U}',
+        });
+
+        const sourceSummary = summarizeCreatureInteractions([stormchaserTalent], opt);
+        const feederSummary = summarizeCreatureInteractions([opt], stormchaserTalent);
+
+        expect(sourceSummary.synergy.combat.sources.map(item => item.name)).toEqual(["stormchaser's talent"]);
+        expect(sourceSummary.synergy.graveyardPlay.sources.map(item => item.name)).toEqual(["stormchaser's talent"]);
+        expect(sourceSummary.synergy.creatureTokens.sources.map(item => item.name)).toEqual(["stormchaser's talent"]);
+        expect(feederSummary.synergy.combat.feeders.map(item => item.name)).toEqual(['opt']);
+        expect(feederSummary.synergy.graveyardPlay.feeders.map(item => item.name)).toEqual(['opt']);
+        expect(feederSummary.synergy.creatureTokens.feeders.map(item => item.name)).toEqual(['opt']);
+    });
 });

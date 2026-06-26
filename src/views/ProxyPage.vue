@@ -580,7 +580,7 @@
                 </thead>
                 <tbody>
                   <tr
-                    v-for="category in analysisCategories"
+                    v-for="category in visibleAnalysisCategories(card)"
                     :key="category.key"
                   >
                     <td>{{ category.label }}</td>
@@ -754,7 +754,8 @@ import { parseDecklist } from "../helpers/DecklistParser.mjs";
 import {
     cardAnalysisCharacteristics,
     isCreatureCard,
-    summarizeCreatureInteractions
+    summarizeCreatureInteractions,
+    synergyTriggerCost
 } from "../helpers/DeckInteractionAnalyzer.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
 import { bindStorage } from "../helpers/VueLocalStorage.mjs";
@@ -793,7 +794,12 @@ const analysisCategories = [
     { key: "combat.defending.defenderSurvives", label: "Blk win" },
     { key: "combat.defending.attackerSurvives", label: "Blk lose" },
     { key: "combat.defending.damageOnPlayer", label: "No block" },
-    { key: "synergies", label: "Synergy" },
+    { key: "synergy.combat.sources", label: "Synergy combat", targetGroup: "cards" },
+    { key: "synergy.combat.feeders", label: "Feeds combat", targetGroup: "cards" },
+    { key: "synergy.graveyardPlay.sources", label: "Synergy grave", targetGroup: "cards" },
+    { key: "synergy.graveyardPlay.feeders", label: "Feeds grave", targetGroup: "cards" },
+    { key: "synergy.creatureTokens.sources", label: "Synergy tokens", targetGroup: "cards" },
+    { key: "synergy.creatureTokens.feeders", label: "Feeds tokens", targetGroup: "cards" },
 ];
 
 function createDefaultConfig() {
@@ -1119,19 +1125,24 @@ export default {
                         key: isNinePlus ? '9-plus' : String(manaValue),
                         sortValue: manaValue,
                         label: isNinePlus ? '9+ mana' : `${manaValue} mana`,
+                        cards: [],
                         creatures: [],
                         totalCards: selectedCardTotal,
                     };
                 });
 
                 for (const session of sessions) {
-                    for (const creature of (session.state?.cards ?? []).filter(card => isCreatureCard(card))) {
-                        const manaValue = Number(creature.selectedOption?.manaValue);
+                    for (const card of (session.state?.cards ?? [])) {
+                        const manaValue = Number(card.selectedOption?.manaValue);
                         if (!Number.isFinite(manaValue) || manaValue < 0) {
                             continue;
                         }
 
-                        columns[Math.min(Math.floor(manaValue), 9)].creatures.push(creature);
+                        const column = columns[Math.min(Math.floor(manaValue), 9)];
+                        column.cards.push(card);
+                        if (isCreatureCard(card)) {
+                            column.creatures.push(card);
+                        }
                     }
                 }
 
@@ -1142,6 +1153,7 @@ export default {
                 return {
                     key: session.id,
                     label: session.name,
+                    cards: session.state?.cards ?? [],
                     creatures: (session.state?.cards ?? []).filter(card => isCreatureCard(card)),
                     totalCards: this.countCards(session.state?.cards ?? []),
                 };
@@ -1197,6 +1209,11 @@ export default {
                 return value?.[part];
             }, summary) ?? [];
         },
+        visibleAnalysisCategories(card) {
+            return this.analysisCategories.filter(category => {
+                return this.analysisColumns.some(column => this.cardAnalysisCell(card, category, column).active);
+            });
+        },
         formatAnalysisValue(card, quantity, total) {
             const prefix = card.isSideboard ? '+' : '';
 
@@ -1210,15 +1227,18 @@ export default {
             return `${prefix}${quantity}`;
         },
         cardAnalysisCell(card, category, column) {
-            const matchedCreatures = [];
+            const targets = category.targetGroup === "cards" ? column.cards ?? [] : column.creatures ?? [];
+            const matchedCards = [];
             let matchedQuantity = 0;
             const denominator = column.totalCards ?? this.countCards(column.creatures);
 
-            for (const creature of column.creatures) {
-                const summary = summarizeCreatureInteractions([card], creature);
+            for (const targetCard of targets) {
+                const summary = summarizeCreatureInteractions([card], targetCard);
                 if (this.cardsForAnalysisCategory(summary, category.key).length > 0) {
-                    matchedQuantity += creature.quantity ?? 1;
-                    matchedCreatures.push(`${creature.quantity ?? 1}x ${creature.name}`);
+                    const cost = synergyTriggerCost(card, targetCard, category.key);
+                    const costText = cost ? ` (${cost})` : '';
+                    matchedQuantity += targetCard.quantity ?? 1;
+                    matchedCards.push(`${targetCard.quantity ?? 1}x ${targetCard.name}${costText}`);
                 }
             }
 
@@ -1233,7 +1253,7 @@ export default {
             return {
                 active: true,
                 display: this.formatAnalysisValue(card, matchedQuantity, denominator),
-                title: matchedCreatures.join(', '),
+                title: matchedCards.join(', '),
             };
         },
         capturePrintOrderIndexes() {

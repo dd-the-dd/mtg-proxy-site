@@ -431,6 +431,74 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Analysis mode hides empty rows and shows typed synergy rows with trigger costs.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const stormchaserTalent = {
+            quantity: 1,
+            name: "stormchaser's talent",
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Enchantment - Class',
+                oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.\nWhen this Class becomes level 2, return target instant or sorcery card from your graveyard to your hand.\nWhenever you cast an instant or sorcery spell, create a 1/1 Otter creature token with prowess.',
+                manaCost: '{U}',
+                relatedTokens: [
+                    {
+                        name: 'otter',
+                        typeLine: 'Token Creature - Otter',
+                        oracleText: 'Prowess',
+                        power: '1',
+                        toughness: '1',
+                    },
+                ],
+            },
+            setOptions: [],
+        };
+        const opt = {
+            quantity: 4,
+            name: 'opt',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Instant',
+                oracleText: 'Scry 1. Draw a card.',
+                manaCost: '{U}',
+            },
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisMetric = 'count';
+        component.data.config.analysisColumnMode = 'metaDeck';
+        component.data.config.analysisMatchupSessionId = 'all';
+        component.data.cards = [stormchaserTalent];
+        component.data.metaDeckStates = [
+            {
+                id: 'synergy-meta',
+                name: 'Synergy Meta',
+                state: {
+                    cards: [opt],
+                },
+            },
+        ];
+
+        const visibleLabels = component.ctx.visibleAnalysisCategories(stormchaserTalent).map(category => category.label);
+        const cell = component.ctx.cardAnalysisCell(
+            stormchaserTalent,
+            component.proxy.analysisCategories.find(category => category.key === 'synergy.combat.sources'),
+            component.proxy.analysisColumns[0],
+        );
+
+        expect(visibleLabels).toContain('Synergy combat');
+        expect(visibleLabels).toContain('Synergy grave');
+        expect(visibleLabels).toContain('Synergy tokens');
+        expect(visibleLabels).not.toContain('Kill inst.');
+        expect(cell.display).toBe('4');
+        expect(cell.title).toContain('4x opt ({U})');
+
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
     test('Feature: Local app startup restores the first saved session from storage.', async () => {
         globalThis.__resetLocalSessions();
         globalThis.__localSessionStore.sessions.push({
