@@ -46,6 +46,9 @@
 - Local app sessions can be tagged as meta decks, and analysis mode renders loaded cards one per row with a matchup grid beside each card.
 - Analysis mode can show current-card interaction categories against all tagged meta decks or one selected matchup, with columns grouped by meta deck or by meta-creature mana value.
 - Analysis cells can show card counts or deck percentages, and sideboard cards use a `+` indicator in cells where they add interaction coverage.
+- Loading surfaces appear over session, deck, and dataset-loading areas while local data is being read.
+- The left session/config rail can collapse toward the left; when open it uses a narrow sidebar layout so analysis content keeps most of the page width.
+- Analysis card rows prioritize a near-card-sized image beside a compact interaction grid that avoids horizontal scrolling for normal meta views.
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
 - Generating combo pieces skips disabled categories and does not duplicate related pieces already in the decklist.
 - Generating real-card combo pieces for `Gilt-Leaf Alchemist` appends `Forest [ecl] 283`, but generating from `Forest [ecl] 283` does not append `Gilt-Leaf Alchemist`.

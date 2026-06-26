@@ -2,459 +2,475 @@
   <div class="section">
     <HelpModal ref="helpModal" />
 
-    <div class="columns">
-      <div
-        v-if="localAppEnabled"
-        id="local-session-menu"
-        class="column col-2 col-sm-12 mb-2"
-        :class="{ 'local-session-menu-collapsed': !sessionsMenuOpen }"
-      >
+    <div
+      class="app-layout"
+      :class="{ 'app-layout-sidebar-collapsed': leftMenuCollapsed }"
+    >
+      <aside id="app-sidebar" class="app-sidebar">
         <button
-          id="toggle-session-menu"
+          id="toggle-left-menu"
           class="btn btn-block"
-          @click="sessionsMenuOpen = !sessionsMenuOpen"
+          @click="leftMenuCollapsed = !leftMenuCollapsed"
         >
-          {{ sessionsMenuOpen ? 'Sessions' : 'Sessions >' }}
+          {{ leftMenuCollapsed ? '>' : '<' }}
         </button>
-        <div v-if="sessionsMenuOpen" class="local-session-menu-body">
-          <button
-            id="new-local-session"
-            class="btn btn-primary btn-block"
-            @click="createLocalSession"
+        <div v-if="!leftMenuCollapsed" class="app-sidebar-content">
+          <div
+            v-if="localAppEnabled"
+            id="local-session-menu"
+            class="mb-2 loading-surface"
+            :class="{ loading: isLoadingSessions }"
           >
-            + New Session
-          </button>
-          <div v-if="activeSessionId" class="form-group mt-2">
-            <label class="form-label" for="local-session-name">Name</label>
-            <input
-              id="local-session-name"
-              class="form-input"
-              type="text"
-              v-model="activeSessionName"
-              @change="scheduleSessionSave"
-            >
-          </div>
-          <label v-if="activeSessionId" class="form-switch">
-            <input
-              id="local-session-is-meta"
-              type="checkbox"
-              v-model="activeSessionIsMetaDeck"
-            >
-            <i class="form-icon" /> Meta deck
-          </label>
-          <div class="menu local-session-list">
             <button
-              v-for="session in localSessions"
-              :key="session.id"
-              type="button"
-              class="menu-item btn btn-link local-session-item"
-              :class="{ active: session.id === activeSessionId }"
-              @click="loadLocalSession(session.id)"
-            >
-              {{ session.name }}
-              <span v-if="session.isMetaDeck" class="label label-primary float-right">Meta</span>
-            </button>
-          </div>
-        </div>
-      </div>
-      <div class="column col-3 col-sm-12 mb-2" style="z-index: 300">
-        <div id="config" class="form-group p-sticky">
-          <div class="form-group">
-            <textarea
-              id="deck-input"
-              class="form-input"
-              title="Deck Input"
-              v-model="config.decklist"
-              autofocus
-              placeholder="4 Wild Nacatl&#10;0x Griselbrand&#10;4 Strip Mine (ATQ) 82d&#10;&#10;// Sideboard&#10;3x Rough // Tumble&#10;SB: dead/gone&#10;&#10;// Tokens&#10;5 Goblin&#10;Lost Mine of Phandelver"
-            />
-          </div>
-
-          <div class="form-group btn-group btn-group-block">
-            <button
-              id="submit-decklist"
-              class="btn btn-primary"
-              @click="loadCardList()"
-            >
-              {{ cards.length ? $t('buttons.update') : $t('buttons.submit') }}
-            </button>
-            <button
-              id="print"
-              class="btn btn-block tooltip"
-              @click="printList"
-              :disabled="cards.length == 0"
-              :data-tooltip="$t('consumedSlots', { count: cardCountWhenPrinting.count, bound: cardCountWhenPrinting.bound})"
-            >
-              <span class="icon-print" /> {{ $t('buttons.print') }}
-            </button>
-          </div>
-          <div class="form-group">
-            <button
-              id="open-print-order"
+              id="toggle-session-menu"
               class="btn btn-block"
-              @click="openPrintOrderModal"
-              :disabled="printSlotsFrontBase.length == 0"
+              @click="sessionsMenuOpen = !sessionsMenuOpen"
             >
-              Print Order
+              {{ sessionsMenuOpen ? 'Sessions' : 'Sessions >' }}
             </button>
-          </div>
-          <div class="form-group">
-            <label class="form-switch">
-              <input
-                id="analysis-mode"
-                type="checkbox"
-                v-model="config.analysisMode"
+            <div v-if="sessionsMenuOpen" class="local-session-menu-body">
+              <button
+                id="new-local-session"
+                class="btn btn-primary btn-block"
+                @click="createLocalSession"
               >
-              <i class="form-icon" /> Analysis mode
-            </label>
-          </div>
-          <div v-if="config.analysisMode" id="analysis-config" class="form-group">
-            <label class="form-label">
-              Metric
-              <select
-                class="form-select select"
-                v-model="config.analysisMetric"
-              >
-                <option value="count">Cards</option>
-                <option value="percent">Percent</option>
-              </select>
-            </label>
-            <label class="form-label">
-              Columns
-              <select
-                class="form-select select"
-                v-model="config.analysisColumnMode"
-              >
-                <option value="metaDeck">Meta decks</option>
-                <option value="manaValue">Mana value</option>
-              </select>
-            </label>
-            <label class="form-label">
-              Matchup
-              <select
-                class="form-select select"
-                v-model="config.analysisMatchupSessionId"
-              >
-                <option value="all">All meta decks</option>
-                <option
-                  v-for="session in localSessions.filter(session => session.isMetaDeck)"
+                + New Session
+              </button>
+              <div v-if="activeSessionId" class="form-group mt-2">
+                <label class="form-label" for="local-session-name">Name</label>
+                <input
+                  id="local-session-name"
+                  class="form-input"
+                  type="text"
+                  v-model="activeSessionName"
+                  @change="scheduleSessionSave"
+                >
+              </div>
+              <label v-if="activeSessionId" class="form-switch">
+                <input
+                  id="local-session-is-meta"
+                  type="checkbox"
+                  v-model="activeSessionIsMetaDeck"
+                >
+                <i class="form-icon" /> Meta deck
+              </label>
+              <div class="menu local-session-list">
+                <button
+                  v-for="session in localSessions"
                   :key="session.id"
-                  :value="session.id"
+                  type="button"
+                  class="menu-item btn btn-link local-session-item"
+                  :class="{ active: session.id === activeSessionId }"
+                  @click="loadLocalSession(session.id)"
                 >
                   {{ session.name }}
-                </option>
-              </select>
-            </label>
-          </div>
-
-          <div class="form-group btn-group btn-group-block">
-            <div id="slot-usage" class="bar">
-              <template v-for="index in printCapacity.pageSize" :key="index">
-                <div
-                  :class="`bar-item ${index <= cardCountWhenPrinting.overflow ? 'consumed' : 'unconsumed'}`"
-                  role="progressbar"
-                />
-              </template>
+                  <span v-if="session.isMetaDeck" class="label label-primary float-right">Meta</span>
+                </button>
+              </div>
             </div>
           </div>
-          <div
-            v-if="cards.length"
-            id="print-capacity"
-            class="text-small text-gray"
-          >
-            Open: {{ printCapacity.missingCards }} card slot{{ printCapacity.missingCards === 1 ? '' : 's' }}
-            / {{ printCapacity.missingGamePieces }} game piece face{{ printCapacity.missingGamePieces === 1 ? '' : 's' }}
-          </div>
-
-          <div class="spacer" style="height: 0.4rem" />
-          <div
-            class="divider text-center"
-            :data-content="$t('configuration.label').toUpperCase()"
-          />
-
-          <div class="columns">
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="include-digital"
-                  v-model="config.includeDigital"
-                >
-                <i class="form-icon" /> {{ $t('configuration.showDigitalPrintings') }}
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="include-promo"
-                  v-model="config.includePromo"
-                >
-                <i class="form-icon" /> {{ $t('configuration.showPromoPrintings') }}
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="match-editions"
-                  v-model="config.matchEditions"
-                >
-                <i class="form-icon" /> {{ $t('configuration.matchInputEditions') }}
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="include-basics"
-                  v-model="config.includeBasics"
-                >
-                <i class="form-icon" /> {{ $t('configuration.includeBasicLands') }}
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="include-cards"
-                  v-model="config.includeCards"
-                >
-                <i class="form-icon" /> {{ $t('configuration.includeCards') }}
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="include-game-pieces"
-                  v-model="config.includeGamePieces"
-                >
-                <i class="form-icon" /> {{ $t('configuration.includeGamePieces') }}
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="show-cut-lines"
-                  v-model="config.showCutLines"
-                >
-                <i class="form-icon" /> {{ $t('configuration.showCutLines') }}
-              </label>
-            </div>
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="fixed-page-size"
-                  v-model="config.fixedPageSize"
-                >
-                <i class="form-icon" /> Fixed page size (3×3)
-              </label>
-            </div>
-            
-          </div>
-          <div class="column col-12 divider" />
-          <div class="columns">
-            <div class="column col-12 btn-group btn-group-block">
-              <button
-                id="toggle-combo-piece-config"
-                class="btn"
-                @click="config.comboPieceConfigOpen = !config.comboPieceConfigOpen"
-              >
-                {{ config.comboPieceConfigOpen ? 'Hide' : 'Show' }} Combo Pieces
-              </button>
-              <button
-                id="generate-combo-pieces"
-                class="btn btn-primary"
-                @click="generateRelatedComboPieces"
-              >
-                Generate
-              </button>
-            </div>
+          <div class="mb-2" style="z-index: 300">
             <div
-              v-if="config.comboPieceConfigOpen"
-              id="combo-piece-config"
-              class="column col-12"
+              id="config"
+              class="form-group p-sticky loading-surface"
+              :class="{ loading: isLoadingSets }"
             >
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="combo-piece-token"
-                  v-model="config.comboPieceTypes.token"
-                >
-                <i class="form-icon" /> Tokens
-              </label>
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="combo-piece-emblem"
-                  v-model="config.comboPieceTypes.emblem"
-                >
-                <i class="form-icon" /> Emblems
-              </label>
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="combo-piece-tracker"
-                  v-model="config.comboPieceTypes.tracker"
-                >
-                <i class="form-icon" /> Trackers
-              </label>
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="combo-piece-mechanic-helper"
-                  v-model="config.comboPieceTypes.mechanicHelper"
-                >
-                <i class="form-icon" /> Mechanic helpers
-              </label>
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="combo-piece-dungeon"
-                  v-model="config.comboPieceTypes.dungeon"
-                >
-                <i class="form-icon" /> Dungeons
-              </label>
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="combo-piece-initiative"
-                  v-model="config.comboPieceTypes.initiative"
-                >
-                <i class="form-icon" /> Initiative
-              </label>
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="combo-piece-ring"
-                  v-model="config.comboPieceTypes.ring"
-                >
-                <i class="form-icon" /> Ring
-              </label>
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="combo-piece-real-card"
-                  v-model="config.comboPieceTypes.realCard"
-                >
-                <i class="form-icon" /> Real cards
-              </label>
-            </div>
-          </div>
-          <div class="column col-12 divider" />
-          <div class="columns">
-            <div class="column col-12">
-              <label class="form-label">
-                <span
-                  class="tooltip tooltip-right"
-                  :data-tooltip="$t('configuration.imageType.tooltip')"
-                ><i class="form-icon" /> {{ $t('configuration.imageType.label') }}
-                  <span class="icon-info" /></span>
-                <select
-                  class="form-select select"
-                  name="image-type"
-                  v-model="config.imageType"
-                  style="width: 100%"
-                >
-                  <option value="normal">{{ $t('configuration.imageType.normal') }}</option>
-                  <option value="border_crop">{{ $t('configuration.imageType.borderCrop') }}</option>
-                </select>
-              </label>
-            </div>
+              <div class="form-group">
+                <textarea
+                  id="deck-input"
+                  class="form-input"
+                  title="Deck Input"
+                  v-model="config.decklist"
+                  autofocus
+                  placeholder="4 Wild Nacatl&#10;0x Griselbrand&#10;4 Strip Mine (ATQ) 82d&#10;&#10;// Sideboard&#10;3x Rough // Tumble&#10;SB: dead/gone&#10;&#10;// Tokens&#10;5 Goblin&#10;Lost Mine of Phandelver"
+                />
+              </div>
 
-            <div class="column col-12">
-              <label class="form-label">
-                <span
-                  class="tooltip tooltip-right"
-                  :data-tooltip="$t('configuration.printScale.tooltip')"
-                ><i class="form-icon" /> {{ $t('configuration.printScale.label') }}
-                  <span class="icon-info" /></span>
-                <select
-                  class="form-select select"
-                  name="scale"
-                  v-model="config.scale"
-                  style="width: 100%"
+              <div class="form-group btn-group btn-group-block">
+                <button
+                  id="submit-decklist"
+                  class="btn btn-primary"
+                  @click="loadCardList()"
+                  :class="{ loading: isLoadingCards }"
+                  :disabled="isLoadingCards"
                 >
-                  <option value="small">{{ $t('configuration.printScale.small') }} (-2%)</option>
-                  <option value="normal">{{ $t('configuration.printScale.regular') }} (60mm x 85mm)</option>
-                  <option value="large">{{ $t('configuration.printScale.large') }} (+2%)</option>
-                  <option value="actual">{{ $t('configuration.printScale.actual') }} (63mm x 88mm)</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-label">
-                <i class="form-icon" /> {{ $t('configuration.cardBacks.label') }}
-                <select
-                  class="form-select select"
-                  name="card-backs"
-                  v-model="config.cardBacks"
-                  style="width: 100%"
+                  {{ cards.length ? $t('buttons.update') : $t('buttons.submit') }}
+                </button>
+                <button
+                  id="print"
+                  class="btn btn-block tooltip"
+                  @click="printList"
+                  :disabled="cards.length == 0"
+                  :data-tooltip="$t('consumedSlots', { count: cardCountWhenPrinting.count, bound: cardCountWhenPrinting.bound})"
                 >
-                  <option value="none">{{ $t('configuration.cardBacks.none') }}</option>
-                  <option value="dfc">{{ $t('configuration.cardBacks.dfcs') }}</option>
-                  <option value="all">{{ $t('configuration.cardBacks.all') }}</option>
-                  <option value="all-pages">{{ $t('configuration.cardBacks.allPages') }}</option>
-                  <option value="token-pairs">{{ $t('configuration.cardBacks.tokenPairs') }}</option>
-                </select>
-              </label>
-              <div v-if="config.cardBacks === 'all-pages'" style="margin-top: 0.5rem">
+                  <span class="icon-print" /> {{ $t('buttons.print') }}
+                </button>
+              </div>
+              <div class="form-group">
+                <button
+                  id="open-print-order"
+                  class="btn btn-block"
+                  @click="openPrintOrderModal"
+                  :disabled="printSlotsFrontBase.length == 0"
+                >
+                  Print Order
+                </button>
+              </div>
+              <div class="form-group">
+                <label class="form-switch">
+                  <input
+                    id="analysis-mode"
+                    type="checkbox"
+                    v-model="config.analysisMode"
+                  >
+                  <i class="form-icon" /> Analysis mode
+                </label>
+              </div>
+              <div v-if="config.analysisMode" id="analysis-config" class="form-group">
                 <label class="form-label">
-                  <i class="form-icon" /> Token backs: 
-                  <select class="form-select select" v-model="config.tokenBackMode" style="width: 100%">
-                    <option value="card">Use regular card back</option>
-                    <option value="opposite">Use token face on opposite side</option>
+                  Metric
+                  <select
+                    class="form-select select"
+                    v-model="config.analysisMetric"
+                  >
+                    <option value="count">Cards</option>
+                    <option value="percent">Percent</option>
+                  </select>
+                </label>
+                <label class="form-label">
+                  Columns
+                  <select
+                    class="form-select select"
+                    v-model="config.analysisColumnMode"
+                  >
+                    <option value="metaDeck">Meta decks</option>
+                    <option value="manaValue">Mana value</option>
+                  </select>
+                </label>
+                <label class="form-label">
+                  Matchup
+                  <select
+                    class="form-select select"
+                    v-model="config.analysisMatchupSessionId"
+                  >
+                    <option value="all">All meta decks</option>
+                    <option
+                      v-for="session in localSessions.filter(session => session.isMetaDeck)"
+                      :key="session.id"
+                      :value="session.id"
+                    >
+                      {{ session.name }}
+                    </option>
                   </select>
                 </label>
               </div>
-              <div v-if="config.cardBacks === 'all-pages' && config.tokenBackMode === 'opposite'" style="margin-top: 0.5rem">
-                <label class="form-switch">
-                  <input
-                    type="checkbox"
-                    name="automatic-token-placement"
-                    :checked="config.tokenPlacementMode === 'auto'"
-                    @change="config.tokenPlacementMode = $event.target.checked ? 'auto' : 'chosen'"
-                  >
-                  <i class="form-icon" /> Automatic token placement
-                </label>
-              </div>
-              <div v-if="config.cardBacks === 'all-pages' && !config.fixedPageSize" style="margin-top:0.5rem">
-                <label class="form-label">
-                  <i class="form-icon" /> Cards per page (leave empty to group all fronts/backs):
-                  <input type="number" min="1" max="36" class="form-input" v-model.number="config.cardsPerPage" style="width:100%" />
-                </label>
-              </div>
-            </div>
-          </div>
-          <div class="column col-12 divider" />
-          <div class="columns">
-            <div class="column col-12">
-              <button
-                class="btn p-centered"
-                @click="$refs.helpModal.show()"
-              >
-                {{ $t('configuration.help.label') }}
-              </button>
-            </div>
-          </div>
-          <div class="column col-12 divider" />
-        </div>
-      </div>
 
-      <div
-        class="column col-sm-12"
-        :class="localAppEnabled ? 'col-7' : 'col-9'"
-      >
+              <div class="form-group btn-group btn-group-block">
+                <div id="slot-usage" class="bar">
+                  <template v-for="index in printCapacity.pageSize" :key="index">
+                    <div
+                      :class="`bar-item ${index <= cardCountWhenPrinting.overflow ? 'consumed' : 'unconsumed'}`"
+                      role="progressbar"
+                    />
+                  </template>
+                </div>
+              </div>
+              <div
+                v-if="cards.length"
+                id="print-capacity"
+                class="text-small text-gray"
+              >
+                Open: {{ printCapacity.missingCards }} card slot{{ printCapacity.missingCards === 1 ? '' : 's' }}
+                / {{ printCapacity.missingGamePieces }} game piece face{{ printCapacity.missingGamePieces === 1 ? '' : 's' }}
+              </div>
+
+              <div class="spacer" style="height: 0.4rem" />
+              <div
+                class="divider text-center"
+                :data-content="$t('configuration.label').toUpperCase()"
+              />
+
+              <div class="columns">
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="include-digital"
+                      v-model="config.includeDigital"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.showDigitalPrintings') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="include-promo"
+                      v-model="config.includePromo"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.showPromoPrintings') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="match-editions"
+                      v-model="config.matchEditions"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.matchInputEditions') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="include-basics"
+                      v-model="config.includeBasics"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.includeBasicLands') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="include-cards"
+                      v-model="config.includeCards"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.includeCards') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="include-game-pieces"
+                      v-model="config.includeGamePieces"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.includeGamePieces') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="show-cut-lines"
+                      v-model="config.showCutLines"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.showCutLines') }}
+                  </label>
+                </div>
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="fixed-page-size"
+                      v-model="config.fixedPageSize"
+                    >
+                    <i class="form-icon" /> Fixed page size (3×3)
+                  </label>
+                </div>
+              </div>
+              <div class="column col-12 divider" />
+              <div class="columns">
+                <div class="column col-12 btn-group btn-group-block">
+                  <button
+                    id="toggle-combo-piece-config"
+                    class="btn"
+                    @click="config.comboPieceConfigOpen = !config.comboPieceConfigOpen"
+                  >
+                    {{ config.comboPieceConfigOpen ? 'Hide' : 'Show' }} Combo Pieces
+                  </button>
+                  <button
+                    id="generate-combo-pieces"
+                    class="btn btn-primary"
+                    @click="generateRelatedComboPieces"
+                  >
+                    Generate
+                  </button>
+                </div>
+                <div
+                  v-if="config.comboPieceConfigOpen"
+                  id="combo-piece-config"
+                  class="column col-12"
+                >
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-token"
+                      v-model="config.comboPieceTypes.token"
+                    >
+                    <i class="form-icon" /> Tokens
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-emblem"
+                      v-model="config.comboPieceTypes.emblem"
+                    >
+                    <i class="form-icon" /> Emblems
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-tracker"
+                      v-model="config.comboPieceTypes.tracker"
+                    >
+                    <i class="form-icon" /> Trackers
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-mechanic-helper"
+                      v-model="config.comboPieceTypes.mechanicHelper"
+                    >
+                    <i class="form-icon" /> Mechanic helpers
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-dungeon"
+                      v-model="config.comboPieceTypes.dungeon"
+                    >
+                    <i class="form-icon" /> Dungeons
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-initiative"
+                      v-model="config.comboPieceTypes.initiative"
+                    >
+                    <i class="form-icon" /> Initiative
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-ring"
+                      v-model="config.comboPieceTypes.ring"
+                    >
+                    <i class="form-icon" /> Ring
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-real-card"
+                      v-model="config.comboPieceTypes.realCard"
+                    >
+                    <i class="form-icon" /> Real cards
+                  </label>
+                </div>
+              </div>
+              <div class="column col-12 divider" />
+              <div class="columns">
+                <div class="column col-12">
+                  <label class="form-label">
+                    <span
+                      class="tooltip tooltip-right"
+                      :data-tooltip="$t('configuration.imageType.tooltip')"
+                    ><i class="form-icon" /> {{ $t('configuration.imageType.label') }}
+                      <span class="icon-info" /></span>
+                    <select
+                      class="form-select select"
+                      name="image-type"
+                      v-model="config.imageType"
+                      style="width: 100%"
+                    >
+                      <option value="normal">{{ $t('configuration.imageType.normal') }}</option>
+                      <option value="border_crop">{{ $t('configuration.imageType.borderCrop') }}</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-label">
+                    <span
+                      class="tooltip tooltip-right"
+                      :data-tooltip="$t('configuration.printScale.tooltip')"
+                    ><i class="form-icon" /> {{ $t('configuration.printScale.label') }}
+                      <span class="icon-info" /></span>
+                    <select
+                      class="form-select select"
+                      name="scale"
+                      v-model="config.scale"
+                      style="width: 100%"
+                    >
+                      <option value="small">{{ $t('configuration.printScale.small') }} (-2%)</option>
+                      <option value="normal">{{ $t('configuration.printScale.regular') }} (60mm x 85mm)</option>
+                      <option value="large">{{ $t('configuration.printScale.large') }} (+2%)</option>
+                      <option value="actual">{{ $t('configuration.printScale.actual') }} (63mm x 88mm)</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-label">
+                    <i class="form-icon" /> {{ $t('configuration.cardBacks.label') }}
+                    <select
+                      class="form-select select"
+                      name="card-backs"
+                      v-model="config.cardBacks"
+                      style="width: 100%"
+                    >
+                      <option value="none">{{ $t('configuration.cardBacks.none') }}</option>
+                      <option value="dfc">{{ $t('configuration.cardBacks.dfcs') }}</option>
+                      <option value="all">{{ $t('configuration.cardBacks.all') }}</option>
+                      <option value="all-pages">{{ $t('configuration.cardBacks.allPages') }}</option>
+                      <option value="token-pairs">{{ $t('configuration.cardBacks.tokenPairs') }}</option>
+                    </select>
+                  </label>
+                  <div v-if="config.cardBacks === 'all-pages'" style="margin-top: 0.5rem">
+                    <label class="form-label">
+                      <i class="form-icon" /> Token backs: 
+                      <select class="form-select select" v-model="config.tokenBackMode" style="width: 100%">
+                        <option value="card">Use regular card back</option>
+                        <option value="opposite">Use token face on opposite side</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div v-if="config.cardBacks === 'all-pages' && config.tokenBackMode === 'opposite'" style="margin-top: 0.5rem">
+                    <label class="form-switch">
+                      <input
+                        type="checkbox"
+                        name="automatic-token-placement"
+                        :checked="config.tokenPlacementMode === 'auto'"
+                        @change="config.tokenPlacementMode = $event.target.checked ? 'auto' : 'chosen'"
+                      >
+                      <i class="form-icon" /> Automatic token placement
+                    </label>
+                  </div>
+                  <div v-if="config.cardBacks === 'all-pages' && !config.fixedPageSize" style="margin-top:0.5rem">
+                    <label class="form-label">
+                      <i class="form-icon" /> Cards per page (leave empty to group all fronts/backs):
+                      <input type="number" min="1" max="36" class="form-input" v-model.number="config.cardsPerPage" style="width:100%">
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="column col-12 divider" />
+              <div class="columns">
+                <div class="column col-12">
+                  <button
+                    class="btn p-centered"
+                    @click="$refs.helpModal.show()"
+                  >
+                    {{ $t('configuration.help.label') }}
+                  </button>
+                </div>
+              </div>
+              <div class="column col-12 divider" />
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="app-main loading-surface" :class="{ loading: isLoadingCards }">
         <div
           class="empty"
           v-show="cards.length === 0 && errors.length === 0"
@@ -620,7 +636,7 @@
         </div>
 
         <ArnoldsApproval id="arnold" :cards="cards" />
-      </div>
+      </main>
     </div>
 
     <div
@@ -758,18 +774,18 @@ const basicLands = [
 ];
 
 const analysisCategories = [
-    { key: "instantRemoval", label: "Instant kill" },
-    { key: "sorceryRemoval", label: "Sorcery kill" },
-    { key: "combat.attacking.bothSurvive", label: "Atk both survive" },
-    { key: "combat.attacking.bothDie", label: "Atk both die" },
-    { key: "combat.attacking.defenderSurvives", label: "Atk defender survives" },
-    { key: "combat.attacking.attackerSurvives", label: "Atk attacker survives" },
-    { key: "combat.attacking.damageOnPlayer", label: "Atk damage player" },
-    { key: "combat.defending.bothSurvive", label: "Def both survive" },
-    { key: "combat.defending.bothDie", label: "Def both die" },
-    { key: "combat.defending.defenderSurvives", label: "Def defender survives" },
-    { key: "combat.defending.attackerSurvives", label: "Def attacker survives" },
-    { key: "combat.defending.damageOnPlayer", label: "Def damage player" },
+    { key: "instantRemoval", label: "Kill inst." },
+    { key: "sorceryRemoval", label: "Kill sorc." },
+    { key: "combat.attacking.bothSurvive", label: "Atk hold" },
+    { key: "combat.attacking.bothDie", label: "Atk trade" },
+    { key: "combat.attacking.defenderSurvives", label: "Atk lose" },
+    { key: "combat.attacking.attackerSurvives", label: "Atk win" },
+    { key: "combat.attacking.damageOnPlayer", label: "Atk face" },
+    { key: "combat.defending.bothSurvive", label: "Blk hold" },
+    { key: "combat.defending.bothDie", label: "Blk trade" },
+    { key: "combat.defending.defenderSurvives", label: "Blk win" },
+    { key: "combat.defending.attackerSurvives", label: "Blk lose" },
+    { key: "combat.defending.damageOnPlayer", label: "No block" },
     { key: "synergies", label: "Synergy" },
 ];
 
@@ -841,6 +857,7 @@ export default {
             customPrintOrderCards: [],
             printOrderDraftCards: [],
             localAppEnabled: import.meta.env.VITE_LOCAL_APP === 'true',
+            leftMenuCollapsed: false,
             sessionsMenuOpen: true,
             localSessionStorage: createSessionStorage(),
             localSessions: [],
@@ -848,6 +865,9 @@ export default {
             activeSessionName: '',
             activeSessionIsMetaDeck: false,
             metaDeckStates: [],
+            isLoadingSets: false,
+            isLoadingCards: false,
+            isLoadingSessions: false,
             sessionSaveTimer: null,
             restoringSession: false,
         };
@@ -1292,14 +1312,19 @@ export default {
                 return;
             }
 
-            this.localSessions = await this.localSessionStorage.listSessions();
-            if (this.localSessions.length > 0) {
-                await this.loadLocalSession(this.localSessions[0].id);
-                await this.refreshMetaDeckStates();
-                return;
-            }
+            this.isLoadingSessions = true;
+            try {
+                this.localSessions = await this.localSessionStorage.listSessions();
+                if (this.localSessions.length > 0) {
+                    await this.loadLocalSession(this.localSessions[0].id);
+                    await this.refreshMetaDeckStates();
+                    return;
+                }
 
-            await this.createLocalSession();
+                await this.createLocalSession();
+            } finally {
+                this.isLoadingSessions = false;
+            }
         },
         async createLocalSession() {
             if (!this.localAppEnabled) {
@@ -1335,10 +1360,15 @@ export default {
                 return;
             }
 
-            const metaSessions = this.localSessions.filter(session => session.isMetaDeck);
-            this.metaDeckStates = await Promise.all(
-                metaSessions.map(session => this.localSessionStorage.loadSession(session.id)),
-            );
+            this.isLoadingSessions = true;
+            try {
+                const metaSessions = this.localSessions.filter(session => session.isMetaDeck);
+                this.metaDeckStates = await Promise.all(
+                    metaSessions.map(session => this.localSessionStorage.loadSession(session.id)),
+                );
+            } finally {
+                this.isLoadingSessions = false;
+            }
         },
         async flushPendingSessionSave() {
             if (!this.sessionSaveTimer) {
@@ -1670,18 +1700,23 @@ export default {
             return this.pairsToSlots(pairs);
         },
         async loadSetList() {
-          const dataset = (await ScryfallDatasetAsync());
-          this.sets = dataset.sets;
-          console.log(`Loaded ${Object.keys(dataset.cards).length} distinct cards from ${Object.keys(dataset.sets).length} sets.`)
-          // Build token pool for token-pairs mode
-          this.tokenPool = Object.values(dataset.cards)
-            .flat()
-            .filter((c) => c.cardFaces && c.cardFaces.length === 1 && c.cardFaces[0].type_line && /token/i.test(c.cardFaces[0].type_line))
-            .map((c) => ({
-              name: c.name,
-              urlBack: c.image_uris && c.image_uris.normal ? c.image_uris.normal : undefined,
-            }))
-            .filter((t) => t.urlBack);
+          this.isLoadingSets = true;
+          try {
+            const dataset = (await ScryfallDatasetAsync());
+            this.sets = dataset.sets;
+            console.log(`Loaded ${Object.keys(dataset.cards).length} distinct cards from ${Object.keys(dataset.sets).length} sets.`)
+            // Build token pool for token-pairs mode
+            this.tokenPool = Object.values(dataset.cards)
+              .flat()
+              .filter((c) => c.cardFaces && c.cardFaces.length === 1 && c.cardFaces[0].type_line && /token/i.test(c.cardFaces[0].type_line))
+              .map((c) => ({
+                name: c.name,
+                urlBack: c.image_uris && c.image_uris.normal ? c.image_uris.normal : undefined,
+              }))
+              .filter((t) => t.urlBack);
+          } finally {
+            this.isLoadingSets = false;
+          }
         },
         initConfig() {
             this.config.includeDigital = bindStorage('includeDigital', (v) => v === "true");
@@ -1856,102 +1891,106 @@ export default {
             window.print();
         },
         async loadCardList() {
-            this.cards = [];
-            this.errors = [];
-            this.resetPrintOrder();
+            this.isLoadingCards = true;
+            try {
+                this.cards = [];
+                this.errors = [];
+                this.resetPrintOrder();
 
-            const { lines, errors } = parseDecklist(this.config.decklist);
-            this.errors = errors;
-            const dataset = await ScryfallDatasetAsync();
-            
+                const { lines, errors } = parseDecklist(this.config.decklist);
+                this.errors = errors;
+                const dataset = await ScryfallDatasetAsync();
 
-            const _cards = [];
+                const _cards = [];
 
-            for (let line of lines) {
-                let cardLookup = dataset.cards[line.name];
+                for (let line of lines) {
+                    let cardLookup = dataset.cards[line.name];
 
-                if (!cardLookup) {
-                    this.errors.push(line.name);
-                    console.warn(
-                        `Failed to identify card on line: ${JSON.stringify(line)}`,
-                    );
-                    continue;
-                }
-
-                const cardIndex = _cards.filter((v) => { return v.name === line.name }).length;
-
-                const options = {
-                    quantity: line.quantity,
-                    name: line.name,
-                    setOptions: cardLookup.map((option) => {
-                        // This could use spread syntax, but it's nice to have all the property names in this file explicitly.
-                        return {
-                            name: `${this.sets[option.setCode]} (${option.collectorNumber})`,
-                            setCode: option.setCode,
-                            collectorNumber: option.collectorNumber,
-                            urlFront: option.urlFront,
-                            urlBack: option.urlBack,
-                            isDigital: option.isDigital,
-                            isPromo: option.isPromo,
-                            isToken: option.isToken,
-                            isGamePiece: option.isGamePiece,
-                            typeLine: option.typeLine,
-                            oracleText: option.oracleText,
-                            manaCost: option.manaCost,
-                            manaValue: option.manaValue,
-                            power: option.power,
-                            toughness: option.toughness,
-                            relatedTokens: option.relatedTokens,
-                            relatedGamePieces: option.relatedGamePieces,
-                        };
-                    }),
-                    isBasic: basicLands.includes(line.name.toLowerCase()),
-                    isSideboard: Boolean(line.isSideboard),
-                    requestedSet: line.set,
-                    requestedCollectorNumber: line.collectorsNumber,
-                    selectedOption: this.sessionSetSelections[line.name]?.[cardIndex],
-                    selectedFromSession: Boolean(this.sessionSetSelections[line.name]?.[cardIndex]),
-                };
-
-                if (!options.selectedOption) {
-                    // Set a default selection.
-                    // First, if enabled, attempt to find an exact match from the decklist.
-                    if (this.config.matchEditions) {
-                        options.selectedOption = options.setOptions.filter(option => {
-                            return option.setCode === line.set && option.collectorNumber == line.collectorsNumber
-                        })?.[0] ?? undefined;
+                    if (!cardLookup) {
+                        this.errors.push(line.name);
+                        console.warn(
+                            `Failed to identify card on line: ${JSON.stringify(line)}`,
+                        );
+                        continue;
                     }
 
-                    if (!options.selectedOption && line.set) {
-                        options.selectedOption = options.setOptions.find(option => {
-                            return option.isGamePiece &&
-                                option.setCode === line.set &&
-                                (!line.collectorsNumber || option.collectorNumber == line.collectorsNumber);
-                        });
-                    }
+                    const cardIndex = _cards.filter((v) => { return v.name === line.name }).length;
 
-                    // If we failed there, then we can set a default based on characteristics.
+                    const options = {
+                        quantity: line.quantity,
+                        name: line.name,
+                        setOptions: cardLookup.map((option) => {
+                            // This could use spread syntax, but it's nice to have all the property names in this file explicitly.
+                            return {
+                                name: `${this.sets[option.setCode]} (${option.collectorNumber})`,
+                                setCode: option.setCode,
+                                collectorNumber: option.collectorNumber,
+                                urlFront: option.urlFront,
+                                urlBack: option.urlBack,
+                                isDigital: option.isDigital,
+                                isPromo: option.isPromo,
+                                isToken: option.isToken,
+                                isGamePiece: option.isGamePiece,
+                                typeLine: option.typeLine,
+                                oracleText: option.oracleText,
+                                manaCost: option.manaCost,
+                                manaValue: option.manaValue,
+                                power: option.power,
+                                toughness: option.toughness,
+                                relatedTokens: option.relatedTokens,
+                                relatedGamePieces: option.relatedGamePieces,
+                            };
+                        }),
+                        isBasic: basicLands.includes(line.name.toLowerCase()),
+                        isSideboard: Boolean(line.isSideboard),
+                        requestedSet: line.set,
+                        requestedCollectorNumber: line.collectorsNumber,
+                        selectedOption: this.sessionSetSelections[line.name]?.[cardIndex],
+                        selectedFromSession: Boolean(this.sessionSetSelections[line.name]?.[cardIndex]),
+                    };
+
                     if (!options.selectedOption) {
-                        options.selectedOption = options.setOptions.filter(option => {
-                            return !option.isDigital && !option.isPromo && !option.isGamePiece;
-                        })?.[0] ?? options.setOptions[0];
+                        // Set a default selection.
+                        // First, if enabled, attempt to find an exact match from the decklist.
+                        if (this.config.matchEditions) {
+                            options.selectedOption = options.setOptions.filter(option => {
+                                return option.setCode === line.set && option.collectorNumber == line.collectorsNumber
+                            })?.[0] ?? undefined;
+                        }
+
+                        if (!options.selectedOption && line.set) {
+                            options.selectedOption = options.setOptions.find(option => {
+                                return option.isGamePiece &&
+                                    option.setCode === line.set &&
+                                    (!line.collectorsNumber || option.collectorNumber == line.collectorsNumber);
+                            });
+                        }
+
+                        // If we failed there, then we can set a default based on characteristics.
+                        if (!options.selectedOption) {
+                            options.selectedOption = options.setOptions.filter(option => {
+                                return !option.isDigital && !option.isPromo && !option.isGamePiece;
+                            })?.[0] ?? options.setOptions[0];
+                        }
                     }
+
+                    _cards.push(options);
                 }
 
-                _cards.push(options);
-            }
+                this.applySessionRelatedTokenSelections(_cards);
 
-            this.applySessionRelatedTokenSelections(_cards);
+                this.cards = _cards;
 
-            this.cards = _cards;
-
-            // attach tokenBackUrl when token-pairs mode is enabled
-            if (this.config.cardBacks === 'token-pairs') {
-              for (const c of this.cards) {
-                if (c.selectedOption && c.selectedOption.isGamePiece) {
-                  c.tokenBackUrl = this.getTokenPairBackUrl(c.selectedOption.urlFront, c.name);
+                // attach tokenBackUrl when token-pairs mode is enabled
+                if (this.config.cardBacks === 'token-pairs') {
+                  for (const c of this.cards) {
+                    if (c.selectedOption && c.selectedOption.isGamePiece) {
+                      c.tokenBackUrl = this.getTokenPairBackUrl(c.selectedOption.urlFront, c.name);
+                    }
+                  }
                 }
-              }
+            } finally {
+                this.isLoadingCards = false;
             }
         },
         applySessionRelatedTokenSelections(cards) {
@@ -1996,6 +2035,47 @@ export default {
     height: 14rem;
 }
 
+.app-layout {
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: minmax(13rem, 15%) minmax(0, 85%);
+}
+
+.app-layout-sidebar-collapsed {
+    grid-template-columns: 2.4rem minmax(0, 1fr);
+}
+
+.app-sidebar {
+    position: sticky;
+    top: 0.6rem;
+    z-index: 320;
+}
+
+.app-main {
+    min-width: 0;
+}
+
+.loading-surface {
+    position: relative;
+
+    &.loading::after {
+        align-items: center;
+        background: rgb(255 255 255 / 70%);
+        border: 1px solid #dadee4;
+        border-radius: 4px;
+        color: #5755d9;
+        content: "Loading...";
+        display: flex;
+        font-size: 0.7rem;
+        font-weight: 600;
+        inset: 0;
+        justify-content: center;
+        min-height: 2.2rem;
+        position: absolute;
+        z-index: 500;
+    }
+}
+
 @media (max-width: 600px) {
     #deck-input {
         height: 10rem;
@@ -2007,9 +2087,7 @@ export default {
 }
 
 #local-session-menu {
-    position: sticky;
-    top: 0.6rem;
-    z-index: 320;
+    min-width: 0;
 }
 
 .local-session-menu-body {
@@ -2051,19 +2129,21 @@ export default {
     border-radius: 4px;
     display: grid;
     gap: 0.7rem;
-    grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+    grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr);
     padding: 0.6rem;
 }
 
 .analysis-card-preview {
     display: grid;
     gap: 0.5rem;
-    grid-template-columns: 4.4rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
 }
 
 .analysis-card-image {
     border-radius: 4px;
-    width: 4.4rem;
+    max-height: 21rem;
+    object-fit: contain;
+    width: 100%;
 }
 
 .analysis-card-name {
@@ -2071,17 +2151,28 @@ export default {
 }
 
 .analysis-grid-wrap {
-    overflow-x: auto;
+    min-width: 0;
 }
 
 .analysis-grid {
-    min-width: 48rem;
+    table-layout: fixed;
+    width: 100%;
 }
 
 .analysis-grid th,
 .analysis-grid td {
     font-size: 0.65rem;
-    white-space: nowrap;
+    line-height: 1.05;
+    padding: 0.18rem 0.22rem;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.analysis-grid th:first-child,
+.analysis-grid td:first-child {
+    text-align: left;
+    width: 5.5rem;
 }
 
 .analysis-cell-active {
@@ -2091,6 +2182,15 @@ export default {
 }
 
 @media (max-width: 960px) {
+    .app-layout,
+    .app-layout-sidebar-collapsed {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .app-sidebar {
+        position: static;
+    }
+
     .analysis-card-row {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -2107,6 +2207,11 @@ html.dark-theme {
 
     .analysis-cell-active {
         background: #303742;
+    }
+
+    .loading-surface.loading::after {
+        background: rgb(48 55 66 / 75%);
+        border-color: #667085;
     }
 
     .local-session-item.active {

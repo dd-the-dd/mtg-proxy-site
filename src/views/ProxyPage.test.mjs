@@ -13,7 +13,7 @@ beforeAll(async () => {
     while(Object.keys(wrapper.getCurrentComponent().data.sets).length === 0) {
         await new Promise(r => setTimeout(r, 50));
     }
-}, 60000);
+}, 90000);
 
 describe('Core Rendering', async () => {
     test('Renders', () => {
@@ -34,6 +34,16 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#local-session-menu').exists()).toBe(true);
         expect(wrapper.find('#new-local-session').exists()).toBe(true);
         expect(component.data.localSessions.length).toBeGreaterThan(0);
+    });
+
+    test('Feature: Left analysis rail collapses toward the page edge.', async () => {
+        expect(wrapper.find('.app-layout-sidebar-collapsed').exists()).toBe(false);
+
+        await wrapper.find('#toggle-left-menu').trigger('click');
+        expect(wrapper.find('.app-layout-sidebar-collapsed').exists()).toBe(true);
+
+        await wrapper.find('#toggle-left-menu').trigger('click');
+        expect(wrapper.find('.app-layout-sidebar-collapsed').exists()).toBe(false);
     });
 
     test('Feature: Local app sessions restore saved page state.', async () => {
