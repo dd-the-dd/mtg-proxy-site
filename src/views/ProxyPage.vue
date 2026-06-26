@@ -531,6 +531,12 @@
                 <div class="analysis-card-name">
                   {{ card.quantity }}x {{ card.name }}
                   <span v-if="card.isSideboard" class="label label-secondary">Sideboard</span>
+                  <span
+                    v-if="analysisStatsLoading"
+                    class="analysis-card-stat-loader loading loading-sm"
+                    title="Loading analysis stats"
+                    aria-label="Loading analysis stats"
+                  />
                 </div>
                 <div class="text-small text-gray">
                   {{ card.selectedOption?.manaCost || 'No mana cost' }}
@@ -1143,6 +1149,9 @@ export default {
         },
         analysisCardTotal() {
             return this.cards.reduce((total, card) => total + (card.quantity ?? 1), 0);
+        },
+        analysisStatsLoading() {
+            return this.isLoadingCards || this.isLoadingSessions || this.isLoadingSets;
         },
     },
     async mounted() {
@@ -2160,7 +2169,18 @@ export default {
 }
 
 .analysis-card-name {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
     font-weight: 600;
+}
+
+.analysis-card-stat-loader {
+    display: inline-block;
+    flex: 0 0 auto;
+    height: 0.8rem;
+    width: 0.8rem;
 }
 
 .analysis-grid-wrap {

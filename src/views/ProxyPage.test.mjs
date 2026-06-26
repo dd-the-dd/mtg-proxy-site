@@ -395,6 +395,42 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Analysis card rows show loading indicators while stats data loads.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const analyzedCard = {
+            quantity: 1,
+            name: 'burst lightning',
+            selectedOption: {
+                typeLine: 'Instant',
+                oracleText: 'Burst Lightning deals 2 damage to any target.',
+            },
+            setOptions: [],
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.cards = [analyzedCard];
+        component.data.isLoadingSessions = true;
+        component.data.metaDeckStates = [
+            {
+                id: 'meta-loading',
+                name: 'Meta Loading',
+                state: {
+                    cards: [],
+                },
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.findAll('.analysis-card-stat-loader')).toHaveLength(1);
+
+        component.data.isLoadingSessions = false;
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
     test('Feature: Local app startup restores the first saved session from storage.', async () => {
         globalThis.__resetLocalSessions();
         globalThis.__localSessionStore.sessions.push({
