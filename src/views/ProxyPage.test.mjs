@@ -513,6 +513,68 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Bounce synergy rows identify permanents and ETB recast targets.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const boomerang = {
+            quantity: 1,
+            name: 'boomerang',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Instant',
+                oracleText: "Return target permanent to its owner's hand.",
+                manaCost: '{U}{U}',
+            },
+            setOptions: [],
+        };
+        const stormchaserTalent = {
+            quantity: 2,
+            name: "stormchaser's talent",
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Enchantment - Class',
+                oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.',
+                manaCost: '{U}',
+            },
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisMetric = 'count';
+        component.data.config.analysisColumnMode = 'metaDeck';
+        component.data.config.analysisMatchupSessionId = 'all';
+        component.data.cards = [boomerang];
+        component.data.metaDeckStates = [
+            {
+                id: 'bounce-meta',
+                name: 'Bounce Meta',
+                state: {
+                    cards: [stormchaserTalent],
+                },
+            },
+        ];
+
+        const visibleLabels = component.ctx.visibleAnalysisCategories(boomerang).map(category => category.label);
+        const handCell = component.ctx.cardAnalysisCell(
+            boomerang,
+            component.proxy.analysisCategories.find(category => category.key === 'synergy.battlefieldToHand.sources'),
+            component.proxy.analysisColumns[0],
+        );
+        const etbCell = component.ctx.cardAnalysisCell(
+            boomerang,
+            component.proxy.analysisCategories.find(category => category.key === 'synergy.entersBattlefield.sources'),
+            component.proxy.analysisColumns[0],
+        );
+
+        expect(visibleLabels).toContain('Synergy hand');
+        expect(visibleLabels).toContain('Synergy ETB');
+        expect(handCell.title).toContain("2x stormchaser's talent - I:Battlefield to hand draw cost 2");
+        expect(etbCell.title).toContain("2x stormchaser's talent - I:ETB recast cost 3");
+
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
     test('Feature: Local app startup restores the first saved session from storage.', async () => {
         globalThis.__resetLocalSessions();
         globalThis.__localSessionStore.sessions.push({

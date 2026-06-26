@@ -800,6 +800,10 @@ const analysisCategories = [
     { key: "synergy.graveyardPlay.feeders", label: "Feeds grave", targetGroup: "cards" },
     { key: "synergy.creatureTokens.sources", label: "Synergy tokens", targetGroup: "cards" },
     { key: "synergy.creatureTokens.feeders", label: "Feeds tokens", targetGroup: "cards" },
+    { key: "synergy.battlefieldToHand.sources", label: "Synergy hand", targetGroup: "cards" },
+    { key: "synergy.battlefieldToHand.feeders", label: "Feeds hand", targetGroup: "cards" },
+    { key: "synergy.entersBattlefield.sources", label: "Synergy ETB", targetGroup: "cards" },
+    { key: "synergy.entersBattlefield.feeders", label: "Feeds ETB", targetGroup: "cards" },
 ];
 
 function createDefaultConfig() {

@@ -181,4 +181,24 @@ describe('DeckInteractionAnalyzer', () => {
         expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.graveyardPlay.feeders')).toBe('S:Grave to hand cost 5');
         expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.creatureTokens.feeders')).toBe('S:Token engine cost 11');
     });
+
+    test('Feature: Bounce spells identify battlefield-to-hand and ETB recast synergies.', () => {
+        const boomerang = card('boomerang', {
+            typeLine: 'Instant',
+            oracleText: "Return target permanent to its owner's hand.",
+            manaCost: '{U}{U}',
+        });
+        const stormchaserTalent = card("stormchaser's talent", {
+            typeLine: 'Enchantment - Class',
+            oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.',
+            manaCost: '{U}',
+        });
+
+        const summary = summarizeCreatureInteractions([boomerang], stormchaserTalent);
+
+        expect(summary.synergy.battlefieldToHand.sources.map(item => item.name)).toEqual(['boomerang']);
+        expect(summary.synergy.entersBattlefield.sources.map(item => item.name)).toEqual(['boomerang']);
+        expect(synergyInteractionDetail(boomerang, stormchaserTalent, 'synergy.battlefieldToHand.sources')).toBe('I:Battlefield to hand draw cost 2');
+        expect(synergyInteractionDetail(boomerang, stormchaserTalent, 'synergy.entersBattlefield.sources')).toBe('I:ETB recast cost 3');
+    });
 });

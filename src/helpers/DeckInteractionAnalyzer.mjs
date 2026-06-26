@@ -77,6 +77,11 @@ function isNonCreatureNonLandSpell(card) {
         !/\bLand\b/i.test(typeLine);
 }
 
+function isPermanentCard(card) {
+    const typeLine = typeLineOf(card);
+    return /\b(?:Artifact|Battle|Creature|Enchantment|Land|Planeswalker)\b/i.test(typeLine);
+}
+
 export function creatureStats(card) {
     return {
         power: statValue(selected(card).power),
@@ -278,6 +283,8 @@ function createSynergySummary() {
         combat: emptySynergySummary(),
         graveyardPlay: emptySynergySummary(),
         creatureTokens: emptySynergySummary(),
+        battlefieldToHand: emptySynergySummary(),
+        entersBattlefield: emptySynergySummary(),
     };
 }
 
@@ -333,6 +340,14 @@ function isCreatureTokenSynergySource(card) {
     return /whenever you cast an instant or sorcery spell, create/i.test(textOf(card));
 }
 
+function isBattlefieldToHandSynergySource(card) {
+    return /return target permanent to (?:its|their|his|her|that permanent's) owner's hand/i.test(textOf(card));
+}
+
+function isEntersBattlefieldSynergyTarget(card) {
+    return /\b(?:when|whenever) (?:this|[^.]+) enters\b/i.test(textOf(card));
+}
+
 function addSynergyMatches(summary, card, relatedCard) {
     if (isCombatSynergySource(card) && isNonCreatureNonLandSpell(relatedCard)) {
         pushOnce(summary.synergy.combat.sources, card);
@@ -356,6 +371,22 @@ function addSynergyMatches(summary, card, relatedCard) {
 
     if (isCreatureTokenSynergySource(relatedCard) && isInstantOrSorcery(card)) {
         pushOnce(summary.synergy.creatureTokens.feeders, card);
+    }
+
+    if (isBattlefieldToHandSynergySource(card) && isPermanentCard(relatedCard)) {
+        pushOnce(summary.synergy.battlefieldToHand.sources, card);
+    }
+
+    if (isBattlefieldToHandSynergySource(relatedCard) && isPermanentCard(card)) {
+        pushOnce(summary.synergy.battlefieldToHand.feeders, card);
+    }
+
+    if (isBattlefieldToHandSynergySource(card) && isPermanentCard(relatedCard) && isEntersBattlefieldSynergyTarget(relatedCard)) {
+        pushOnce(summary.synergy.entersBattlefield.sources, card);
+    }
+
+    if (isBattlefieldToHandSynergySource(relatedCard) && isPermanentCard(card) && isEntersBattlefieldSynergyTarget(card)) {
+        pushOnce(summary.synergy.entersBattlefield.feeders, card);
     }
 }
 
@@ -410,6 +441,16 @@ export function synergyInteractionDetail(card, relatedCard, categoryKey) {
 
     if (/^synergy\.creatureTokens\./.test(categoryKey)) {
         return `S:Token engine cost ${classLevelCost(source, 3)}`;
+    }
+
+    if (/^synergy\.battlefieldToHand\./.test(categoryKey)) {
+        const speed = spellSpeed(source) === 'instant' ? 'I' : 'S';
+        return `${speed}:Battlefield to hand draw cost ${manaCostValue(manaCostOf(source))}`;
+    }
+
+    if (/^synergy\.entersBattlefield\./.test(categoryKey)) {
+        const speed = spellSpeed(source) === 'instant' ? 'I' : 'S';
+        return `${speed}:ETB recast cost ${manaCostValue(manaCostOf(source)) + manaCostValue(manaCostOf(feeder))}`;
     }
 
     return '';
