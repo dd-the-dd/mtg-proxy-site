@@ -107,6 +107,65 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Local app sessions persist the meta deck tag.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        while(!component.data.activeSessionId) {
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        component.data.activeSessionIsMetaDeck = true;
+        await component.ctx.saveActiveSession();
+
+        expect(component.data.localSessions.find(session => {
+            return session.id === component.data.activeSessionId;
+        }).isMetaDeck).toBe(true);
+    });
+
+    test('Feature: Meta deck creature analysis counts current deck interaction categories.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const slickshot = {
+            quantity: 4,
+            name: 'slickshot show-off',
+            selectedOption: {
+                typeLine: 'Creature - Bird Wizard',
+                oracleText: 'Flying, haste',
+                power: '1',
+                toughness: '2',
+            },
+        };
+
+        component.data.cards = [
+            {
+                quantity: 4,
+                name: 'burst lightning',
+                selectedOption: {
+                    typeLine: 'Instant',
+                    oracleText: 'Burst Lightning deals 2 damage to any target.',
+                },
+            },
+            slickshot,
+        ];
+        component.data.metaDeckStates = [
+            {
+                id: 'izzet-meta',
+                name: 'Izzet Mirror',
+                state: {
+                    cards: [slickshot],
+                },
+            },
+        ];
+
+        const analysis = component.proxy.metaCreatureAnalyses[0];
+
+        expect(analysis.counts.instantRemoval).toBe(4);
+        expect(analysis.counts.combat.bothSurvive).toBe(4);
+
+        component.data.config.decklist = '4 Wild Nacatl';
+        component.data.metaDeckStates = [];
+        await component.ctx.loadCardList();
+    });
+
     test('Feature: Local app startup restores the first saved session from storage.', async () => {
         globalThis.__resetLocalSessions();
         globalThis.__localSessionStore.sessions.push({

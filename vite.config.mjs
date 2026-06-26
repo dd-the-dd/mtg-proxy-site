@@ -62,6 +62,7 @@ function localSessionsPlugin(env) {
                                 return {
                                     id: session.id,
                                     name: session.name,
+                                    isMetaDeck: Boolean(session.isMetaDeck),
                                     updatedAt: session.updatedAt,
                                 };
                             }),
@@ -75,6 +76,7 @@ function localSessionsPlugin(env) {
                         const session = {
                             id: randomUUID(),
                             name: body.name || 'Untitled Session',
+                            isMetaDeck: Boolean(body.isMetaDeck),
                             state: body.state ?? null,
                             updatedAt: now,
                         };
@@ -101,6 +103,7 @@ function localSessionsPlugin(env) {
                         const session = {
                             ...store.sessions[sessionIndex],
                             name: body.name || store.sessions[sessionIndex].name,
+                            isMetaDeck: Boolean(body.isMetaDeck),
                             state: body.state ?? store.sessions[sessionIndex].state,
                             updatedAt: now,
                         };

@@ -34,6 +34,14 @@
               @change="scheduleSessionSave"
             >
           </div>
+          <label v-if="activeSessionId" class="form-switch">
+            <input
+              id="local-session-is-meta"
+              type="checkbox"
+              v-model="activeSessionIsMetaDeck"
+            >
+            <i class="form-icon" /> Meta deck
+          </label>
           <div class="menu local-session-list">
             <button
               v-for="session in localSessions"
@@ -44,6 +52,7 @@
               @click="loadLocalSession(session.id)"
             >
               {{ session.name }}
+              <span v-if="session.isMetaDeck" class="label label-primary float-right">Meta</span>
             </button>
           </div>
         </div>
@@ -432,6 +441,54 @@
           </ul>
         </div>
 
+        <div
+          v-if="localAppEnabled && metaCreatureAnalyses.length"
+          id="meta-analysis"
+          class="meta-analysis"
+        >
+          <div class="h5">
+            Meta Analysis
+          </div>
+          <div class="text-small text-gray mb-2">
+            Counts are from the current deck against creatures in tagged meta sessions.
+          </div>
+          <div class="table-scroll">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>Meta creature</th>
+                  <th>Deck</th>
+                  <th>Instant kill</th>
+                  <th>Sorcery kill</th>
+                  <th>Both survive</th>
+                  <th>Both die</th>
+                  <th>Their creature survives</th>
+                  <th>Our creature survives</th>
+                  <th>Damage player</th>
+                  <th>Synergy</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="analysis in metaCreatureAnalyses"
+                  :key="`${analysis.sessionId}-${analysis.creature.name}-${analysis.index}`"
+                >
+                  <td>{{ analysis.creature.name }}</td>
+                  <td>{{ analysis.sessionName }}</td>
+                  <td>{{ analysis.counts.instantRemoval }}</td>
+                  <td>{{ analysis.counts.sorceryRemoval }}</td>
+                  <td>{{ analysis.counts.combat.bothSurvive }}</td>
+                  <td>{{ analysis.counts.combat.bothDie }}</td>
+                  <td>{{ analysis.counts.combat.defenderSurvives }}</td>
+                  <td>{{ analysis.counts.combat.attackerSurvives }}</td>
+                  <td>{{ analysis.counts.combat.damageOnPlayer }}</td>
+                  <td>{{ analysis.counts.synergies }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="cards columns">
           <div
             v-for="(card, cardIndex) in cards"
@@ -584,6 +641,10 @@
 
 <script>
 import { parseDecklist } from "../helpers/DecklistParser.mjs";
+import {
+    isCreatureCard,
+    summarizeCreatureInteractions
+} from "../helpers/DeckInteractionAnalyzer.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
 import { bindStorage } from "../helpers/VueLocalStorage.mjs";
 import ImageLoader from "../components/ImageLoader.vue";
@@ -677,6 +738,8 @@ export default {
             localSessions: [],
             activeSessionId: null,
             activeSessionName: '',
+            activeSessionIsMetaDeck: false,
+            metaDeckStates: [],
             sessionSaveTimer: null,
             restoringSession: false,
         };
@@ -713,6 +776,9 @@ export default {
             },
         },
         activeSessionName() {
+            this.scheduleSessionSave();
+        },
+        activeSessionIsMetaDeck() {
             this.scheduleSessionSave();
         },
     },
@@ -879,6 +945,23 @@ export default {
 
             return toPages(slots, false);
         },
+        metaCreatureAnalyses() {
+            return this.metaDeckStates.flatMap(session => {
+                return (session.state?.cards ?? [])
+                    .filter(card => isCreatureCard(card))
+                    .map((creature, index) => {
+                        const summary = summarizeCreatureInteractions(this.cards, creature);
+
+                        return {
+                            sessionId: session.id,
+                            sessionName: session.name,
+                            creature,
+                            index,
+                            counts: this.countInteractionSummary(summary),
+                        };
+                    });
+            });
+        },
     },
     async mounted() {
         // Trigger an immediate load of the card list + set names.
@@ -892,6 +975,24 @@ export default {
     methods: {
         cloneForStorage(value) {
             return JSON.parse(JSON.stringify(value));
+        },
+        countCards(cards) {
+            return cards.reduce((total, card) => total + (card.quantity ?? 1), 0);
+        },
+        countInteractionSummary(summary) {
+            return {
+                instantRemoval: this.countCards(summary.instantRemoval),
+                sorceryRemoval: this.countCards(summary.sorceryRemoval),
+                combat: {
+                    bothSurvive: this.countCards(summary.combat.bothSurvive),
+                    bothDie: this.countCards(summary.combat.bothDie),
+                    defenderSurvives: this.countCards(summary.combat.defenderSurvives),
+                    attackerSurvives: this.countCards(summary.combat.attackerSurvives),
+                    damageOnPlayer: this.countCards(summary.combat.damageOnPlayer),
+                    unknown: this.countCards(summary.combat.unknown),
+                },
+                synergies: this.countCards(summary.synergies),
+            };
         },
         capturePrintOrderIndexes() {
             const baseSlots = [...this.printSlotsFrontBase];
@@ -993,6 +1094,7 @@ export default {
             this.localSessions = await this.localSessionStorage.listSessions();
             if (this.localSessions.length > 0) {
                 await this.loadLocalSession(this.localSessions[0].id);
+                await this.refreshMetaDeckStates();
                 return;
             }
 
@@ -1009,7 +1111,9 @@ export default {
             const session = await this.localSessionStorage.createSession(name, this.captureSessionState());
             this.activeSessionId = session.id;
             this.activeSessionName = session.name;
+            this.activeSessionIsMetaDeck = Boolean(session.isMetaDeck);
             this.localSessions = await this.localSessionStorage.listSessions();
+            await this.refreshMetaDeckStates();
         },
         async loadLocalSession(id) {
             if (!this.localAppEnabled) {
@@ -1021,7 +1125,19 @@ export default {
             this.restoringSession = true;
             this.activeSessionId = session.id;
             this.activeSessionName = session.name;
+            this.activeSessionIsMetaDeck = Boolean(session.isMetaDeck);
             await this.restoreSessionState(session.state);
+            await this.refreshMetaDeckStates();
+        },
+        async refreshMetaDeckStates() {
+            if (!this.localAppEnabled) {
+                return;
+            }
+
+            const metaSessions = this.localSessions.filter(session => session.isMetaDeck);
+            this.metaDeckStates = await Promise.all(
+                metaSessions.map(session => this.localSessionStorage.loadSession(session.id)),
+            );
         },
         async flushPendingSessionSave() {
             if (!this.sessionSaveTimer) {
@@ -1056,14 +1172,21 @@ export default {
             const session = await this.localSessionStorage.saveSession({
                 id: this.activeSessionId,
                 name: this.activeSessionName || 'Untitled Session',
+                isMetaDeck: this.activeSessionIsMetaDeck,
                 state: this.captureSessionState(),
             });
 
             this.localSessions = this.localSessions.map(localSession => {
                 return localSession.id === session.id
-                    ? { id: session.id, name: session.name, updatedAt: session.updatedAt }
+                    ? {
+                        id: session.id,
+                        name: session.name,
+                        isMetaDeck: Boolean(session.isMetaDeck),
+                        updatedAt: session.updatedAt,
+                    }
                     : localSession;
             });
+            await this.refreshMetaDeckStates();
         },
         buildPrintOrderPreviewPages(indexedSlots) {
             const toPreviewPages = (slots, isBack, pageSize = null) => {
@@ -1567,6 +1690,10 @@ export default {
                             isPromo: option.isPromo,
                             isToken: option.isToken,
                             isGamePiece: option.isGamePiece,
+                            typeLine: option.typeLine,
+                            oracleText: option.oracleText,
+                            power: option.power,
+                            toughness: option.toughness,
                             relatedTokens: option.relatedTokens,
                             relatedGamePieces: option.relatedGamePieces,
                         };
@@ -1705,8 +1832,23 @@ export default {
     }
 }
 
+.meta-analysis {
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    margin-bottom: 0.8rem;
+    padding: 0.6rem;
+}
+
+.table-scroll {
+    overflow-x: auto;
+}
+
 html.dark-theme {
     .local-session-menu-body {
+        border-color: #667085;
+    }
+
+    .meta-analysis {
         border-color: #667085;
     }
 

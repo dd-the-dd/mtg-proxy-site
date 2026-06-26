@@ -49,7 +49,12 @@ globalThis.fetch = vi.fn(async (url, options = {}) => {
             status: 200,
             json: async () => ({
                 sessions: localSessionStore.sessions.map(session => {
-                    return { id: session.id, name: session.name, updatedAt: session.updatedAt };
+                    return {
+                        id: session.id,
+                        name: session.name,
+                        isMetaDeck: Boolean(session.isMetaDeck),
+                        updatedAt: session.updatedAt,
+                    };
                 }),
             }),
         };
@@ -60,6 +65,7 @@ globalThis.fetch = vi.fn(async (url, options = {}) => {
         const session = {
             id: `session-${localSessionStore.sessions.length + 1}`,
             name: body.name,
+            isMetaDeck: Boolean(body.isMetaDeck),
             state: body.state,
             updatedAt: new Date().toISOString(),
         };
@@ -93,6 +99,7 @@ globalThis.fetch = vi.fn(async (url, options = {}) => {
         localSessionStore.sessions[sessionIndex] = {
             ...localSessionStore.sessions[sessionIndex],
             name: body.name,
+            isMetaDeck: Boolean(body.isMetaDeck),
             state: body.state,
             updatedAt: new Date().toISOString(),
         };
