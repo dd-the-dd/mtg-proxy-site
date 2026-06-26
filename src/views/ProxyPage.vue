@@ -98,6 +98,54 @@
               Print Order
             </button>
           </div>
+          <div class="form-group">
+            <label class="form-switch">
+              <input
+                id="analysis-mode"
+                type="checkbox"
+                v-model="config.analysisMode"
+              >
+              <i class="form-icon" /> Analysis mode
+            </label>
+          </div>
+          <div v-if="config.analysisMode" id="analysis-config" class="form-group">
+            <label class="form-label">
+              Metric
+              <select
+                class="form-select select"
+                v-model="config.analysisMetric"
+              >
+                <option value="count">Cards</option>
+                <option value="percent">Percent</option>
+              </select>
+            </label>
+            <label class="form-label">
+              Columns
+              <select
+                class="form-select select"
+                v-model="config.analysisColumnMode"
+              >
+                <option value="metaDeck">Meta decks</option>
+                <option value="manaValue">Mana value</option>
+              </select>
+            </label>
+            <label class="form-label">
+              Matchup
+              <select
+                class="form-select select"
+                v-model="config.analysisMatchupSessionId"
+              >
+                <option value="all">All meta decks</option>
+                <option
+                  v-for="session in localSessions.filter(session => session.isMetaDeck)"
+                  :key="session.id"
+                  :value="session.id"
+                >
+                  {{ session.name }}
+                </option>
+              </select>
+            </label>
+          </div>
 
           <div class="form-group btn-group btn-group-block">
             <div id="slot-usage" class="bar">
@@ -441,65 +489,95 @@
           </ul>
         </div>
 
-        <div
-          v-if="localAppEnabled && metaCreatureAnalyses.length"
-          id="meta-analysis"
-          class="meta-analysis"
-        >
-          <div class="h5">
-            Meta Analysis
+        <div v-if="config.analysisMode" id="analysis-card-list" class="analysis-card-list">
+          <div
+            v-if="analysisColumns.length === 0"
+            class="empty"
+          >
+            <p class="empty-title h5">
+              Tag a local session as a meta deck to show matchup analysis.
+            </p>
           </div>
-          <div class="text-small text-gray mb-2">
-            Counts are from the current deck against creatures in tagged meta sessions.
-          </div>
-          <div class="table-scroll">
-            <table class="table table-striped">
-              <thead>
-                <tr>
-                  <th>Meta creature</th>
-                  <th>Deck</th>
-                  <th>Instant kill</th>
-                  <th>Sorcery kill</th>
-                  <th>Atk both survive</th>
-                  <th>Atk both die</th>
-                  <th>Atk defender survives</th>
-                  <th>Atk attacker survives</th>
-                  <th>Atk damage player</th>
-                  <th>Def both survive</th>
-                  <th>Def both die</th>
-                  <th>Def defender survives</th>
-                  <th>Def attacker survives</th>
-                  <th>Def damage player</th>
-                  <th>Synergy</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="analysis in metaCreatureAnalyses"
-                  :key="`${analysis.sessionId}-${analysis.creature.name}-${analysis.index}`"
+          <div
+            v-for="(card, cardIndex) in cards"
+            :key="`analysis-${cardIndex}`"
+            class="analysis-card-row"
+            v-show="shouldShowCard(card)"
+          >
+            <div class="analysis-card-preview">
+              <ImageLoader
+                class="analysis-card-image"
+                :src="resolveCardImage(card)"
+                placeholder="./card_back_border_crop.jpg"
+                :alt="card.name"
+              />
+              <div class="analysis-card-details">
+                <div class="analysis-card-name">
+                  {{ card.quantity }}x {{ card.name }}
+                  <span v-if="card.isSideboard" class="label label-secondary">Sideboard</span>
+                </div>
+                <div class="text-small text-gray">
+                  {{ card.selectedOption?.manaCost || 'No mana cost' }}
+                  <span v-if="card.selectedOption?.typeLine">/ {{ card.selectedOption.typeLine }}</span>
+                </div>
+                <select
+                  class="form-select select-sm mt-2"
+                  name="selected-option"
+                  v-model="card.selectedOption"
+                  @change="
+                    updateSessionSet(
+                      card.name,
+                      card.selectedOption,
+                      cardIndex,
+                    )
+                  "
                 >
-                  <td>{{ analysis.creature.name }}</td>
-                  <td>{{ analysis.sessionName }}</td>
-                  <td>{{ analysis.counts.instantRemoval }}</td>
-                  <td>{{ analysis.counts.sorceryRemoval }}</td>
-                  <td>{{ analysis.counts.combat.attacking.bothSurvive }}</td>
-                  <td>{{ analysis.counts.combat.attacking.bothDie }}</td>
-                  <td>{{ analysis.counts.combat.attacking.defenderSurvives }}</td>
-                  <td>{{ analysis.counts.combat.attacking.attackerSurvives }}</td>
-                  <td>{{ analysis.counts.combat.attacking.damageOnPlayer }}</td>
-                  <td>{{ analysis.counts.combat.defending.bothSurvive }}</td>
-                  <td>{{ analysis.counts.combat.defending.bothDie }}</td>
-                  <td>{{ analysis.counts.combat.defending.defenderSurvives }}</td>
-                  <td>{{ analysis.counts.combat.defending.attackerSurvives }}</td>
-                  <td>{{ analysis.counts.combat.defending.damageOnPlayer }}</td>
-                  <td>{{ analysis.counts.synergies }}</td>
-                </tr>
-              </tbody>
-            </table>
+                  <option
+                    v-for="(set, setIndex) in card.setOptions"
+                    :value="set"
+                    :key="setIndex"
+                    v-show="shouldShowSetOption(card, set)"
+                  >
+                    {{ set.name }}
+                  </option>
+                </select>
+              </div>
+            </div>
+            <div class="analysis-grid-wrap">
+              <table class="table table-striped analysis-grid">
+                <thead>
+                  <tr>
+                    <th>Interaction</th>
+                    <th
+                      v-for="column in analysisColumns"
+                      :key="column.key"
+                    >
+                      {{ column.label }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="category in analysisCategories"
+                    :key="category.key"
+                  >
+                    <td>{{ category.label }}</td>
+                    <td
+                      v-for="column in analysisColumns"
+                      :key="`${category.key}-${column.key}`"
+                      :class="{ 'analysis-cell-active': cardAnalysisCell(card, category, column).active }"
+                      :title="cardAnalysisCell(card, category, column).title"
+                    >
+                      {{ cardAnalysisCell(card, category, column).display }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
-        <div class="cards columns">
+        <div v-else class="cards columns">
           <div
             v-for="(card, cardIndex) in cards"
             :key="cardIndex"
@@ -679,6 +757,22 @@ const basicLands = [
     "snow-covered mountain",
 ];
 
+const analysisCategories = [
+    { key: "instantRemoval", label: "Instant kill" },
+    { key: "sorceryRemoval", label: "Sorcery kill" },
+    { key: "combat.attacking.bothSurvive", label: "Atk both survive" },
+    { key: "combat.attacking.bothDie", label: "Atk both die" },
+    { key: "combat.attacking.defenderSurvives", label: "Atk defender survives" },
+    { key: "combat.attacking.attackerSurvives", label: "Atk attacker survives" },
+    { key: "combat.attacking.damageOnPlayer", label: "Atk damage player" },
+    { key: "combat.defending.bothSurvive", label: "Def both survive" },
+    { key: "combat.defending.bothDie", label: "Def both die" },
+    { key: "combat.defending.defenderSurvives", label: "Def defender survives" },
+    { key: "combat.defending.attackerSurvives", label: "Def attacker survives" },
+    { key: "combat.defending.damageOnPlayer", label: "Def damage player" },
+    { key: "synergies", label: "Synergy" },
+];
+
 function createDefaultConfig() {
     return {
         includeDigital: false,
@@ -695,6 +789,10 @@ function createDefaultConfig() {
         tokenBackMode: "opposite",
         tokenPlacementMode: "auto",
         cardsPerPage: null,
+        analysisMode: false,
+        analysisMetric: "count",
+        analysisColumnMode: "metaDeck",
+        analysisMatchupSessionId: "all",
         comboPieceConfigOpen: false,
         comboPieceTypes: {
             token: true,
@@ -972,6 +1070,50 @@ export default {
                     });
             });
         },
+        selectedMetaDeckStates() {
+            if (this.config.analysisMatchupSessionId === "all") {
+                return this.metaDeckStates;
+            }
+
+            return this.metaDeckStates.filter(session => session.id === this.config.analysisMatchupSessionId);
+        },
+        analysisCategories() {
+            return analysisCategories;
+        },
+        analysisColumns() {
+            const sessions = this.selectedMetaDeckStates;
+
+            if (this.config.analysisColumnMode === "manaValue") {
+                const groups = new Map();
+                for (const session of sessions) {
+                    for (const creature of (session.state?.cards ?? []).filter(card => isCreatureCard(card))) {
+                        const manaValue = creature.selectedOption?.manaValue ?? 'unknown';
+                        const key = String(manaValue);
+                        const group = groups.get(key) ?? {
+                            key,
+                            sortValue: Number.isFinite(Number(manaValue)) ? Number(manaValue) : 999,
+                            label: key === 'unknown' ? 'MV ?' : `MV ${key}`,
+                            creatures: [],
+                        };
+                        group.creatures.push(creature);
+                        groups.set(key, group);
+                    }
+                }
+
+                return [...groups.values()].sort((a, b) => a.sortValue - b.sortValue || a.label.localeCompare(b.label));
+            }
+
+            return sessions.map(session => {
+                return {
+                    key: session.id,
+                    label: session.name,
+                    creatures: (session.state?.cards ?? []).filter(card => isCreatureCard(card)),
+                };
+            });
+        },
+        analysisCardTotal() {
+            return this.cards.reduce((total, card) => total + (card.quantity ?? 1), 0);
+        },
     },
     async mounted() {
         // Trigger an immediate load of the card list + set names.
@@ -1009,6 +1151,48 @@ export default {
                     defending: countCombat(summary.combat.defending),
                 },
                 synergies: this.countCards(summary.synergies),
+            };
+        },
+        cardsForAnalysisCategory(summary, categoryKey) {
+            return categoryKey.split('.').reduce((value, part) => {
+                return value?.[part];
+            }, summary) ?? [];
+        },
+        formatAnalysisValue(card) {
+            const quantity = card.quantity ?? 1;
+
+            if (this.config.analysisMetric === "percent") {
+                const percent = this.analysisCardTotal > 0
+                    ? quantity / this.analysisCardTotal * 100
+                    : 0;
+                const value = `${percent.toFixed(1)}%`;
+                return card.isSideboard ? `+${value}` : value;
+            }
+
+            return card.isSideboard ? `+${quantity}` : String(quantity);
+        },
+        cardAnalysisCell(card, category, column) {
+            const matchedCreatures = [];
+
+            for (const creature of column.creatures) {
+                const summary = summarizeCreatureInteractions([card], creature);
+                if (this.cardsForAnalysisCategory(summary, category.key).length > 0) {
+                    matchedCreatures.push(`${creature.quantity ?? 1}x ${creature.name}`);
+                }
+            }
+
+            if (matchedCreatures.length === 0) {
+                return {
+                    active: false,
+                    display: '-',
+                    title: '',
+                };
+            }
+
+            return {
+                active: true,
+                display: this.formatAnalysisValue(card),
+                title: matchedCreatures.join(', '),
             };
         },
         capturePrintOrderIndexes() {
@@ -1513,6 +1697,10 @@ export default {
             this.config.cardBacks = bindStorage('cardBacks', (v) => v ?? "dfc");
             this.config.tokenBackMode = bindStorage('tokenBackMode', (v) => v ?? "opposite");
             this.config.tokenPlacementMode = bindStorage('tokenPlacementMode', (v) => v ?? "auto");
+            this.config.analysisMode = bindStorage('analysisMode', (v) => v === "true");
+            this.config.analysisMetric = bindStorage('analysisMetric', (v) => v ?? "count");
+            this.config.analysisColumnMode = bindStorage('analysisColumnMode', (v) => v ?? "metaDeck");
+            this.config.analysisMatchupSessionId = bindStorage('analysisMatchupSessionId', (v) => v ?? "all");
             this.config.comboPieceConfigOpen = bindStorage('comboPieceConfigOpen', (v) => v === "true");
             this.config.comboPieceTypes.token = bindStorage('comboPieceToken', (v) => v !== "false");
             this.config.comboPieceTypes.emblem = bindStorage('comboPieceEmblem', (v) => v !== "false");
@@ -1709,6 +1897,8 @@ export default {
                             isGamePiece: option.isGamePiece,
                             typeLine: option.typeLine,
                             oracleText: option.oracleText,
+                            manaCost: option.manaCost,
+                            manaValue: option.manaValue,
                             power: option.power,
                             toughness: option.toughness,
                             relatedTokens: option.relatedTokens,
@@ -1716,6 +1906,7 @@ export default {
                         };
                     }),
                     isBasic: basicLands.includes(line.name.toLowerCase()),
+                    isSideboard: Boolean(line.isSideboard),
                     requestedSet: line.set,
                     requestedCollectorNumber: line.collectorsNumber,
                     selectedOption: this.sessionSetSelections[line.name]?.[cardIndex],
@@ -1849,15 +2040,60 @@ export default {
     }
 }
 
-.meta-analysis {
+.analysis-card-list {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.analysis-card-row {
+    align-items: flex-start;
     border: 1px solid #dadee4;
     border-radius: 4px;
-    margin-bottom: 0.8rem;
+    display: grid;
+    gap: 0.7rem;
+    grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
     padding: 0.6rem;
 }
 
-.table-scroll {
+.analysis-card-preview {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: 4.4rem minmax(0, 1fr);
+}
+
+.analysis-card-image {
+    border-radius: 4px;
+    width: 4.4rem;
+}
+
+.analysis-card-name {
+    font-weight: 600;
+}
+
+.analysis-grid-wrap {
     overflow-x: auto;
+}
+
+.analysis-grid {
+    min-width: 48rem;
+}
+
+.analysis-grid th,
+.analysis-grid td {
+    font-size: 0.65rem;
+    white-space: nowrap;
+}
+
+.analysis-cell-active {
+    background: #f1f1fc;
+    color: #5755d9;
+    font-weight: 600;
+}
+
+@media (max-width: 960px) {
+    .analysis-card-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 html.dark-theme {
@@ -1865,8 +2101,12 @@ html.dark-theme {
         border-color: #667085;
     }
 
-    .meta-analysis {
+    .analysis-card-row {
         border-color: #667085;
+    }
+
+    .analysis-cell-active {
+        background: #303742;
     }
 
     .local-session-item.active {

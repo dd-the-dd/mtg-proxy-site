@@ -167,6 +167,72 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Analysis mode renders card rows with sideboard interaction indicators.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const slickshot = {
+            quantity: 4,
+            name: 'slickshot show-off',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Creature - Bird Wizard',
+                oracleText: 'Flying, haste',
+                power: '1',
+                toughness: '2',
+            },
+        };
+        const sideboardBurst = {
+            quantity: 2,
+            name: 'burst lightning',
+            isSideboard: true,
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Instant',
+                oracleText: 'Burst Lightning deals 2 damage to any target.',
+            },
+            setOptions: [
+                {
+                    name: 'Test (1)',
+                    manaValue: 1,
+                    typeLine: 'Instant',
+                    oracleText: 'Burst Lightning deals 2 damage to any target.',
+                    urlFront: 'burst-front',
+                },
+            ],
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisMetric = 'count';
+        component.data.config.analysisColumnMode = 'metaDeck';
+        component.data.config.analysisMatchupSessionId = 'all';
+        component.data.cards = [sideboardBurst];
+        component.data.metaDeckStates = [
+            {
+                id: 'izzet-meta',
+                name: 'Izzet Mirror',
+                state: {
+                    cards: [slickshot],
+                },
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+
+        const cell = component.ctx.cardAnalysisCell(
+            sideboardBurst,
+            component.proxy.analysisCategories[0],
+            component.proxy.analysisColumns[0],
+        );
+
+        expect(wrapper.find('#analysis-card-list').exists()).toBe(true);
+        expect(cell.display).toBe('+2');
+        expect(cell.title).toContain('slickshot show-off');
+
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
     test('Feature: Local app startup restores the first saved session from storage.', async () => {
         globalThis.__resetLocalSessions();
         globalThis.__localSessionStore.sessions.push({
