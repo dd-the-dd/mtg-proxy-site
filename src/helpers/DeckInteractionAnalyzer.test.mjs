@@ -64,4 +64,24 @@ describe('DeckInteractionAnalyzer', () => {
 
         expect(combatOutcome(flyer, groundCreature)).toBe('damageOnPlayer');
     });
+
+    test('Feature: Creature interaction analysis separates attacking combat from defensive blocking.', () => {
+        const flyer = card('slickshot show-off', {
+            typeLine: 'Creature - Bird Wizard',
+            oracleText: 'Flying, haste',
+            power: '1',
+            toughness: '2',
+        });
+        const groundCreature = card('ground creature', {
+            typeLine: 'Creature - Human',
+            oracleText: '',
+            power: '2',
+            toughness: '2',
+        });
+
+        const summary = summarizeCreatureInteractions([groundCreature], flyer);
+
+        expect(summary.combat.attacking.attackerSurvives.map(item => item.name)).toEqual(['ground creature']);
+        expect(summary.combat.defending.damageOnPlayer.map(item => item.name)).toEqual(['ground creature']);
+    });
 });

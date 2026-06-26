@@ -116,17 +116,24 @@ export function hasCreatureSynergy(card) {
     return /target creature|creatures? you control|whenever (?:a|another|one or more) creatures?|creature spell/i.test(oracleText);
 }
 
+function emptyCombatSummary() {
+    return {
+        bothSurvive: [],
+        bothDie: [],
+        defenderSurvives: [],
+        attackerSurvives: [],
+        damageOnPlayer: [],
+        unknown: [],
+    };
+}
+
 export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
     const summary = {
         instantRemoval: [],
         sorceryRemoval: [],
         combat: {
-            bothSurvive: [],
-            bothDie: [],
-            defenderSurvives: [],
-            attackerSurvives: [],
-            damageOnPlayer: [],
-            unknown: [],
+            attacking: emptyCombatSummary(),
+            defending: emptyCombatSummary(),
         },
         synergies: [],
     };
@@ -138,9 +145,14 @@ export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
         }
 
         if (isCreatureCard(card)) {
-            const outcome = combatOutcome(card, enemyCreature);
-            if (outcome) {
-                summary.combat[outcome].push(card);
+            const attackingOutcome = combatOutcome(card, enemyCreature);
+            if (attackingOutcome) {
+                summary.combat.attacking[attackingOutcome].push(card);
+            }
+
+            const defendingOutcome = combatOutcome(enemyCreature, card);
+            if (defendingOutcome) {
+                summary.combat.defending[defendingOutcome].push(card);
             }
         }
 

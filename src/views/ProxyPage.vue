@@ -460,11 +460,16 @@
                   <th>Deck</th>
                   <th>Instant kill</th>
                   <th>Sorcery kill</th>
-                  <th>Both survive</th>
-                  <th>Both die</th>
-                  <th>Their creature survives</th>
-                  <th>Our creature survives</th>
-                  <th>Damage player</th>
+                  <th>Atk both survive</th>
+                  <th>Atk both die</th>
+                  <th>Atk defender survives</th>
+                  <th>Atk attacker survives</th>
+                  <th>Atk damage player</th>
+                  <th>Def both survive</th>
+                  <th>Def both die</th>
+                  <th>Def defender survives</th>
+                  <th>Def attacker survives</th>
+                  <th>Def damage player</th>
                   <th>Synergy</th>
                 </tr>
               </thead>
@@ -477,11 +482,16 @@
                   <td>{{ analysis.sessionName }}</td>
                   <td>{{ analysis.counts.instantRemoval }}</td>
                   <td>{{ analysis.counts.sorceryRemoval }}</td>
-                  <td>{{ analysis.counts.combat.bothSurvive }}</td>
-                  <td>{{ analysis.counts.combat.bothDie }}</td>
-                  <td>{{ analysis.counts.combat.defenderSurvives }}</td>
-                  <td>{{ analysis.counts.combat.attackerSurvives }}</td>
-                  <td>{{ analysis.counts.combat.damageOnPlayer }}</td>
+                  <td>{{ analysis.counts.combat.attacking.bothSurvive }}</td>
+                  <td>{{ analysis.counts.combat.attacking.bothDie }}</td>
+                  <td>{{ analysis.counts.combat.attacking.defenderSurvives }}</td>
+                  <td>{{ analysis.counts.combat.attacking.attackerSurvives }}</td>
+                  <td>{{ analysis.counts.combat.attacking.damageOnPlayer }}</td>
+                  <td>{{ analysis.counts.combat.defending.bothSurvive }}</td>
+                  <td>{{ analysis.counts.combat.defending.bothDie }}</td>
+                  <td>{{ analysis.counts.combat.defending.defenderSurvives }}</td>
+                  <td>{{ analysis.counts.combat.defending.attackerSurvives }}</td>
+                  <td>{{ analysis.counts.combat.defending.damageOnPlayer }}</td>
                   <td>{{ analysis.counts.synergies }}</td>
                 </tr>
               </tbody>
@@ -980,16 +990,23 @@ export default {
             return cards.reduce((total, card) => total + (card.quantity ?? 1), 0);
         },
         countInteractionSummary(summary) {
+            const countCombat = combat => {
+                return {
+                    bothSurvive: this.countCards(combat.bothSurvive),
+                    bothDie: this.countCards(combat.bothDie),
+                    defenderSurvives: this.countCards(combat.defenderSurvives),
+                    attackerSurvives: this.countCards(combat.attackerSurvives),
+                    damageOnPlayer: this.countCards(combat.damageOnPlayer),
+                    unknown: this.countCards(combat.unknown),
+                };
+            };
+
             return {
                 instantRemoval: this.countCards(summary.instantRemoval),
                 sorceryRemoval: this.countCards(summary.sorceryRemoval),
                 combat: {
-                    bothSurvive: this.countCards(summary.combat.bothSurvive),
-                    bothDie: this.countCards(summary.combat.bothDie),
-                    defenderSurvives: this.countCards(summary.combat.defenderSurvives),
-                    attackerSurvives: this.countCards(summary.combat.attackerSurvives),
-                    damageOnPlayer: this.countCards(summary.combat.damageOnPlayer),
-                    unknown: this.countCards(summary.combat.unknown),
+                    attacking: countCombat(summary.combat.attacking),
+                    defending: countCombat(summary.combat.defending),
                 },
                 synergies: this.countCards(summary.synergies),
             };

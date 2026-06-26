@@ -159,7 +159,8 @@ describe('Core Rendering', async () => {
         const analysis = component.proxy.metaCreatureAnalyses[0];
 
         expect(analysis.counts.instantRemoval).toBe(4);
-        expect(analysis.counts.combat.bothSurvive).toBe(4);
+        expect(analysis.counts.combat.attacking.bothSurvive).toBe(4);
+        expect(analysis.counts.combat.defending.bothSurvive).toBe(4);
 
         component.data.config.decklist = '4 Wild Nacatl';
         component.data.metaDeckStates = [];
