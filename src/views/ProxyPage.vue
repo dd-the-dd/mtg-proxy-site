@@ -613,6 +613,15 @@
                       {{ bonus.condition }} / {{ bonus.detail }}
                     </span>
                   </div>
+                  <div v-if="option.permanentOptions.length" class="value-items value-items-permanent">
+                    <span
+                      v-for="(permanent, permanentIndex) in option.permanentOptions"
+                      :key="`permanent-${permanentIndex}`"
+                      class="value-pill value-pill-permanent"
+                    >
+                      {{ permanent.condition }} / {{ permanent.detail }}
+                    </span>
+                  </div>
                   <div v-if="option.zoneChanges.length" class="value-items value-items-zone">
                     <span
                       v-for="(zone, zoneIndex) in option.zoneChanges"
@@ -2392,6 +2401,12 @@ export default {
     background: #ecfdf3;
     border: 1px solid #75e0a7;
     color: #067647;
+}
+
+.value-pill-permanent {
+    background: #f4f3ff;
+    border: 1px solid #bdb4fe;
+    color: #5925dc;
 }
 
 .value-pill-zone {

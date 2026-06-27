@@ -579,7 +579,7 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
-    test('Feature: Value view renders cast cost, base value, bonuses, and zone changes.', async () => {
+    test('Feature: Value view renders cast cost, base value, and permanent-provided options.', async () => {
         const component = wrapper.getCurrentComponent();
         const opt = {
             quantity: 1,
@@ -634,6 +634,10 @@ describe('Core Rendering', async () => {
         expect(valueText).toContain('I:Feed 1+1 UED cost 1');
         expect(valueText).toContain('S:Token engine cost 11');
         expect(valueText).toContain('S:Grave to hand cost 5');
+        expect(wrapper.find('.value-items-permanent').text()).toContain('I:Feed 1+1 UED cost 1');
+        expect(wrapper.find('.value-items-permanent').text()).toContain('S:Grave to hand cost 5');
+        expect(wrapper.find('.value-items-bonus').exists()).toBe(false);
+        expect(wrapper.find('.value-items-zone').exists()).toBe(false);
 
         component.data.config.analysisView = 'interaction';
         component.data.config.analysisMode = false;

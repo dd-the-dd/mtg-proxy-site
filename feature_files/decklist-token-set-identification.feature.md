@@ -45,7 +45,7 @@
 - Local app sessions persist deck text quantity edits by synchronizing loaded card quantities from the current deck text before saving.
 - Local app sessions can be tagged as meta decks, and analysis mode renders loaded cards one per row with a matchup grid beside each card.
 - Analysis mode can show current-card interaction categories against all tagged meta decks or one selected matchup, with columns grouped by meta deck or by meta-creature mana value.
-- Analysis mode can switch between interaction grid view and a visual value view that shows cast options, mana symbols, base value, synergy bonuses, and zone-change opportunities.
+- Analysis mode can switch between interaction grid view and a visual value view that shows cast options, mana symbols, base value, synergy bonuses, permanent-provided options, and zone-change opportunities, each with distinct visual treatment.
 - Analysis cells can show card counts or deck percentages, and sideboard cards use a `+` indicator in cells where they add interaction coverage.
 - Mana-value analysis columns are fixed from `0 mana` through `8 mana` and `9+ mana`; each cell sums matching meta cards in that column rather than echoing the evaluated card quantity.
 - Analysis percentage cells divide matching meta-card count by the selected meta deck card count, not by the current column total.

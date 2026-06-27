@@ -10,7 +10,7 @@ const card = (name, selectedOption, quantity = 1) => {
 };
 
 describe('CardValueAnalyzer', () => {
-    test('Feature: Value analysis shows Opt hand parity, card quality, and Stormchaser bonuses.', () => {
+    test('Feature: Value analysis shows Opt hand parity, card quality, and Stormchaser permanent options.', () => {
         const opt = card('opt', {
             typeLine: 'Instant',
             oracleText: 'Scry 1. Draw a card.',
@@ -39,8 +39,10 @@ describe('CardValueAnalyzer', () => {
         expect(cast.symbols).toEqual(['U']);
         expect(cast.values).toContainEqual({ label: 'Hand', value: '0' });
         expect(cast.values).toContainEqual({ label: 'Quality', value: 'Scry 1' });
-        expect(cast.bonuses.map(bonus => bonus.detail)).toContain('I:Feed 1+1 UED cost 1');
-        expect(cast.bonuses.map(bonus => bonus.detail)).toContain('S:Token engine cost 11');
-        expect(cast.zoneChanges.map(zone => zone.detail)).toContain('S:Grave to hand cost 5');
+        expect(cast.permanentOptions.map(option => option.detail)).toContain('I:Feed 1+1 UED cost 1');
+        expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Token engine cost 11');
+        expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Grave to hand cost 5');
+        expect(cast.bonuses).toEqual([]);
+        expect(cast.zoneChanges).toEqual([]);
     });
 });
