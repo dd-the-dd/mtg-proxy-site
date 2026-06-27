@@ -40,25 +40,30 @@ describe('CardValueAnalyzer', () => {
         expect(cast.baseRows[0]).toMatchObject({
             condition: 'Cast',
             cost: '{U}',
+            costSymbols: ['U'],
             effect: 'Scry 1, Draw 1',
             speed: 'Instant',
-            value: '',
+            value: 'Card quality improvement',
         });
         expect(cast.values).toContainEqual({ label: 'Effect', value: 'Scry 1' });
         expect(cast.values).not.toContainEqual({ label: 'State', value: 'Card 0' });
         expect(cast.permanentOptions).toContainEqual(expect.objectContaining({
-            condition: 'Permanent in play class 1',
+            condition: "stormchaser's talent class 1",
             cost: '1',
+            costSymbols: ['1'],
             effect: 'Feed 1+1 UED',
             quantity: 4,
             source: "stormchaser's talent",
+            sourceLine: 'x4',
             speed: 'Instant',
+            value: 'Creature improvement',
         }));
         expect(cast.permanentOptions).toContainEqual(expect.objectContaining({
-            condition: 'Permanent in play class 2',
+            condition: "stormchaser's talent class 2",
             cost: '5',
             effect: 'Grave to hand',
             quantity: 4,
+            value: 'Card recursion',
         }));
         expect(cast.permanentOptions.map(option => option.detail)).toContain('I:Feed 1+1 UED cost 1');
         expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Token engine cost 11');

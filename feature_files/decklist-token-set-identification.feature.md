@@ -46,7 +46,7 @@
 - Local app sessions can be tagged as meta decks, and analysis mode renders loaded cards one per row with a matchup grid beside each card.
 - Analysis mode can show current-card interaction categories against all tagged meta decks or one selected matchup, with columns grouped by meta deck or by meta-creature mana value.
 - Analysis mode can switch between interaction grid view and a visual value view that shows cast options, mana symbols, base value, synergy bonuses, permanent-provided options, and zone-change opportunities, each with distinct visual treatment.
-- Visual value rows are structured as condition, cost, effect, and value columns; cast rows are visually wider than permanent-provided option rows, instant or flash-speed costs show a small lightning marker, zero card-state changes are hidden, and permanent-provided rows show the quantity and source card that enables the option.
+- Visual value rows are structured as condition, cost, effect, and value columns; costs use Mana symbol glyphs, instant or flash-speed costs show a small speed marker, zero card-state changes are hidden, permanent-provided rows use the enabling card name as the condition, and the value column names the value category such as card quality improvement or creature improvement.
 - Analysis cells can show card counts or deck percentages, and sideboard cards use a `+` indicator in cells where they add interaction coverage.
 - Mana-value analysis columns are fixed from `0 mana` through `8 mana` and `9+ mana`; each cell sums matching meta cards in that column rather than echoing the evaluated card quantity.
 - Analysis percentage cells divide matching meta-card count by the selected meta deck card count, not by the current column total.

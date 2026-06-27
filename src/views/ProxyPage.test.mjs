@@ -628,15 +628,18 @@ describe('Core Rendering', async () => {
         await wrapper.vm.$nextTick();
 
         const valueText = wrapper.find('.value-view').text();
-        expect(valueText).toContain('U');
         expect(valueText).toContain('Cast');
         expect(valueText).toContain('Scry 1, Draw 1');
+        expect(valueText).toContain('Card quality improvement');
         expect(valueText).not.toContain('Card 0');
-        expect(wrapper.find('.value-row-base').text()).toContain('⚡');
-        expect(wrapper.find('.value-rows-permanent').text()).toContain('Permanent in play class 1');
-        expect(wrapper.find('.value-rows-permanent').text()).toContain('x4 stormchaser');
+        expect(wrapper.find('.value-row-base .ms-u').exists()).toBe(true);
+        expect(wrapper.find('.value-row-base .ms-instant').exists()).toBe(true);
+        expect(wrapper.find('.value-rows-permanent').text()).toContain("stormchaser's talent class 1");
+        expect(wrapper.find('.value-rows-permanent').text()).toContain('x4');
         expect(wrapper.find('.value-rows-permanent').text()).toContain('Feed 1+1 UED');
+        expect(wrapper.find('.value-rows-permanent').text()).toContain('Creature improvement');
         expect(wrapper.find('.value-rows-permanent').text()).toContain('Grave to hand');
+        expect(wrapper.find('.value-rows-permanent .ms-1').exists()).toBe(true);
         expect(wrapper.find('.value-rows-bonus').exists()).toBe(false);
         expect(wrapper.find('.value-rows-zone').exists()).toBe(false);
 

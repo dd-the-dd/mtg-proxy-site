@@ -24,6 +24,10 @@ function manaSymbols(cost) {
     return [...cost.matchAll(/\{([^}]+)\}/g)].map(match => match[1]);
 }
 
+function numericCostSymbols(cost) {
+    return cost === '' ? [] : [cost];
+}
+
 function manaCostValue(cost) {
     return manaSymbols(cost).reduce((total, symbol) => {
         if (/^\d+$/.test(symbol)) {
@@ -104,18 +108,18 @@ function synergyKind(key) {
 function synergyCondition(key, card, relatedCard) {
     if (/\.feeders$/.test(key) && /\bClass\b/i.test(typeLineOf(relatedCard))) {
         if (/graveyardPlay/.test(key)) {
-            return 'Permanent in play class 2';
+            return `${relatedCard.name} class 2`;
         }
 
         if (/creatureTokens/.test(key)) {
-            return 'Permanent in play class 3';
+            return `${relatedCard.name} class 3`;
         }
 
-        return 'Permanent in play class 1';
+        return `${relatedCard.name} class 1`;
     }
 
     if (/\.feeders$/.test(key)) {
-        return 'Permanent in play';
+        return relatedCard.name;
     }
 
     if (/graveyardPlay/.test(key)) {
@@ -147,12 +151,44 @@ function castEffectText(card, drawn) {
     return effects.join(', ');
 }
 
+function castValueText(card, handValue) {
+    if (qualityValues(card).length > 0) {
+        return 'Card quality improvement';
+    }
+
+    return handValue;
+}
+
 function detailSpeed(detail) {
     return /^I:/.test(detail) ? 'Instant' : 'Sorcery';
 }
 
 function detailEffect(detail) {
     return detail.replace(/^[IS]:/, '').replace(/\scost \d+$/, '');
+}
+
+function synergyValueText(key) {
+    if (/^synergy\.combat\./.test(key)) {
+        return 'Creature improvement';
+    }
+
+    if (/^synergy\.graveyardPlay\./.test(key)) {
+        return 'Card recursion';
+    }
+
+    if (/^synergy\.creatureTokens\./.test(key)) {
+        return 'Creature token generation';
+    }
+
+    if (/^synergy\.battlefieldToHand\./.test(key)) {
+        return 'Battlefield reset';
+    }
+
+    if (/^synergy\.entersBattlefield\./.test(key)) {
+        return 'ETB reuse';
+    }
+
+    return '';
 }
 
 export function analyzeCardValue(card, relatedCards = []) {
@@ -186,15 +222,18 @@ export function analyzeCardValue(card, relatedCards = []) {
             }
 
             const detail = synergyInteractionDetail(card, relatedCard, key);
+            const cost = String(synergyActionCost(card, relatedCard, key) ?? '');
             const entry = {
                 condition: synergyCondition(key, card, relatedCard),
-                cost: String(synergyActionCost(card, relatedCard, key) ?? ''),
+                cost,
+                costSymbols: numericCostSymbols(cost),
                 detail,
                 effect: detailEffect(detail),
                 quantity: relatedCard.quantity ?? 1,
                 source: relatedCard.name,
+                sourceLine: `x${relatedCard.quantity ?? 1}`,
                 speed: detailSpeed(detail),
-                value: '',
+                value: synergyValueText(key),
             };
 
             const kind = synergyKind(key);
@@ -220,9 +259,10 @@ export function analyzeCardValue(card, relatedCards = []) {
                     {
                         condition: 'Cast',
                         cost: manaCostOf(card),
+                        costSymbols: manaSymbols(manaCostOf(card)),
                         effect: castEffectText(card, drawn),
                         speed: castSpeed(card),
-                        value: handValue,
+                        value: castValueText(card, handValue),
                     },
                 ],
                 values,

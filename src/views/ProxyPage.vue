@@ -581,16 +581,6 @@
                 :key="`value-${cardIndex}-${optionIndex}`"
                 class="value-cast"
               >
-                <div class="value-cost" :title="option.cost">
-                  <span
-                    v-for="(symbol, symbolIndex) in option.symbols"
-                    :key="`symbol-${symbolIndex}`"
-                    class="mana-symbol"
-                    :class="`mana-symbol-${symbol.toLowerCase()}`"
-                  >
-                    {{ symbol }}
-                  </span>
-                </div>
                 <div class="value-line">
                   <div class="value-line-header">
                     {{ option.label }} / {{ option.speed }}
@@ -605,12 +595,19 @@
                         {{ row.condition }}
                       </div>
                       <div class="value-row-cell value-row-cost">
-                        <span
+                        <i
                           v-if="row.speed === 'Instant' || row.speed === 'Flash'"
-                          class="value-speed"
+                          class="ms value-speed"
+                          :class="speedSymbolClass(row.speed)"
                           :title="row.speed"
-                        >⚡</span>
-                        {{ row.cost }}
+                        />
+                        <i
+                          v-for="(symbol, symbolIndex) in row.costSymbols"
+                          :key="`base-cost-${rowIndex}-${symbolIndex}`"
+                          class="ms ms-cost mana-symbol"
+                          :class="manaSymbolClass(symbol)"
+                          :title="symbol"
+                        />
                       </div>
                       <div class="value-row-cell value-row-effect">
                         {{ row.effect || '-' }}
@@ -630,12 +627,19 @@
                         {{ bonus.condition }}
                       </div>
                       <div class="value-row-cell value-row-cost">
-                        <span
+                        <i
                           v-if="bonus.speed === 'Instant' || bonus.speed === 'Flash'"
-                          class="value-speed"
+                          class="ms value-speed"
+                          :class="speedSymbolClass(bonus.speed)"
                           :title="bonus.speed"
-                        >⚡</span>
-                        {{ bonus.cost }}
+                        />
+                        <i
+                          v-for="(symbol, symbolIndex) in bonus.costSymbols"
+                          :key="`bonus-cost-${bonusIndex}-${symbolIndex}`"
+                          class="ms ms-cost mana-symbol"
+                          :class="manaSymbolClass(symbol)"
+                          :title="symbol"
+                        />
                       </div>
                       <div class="value-row-cell value-row-effect">
                         {{ bonus.effect || bonus.detail }}
@@ -654,16 +658,23 @@
                       <div class="value-row-cell value-row-condition">
                         <div>{{ permanent.condition }}</div>
                         <div class="value-row-source">
-                          x{{ permanent.quantity }} {{ permanent.source }}
+                          {{ permanent.sourceLine }}
                         </div>
                       </div>
                       <div class="value-row-cell value-row-cost">
-                        <span
+                        <i
                           v-if="permanent.speed === 'Instant' || permanent.speed === 'Flash'"
-                          class="value-speed"
+                          class="ms value-speed"
+                          :class="speedSymbolClass(permanent.speed)"
                           :title="permanent.speed"
-                        >⚡</span>
-                        {{ permanent.cost }}
+                        />
+                        <i
+                          v-for="(symbol, symbolIndex) in permanent.costSymbols"
+                          :key="`permanent-cost-${permanentIndex}-${symbolIndex}`"
+                          class="ms ms-cost mana-symbol"
+                          :class="manaSymbolClass(symbol)"
+                          :title="symbol"
+                        />
                       </div>
                       <div class="value-row-cell value-row-effect">
                         {{ permanent.effect }}
@@ -683,12 +694,19 @@
                         {{ zone.condition }}
                       </div>
                       <div class="value-row-cell value-row-cost">
-                        <span
+                        <i
                           v-if="zone.speed === 'Instant' || zone.speed === 'Flash'"
-                          class="value-speed"
+                          class="ms value-speed"
+                          :class="speedSymbolClass(zone.speed)"
                           :title="zone.speed"
-                        >⚡</span>
-                        {{ zone.cost }}
+                        />
+                        <i
+                          v-for="(symbol, symbolIndex) in zone.costSymbols"
+                          :key="`zone-cost-${zoneIndex}-${symbolIndex}`"
+                          class="ms ms-cost mana-symbol"
+                          :class="manaSymbolClass(symbol)"
+                          :title="symbol"
+                        />
                       </div>
                       <div class="value-row-cell value-row-effect">
                         {{ zone.effect || zone.detail }}
@@ -1418,6 +1436,12 @@ export default {
         },
         valueAnalysis(card) {
             return analyzeCardValue(card, this.selectedMetaDeckStates.flatMap(session => session.state?.cards ?? []));
+        },
+        manaSymbolClass(symbol) {
+            return `ms-${String(symbol).toLowerCase().replaceAll('/', '')}`;
+        },
+        speedSymbolClass(speed) {
+            return speed === 'Flash' ? 'ms-ability-flash' : 'ms-instant';
         },
         capturePrintOrderIndexes() {
             const baseSlots = [...this.printSlotsFrontBase];
@@ -2404,39 +2428,13 @@ export default {
 }
 
 .value-cast {
-    display: grid;
-    gap: 0.45rem;
-    grid-template-columns: 2.5rem minmax(0, 1fr);
-}
-
-.value-cost {
-    align-content: start;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.15rem;
-    justify-content: center;
-}
-
-.mana-symbol {
-    align-items: center;
-    background: #d8e5f8;
-    border: 1px solid #9bb7dd;
-    border-radius: 50%;
-    color: #1f3b57;
-    display: inline-flex;
-    font-size: 0.62rem;
-    font-weight: 700;
-    height: 1.25rem;
-    justify-content: center;
-    width: 1.25rem;
+    display: block;
 }
 
 .value-line {
-    border-left: 2px solid #667085;
     display: grid;
     gap: 0.3rem;
     min-width: 0;
-    padding-left: 0.5rem;
 }
 
 .value-line-header {
@@ -2514,6 +2512,10 @@ export default {
     gap: 0.18rem;
 }
 
+.mana-symbol {
+    font-size: 0.92rem;
+}
+
 .value-row-effect {
     font-weight: 600;
 }
@@ -2531,14 +2533,9 @@ export default {
 }
 
 .value-speed {
-    align-items: center;
-    background: rgb(255 255 255 / 70%);
-    border-radius: 50%;
-    display: inline-flex;
-    font-size: 0.62rem;
-    height: 1rem;
-    justify-content: center;
-    width: 1rem;
+    color: currentColor;
+    font-size: 0.78rem;
+    opacity: 0.74;
 }
 
 @media (max-width: 960px) {
