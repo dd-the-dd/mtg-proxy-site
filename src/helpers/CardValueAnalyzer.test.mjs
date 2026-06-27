@@ -51,14 +51,14 @@ describe('CardValueAnalyzer', () => {
             condition: "stormchaser's talent class 1",
             cost: '1',
             costSymbols: ['1'],
-            effect: 'Feed 1+1 UED',
+            effect: 'Combat pump +1/+1 UED',
             quantity: 4,
             source: "stormchaser's talent",
             sourceLine: 'x4',
             speed: 'Sorcery',
             value: 'Creature improvement',
         }));
-        expect(cast.permanentOptions.map(option => option.detail)).toContain('I:Feed 1+1 UED cost 1');
+        expect(cast.permanentOptions.map(option => option.detail)).toContain('I:Combat pump +1/+1 UED cost 1');
         expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Token engine cost 11');
         expect(cast.permanentOptions.map(option => option.detail)).not.toContain('S:Grave to hand cost 5');
         expect(value.zoneOptions).toContainEqual(expect.objectContaining({
@@ -87,7 +87,78 @@ describe('CardValueAnalyzer', () => {
             condition: 'Cast',
             cost: '{R}',
             speed: 'Instant',
-            value: 'Card -1',
+            value: 'Direct damage; Card -1',
+        });
+    });
+
+    test('Feature: Value analysis exposes kicker cast options and threshold token-copy synergies.', () => {
+        const burstLightning = card('burst lightning', {
+            typeLine: 'Instant',
+            oracleText: 'Kicker {4}. Burst Lightning deals 2 damage to any target. If this spell was kicked, it deals 4 damage instead.',
+            manaCost: '{R}',
+            manaValue: 1,
+        });
+        const slickshot = card('slickshot show-off', {
+            typeLine: 'Creature - Bird Wizard',
+            oracleText: 'Flying, haste\nWhenever you cast a noncreature spell, this creature gets +2/+0 until end of turn.',
+            manaCost: '{1}{R}',
+            power: '1',
+            toughness: '2',
+        }, 4);
+        const colorstormStallion = card('colorstorm stallion', {
+            typeLine: 'Creature - Elemental Horse',
+            oracleText: 'Ward {1}, haste\nOpus — Whenever you cast an instant or sorcery spell, this creature gets +1/+1 until end of turn. If five or more mana was spent to cast that spell, create a token that\'s a copy of this creature.',
+            manaCost: '{1}{U}{R}',
+            power: '3',
+            toughness: '3',
+        }, 3);
+
+        const value = analyzeCardValue(burstLightning, [slickshot, colorstormStallion]);
+        const base = value.castOptions.find(option => option.label === 'Cast');
+        const kicked = value.castOptions.find(option => option.label === 'Kicked');
+
+        expect(kicked.baseRows[0]).toMatchObject({
+            condition: 'Kicked',
+            costSymbols: ['R', '4'],
+            effect: 'Damage 4',
+            value: 'Direct damage; Card -1',
+        });
+        expect(base.permanentOptions.map(option => option.effect)).toContain('Combat pump +2/+0 UED');
+        expect(base.permanentOptions.map(option => option.effect)).not.toContain('Copy token');
+        expect(kicked.permanentOptions).toContainEqual(expect.objectContaining({
+            condition: 'colorstorm stallion threshold',
+            effect: 'Copy token',
+            costSymbols: ['5'],
+            value: 'Creature token generation',
+        }));
+    });
+
+    test('Feature: Value analysis parses word-number card selection and plot cast options.', () => {
+        const sleightOfHand = card('sleight of hand', {
+            typeLine: 'Sorcery',
+            oracleText: 'Look at the top two cards of your library. Put one of them into your hand and the other on the bottom of your library.',
+            manaCost: '{U}',
+            manaValue: 1,
+        });
+        const slickshot = card('slickshot show-off', {
+            typeLine: 'Creature - Bird Wizard',
+            oracleText: 'Flying, haste\nWhenever you cast a noncreature spell, this creature gets +2/+0 until end of turn.\nPlot {1}{R}',
+            manaCost: '{1}{R}',
+            manaValue: 2,
+        });
+
+        expect(analyzeCardValue(sleightOfHand).castOptions[0].baseRows[0]).toMatchObject({
+            effect: 'Look 2',
+            value: 'Card quality improvement',
+        });
+
+        const slickshotValue = analyzeCardValue(slickshot);
+        expect(slickshotValue.castOptions.map(option => option.label)).toEqual(['Cast', 'Plot']);
+        expect(slickshotValue.castOptions[1].baseRows[0]).toMatchObject({
+            condition: 'Plot',
+            costSymbols: ['1', 'R'],
+            effect: 'Exile for later cast',
+            value: 'Delayed cast option; Card -1',
         });
     });
 });

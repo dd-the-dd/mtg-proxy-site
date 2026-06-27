@@ -28,6 +28,10 @@ function numericCostSymbols(cost) {
     return cost === '' ? [] : [cost];
 }
 
+function addManaCosts(...costs) {
+    return costs.filter(Boolean).join('');
+}
+
 function manaCostValue(cost) {
     return manaSymbols(cost).reduce((total, symbol) => {
         if (/^\d+$/.test(symbol)) {
@@ -36,6 +40,23 @@ function manaCostValue(cost) {
 
         return /^X$/i.test(symbol) ? total : total + 1;
     }, 0);
+}
+
+function numberWordValue(value) {
+    const words = {
+        one: 1,
+        two: 2,
+        three: 3,
+        four: 4,
+        five: 5,
+        six: 6,
+        seven: 7,
+        eight: 8,
+        nine: 9,
+        ten: 10,
+    };
+
+    return /^\d+$/.test(value) ? parseInt(value, 10) : words[value.toLowerCase()];
 }
 
 function drawCount(card) {
@@ -59,9 +80,9 @@ function qualityValues(card) {
         values.push(`Surveil ${surveil[1]}`);
     }
 
-    const look = /\blook at the top (\d+) cards?/i.exec(text);
+    const look = /\blook at the top (\d+|one|two|three|four|five|six|seven|eight|nine|ten) cards?/i.exec(text);
     if (look) {
-        values.push(`Look ${look[1]}`);
+        values.push(`Look ${numberWordValue(look[1])}`);
     }
 
     return values;
@@ -77,6 +98,16 @@ function castSpeed(card) {
 
 function isCastableSpell(card) {
     return !/\bLand\b/i.test(typeLineOf(card)) && manaCostOf(card) !== '';
+}
+
+function kickerCosts(card) {
+    return [...textOf(card).matchAll(/\bKicker(?:\s*[—-])?\s*((?:\{[^}]+\})+)/gi)]
+        .map(match => match[1]);
+}
+
+function plotCosts(card) {
+    return [...textOf(card).matchAll(/\bPlot\s*((?:\{[^}]+\})+)/gi)]
+        .map(match => match[1]);
 }
 
 function synergyCategories() {
@@ -106,6 +137,10 @@ function synergyKind(key) {
 }
 
 function synergyCondition(key, card, relatedCard) {
+    if (/creatureTokens/.test(key) && /five or more mana was spent/i.test(textOf(relatedCard))) {
+        return `${relatedCard.name} threshold`;
+    }
+
     if (/\.feeders$/.test(key) && /\bClass\b/i.test(typeLineOf(relatedCard))) {
         if (/graveyardPlay/.test(key)) {
             return `${relatedCard.name} class 2`;
@@ -142,18 +177,46 @@ function stateValue(handDelta) {
     return `Card ${handDelta > 0 ? `+${handDelta}` : handDelta}`;
 }
 
-function castEffectText(card, drawn) {
+function damageValue(card, kicked = false) {
+    const text = textOf(card);
+    const kickedDamage = /if this spell was kicked, it deals (\d+) damage instead/i.exec(text);
+    if (kicked && kickedDamage) {
+        return `Damage ${kickedDamage[1]}`;
+    }
+
+    const baseDamage = /deals? (\d+) damage to (?:any target|target (?:creature|creature or planeswalker|player or planeswalker|opponent|player))/i.exec(text);
+    return baseDamage ? `Damage ${baseDamage[1]}` : '';
+}
+
+function castEffectText(card, drawn, option = {}) {
+    if (option.plotted) {
+        return 'Exile for later cast';
+    }
+
     const effects = [...qualityValues(card)];
     if (drawn > 0) {
         effects.push(`Draw ${drawn}`);
     }
 
+    const damage = damageValue(card, option.kicked);
+    if (damage) {
+        effects.push(damage);
+    }
+
     return effects.join(', ');
 }
 
-function castValueText(card, handValue) {
+function castValueText(card, handValue, option = {}) {
+    if (option.plotted) {
+        return ['Delayed cast option', handValue].filter(Boolean).join('; ');
+    }
+
     if (qualityValues(card).length > 0) {
         return 'Card quality improvement';
+    }
+
+    if (damageValue(card, option.kicked)) {
+        return ['Direct damage', handValue].filter(Boolean).join('; ');
     }
 
     return handValue;
@@ -173,6 +236,10 @@ function synergySpeed(key, relatedCard, detail) {
 
 function detailEffect(detail) {
     return detail.replace(/^[IS]:/, '').replace(/\scost \d+$/, '');
+}
+
+function isThresholdTokenCopyDetail(detail) {
+    return /Copy token cost 5/.test(detail);
 }
 
 function synergyValueText(key) {
@@ -199,6 +266,54 @@ function synergyValueText(key) {
     return '';
 }
 
+function castOptionsForCard(card, drawn, handValue) {
+    const baseCost = manaCostOf(card);
+    const baseOption = {
+        label: 'Cast',
+        cost: baseCost,
+        costValue: manaCostValue(baseCost),
+        costSymbols: manaSymbols(baseCost),
+        kicked: false,
+    };
+
+    const kickedOptions = kickerCosts(card).map(kickerCost => {
+        const cost = addManaCosts(baseCost, kickerCost);
+        return {
+            label: 'Kicked',
+            cost,
+            costValue: manaCostValue(cost),
+            costSymbols: manaSymbols(cost),
+            kicked: true,
+        };
+    });
+    const plotOptions = plotCosts(card).map(plotCost => {
+        return {
+            label: 'Plot',
+            cost: plotCost,
+            costValue: manaCostValue(plotCost),
+            costSymbols: manaSymbols(plotCost),
+            kicked: false,
+            plotted: true,
+        };
+    });
+
+    return [baseOption, ...kickedOptions, ...plotOptions].map(option => {
+        return {
+            ...option,
+            baseRows: [
+                {
+                    condition: option.label,
+                    cost: option.cost,
+                    costSymbols: option.costSymbols,
+                    effect: castEffectText(card, drawn, option),
+                    speed: castSpeed(card),
+                    value: castValueText(card, handValue, option),
+                },
+            ],
+        };
+    });
+}
+
 export function analyzeCardValue(card, relatedCards = []) {
     if (!isCastableSpell(card)) {
         return {
@@ -218,9 +333,22 @@ export function analyzeCardValue(card, relatedCards = []) {
         values.push({ label: 'Effect', value: quality });
     }
 
-    const bonuses = [];
-    const permanentOptions = [];
+    const castOptions = castOptionsForCard(card, drawn, handValue).map(option => {
+        return {
+            label: option.label,
+            cost: option.cost,
+            costValue: option.costValue,
+            speed: castSpeed(card),
+            symbols: option.costSymbols,
+            baseRows: option.baseRows,
+            values,
+            bonuses: [],
+            permanentOptions: [],
+            zoneChanges: [],
+        };
+    });
     const zoneOptions = [];
+    const seenZoneOptions = new Set();
 
     for (const relatedCard of relatedCards) {
         const summary = summarizeCreatureInteractions([card], relatedCard);
@@ -245,40 +373,30 @@ export function analyzeCardValue(card, relatedCards = []) {
             };
 
             const kind = synergyKind(key);
-            if (kind === 'permanent') {
-                permanentOptions.push(entry);
-            } else if (kind === 'zone') {
-                zoneOptions.push(entry);
+            if (kind === 'zone') {
+                const zoneKey = `${entry.source}:${key}:${entry.detail}`;
+                if (!seenZoneOptions.has(zoneKey)) {
+                    seenZoneOptions.add(zoneKey);
+                    zoneOptions.push(entry);
+                }
             } else {
-                bonuses.push(entry);
+                for (const option of castOptions) {
+                    if (isThresholdTokenCopyDetail(detail) && option.costValue < (synergyActionCost(card, relatedCard, key) ?? 0)) {
+                        continue;
+                    }
+
+                    if (kind === 'permanent') {
+                        option.permanentOptions.push(entry);
+                    } else {
+                        option.bonuses.push(entry);
+                    }
+                }
             }
         }
     }
 
     return {
-        castOptions: [
-            {
-                label: 'Cast',
-                cost: manaCostOf(card),
-                costValue: manaCostValue(manaCostOf(card)),
-                speed: castSpeed(card),
-                symbols: manaSymbols(manaCostOf(card)),
-                baseRows: [
-                    {
-                        condition: 'Cast',
-                        cost: manaCostOf(card),
-                        costSymbols: manaSymbols(manaCostOf(card)),
-                        effect: castEffectText(card, drawn),
-                        speed: castSpeed(card),
-                        value: castValueText(card, handValue),
-                    },
-                ],
-                values,
-                bonuses,
-                permanentOptions,
-                zoneChanges: [],
-            },
-        ],
+        castOptions,
         zoneOptions,
     };
 }

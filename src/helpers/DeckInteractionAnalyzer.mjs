@@ -328,8 +328,41 @@ function tokenHasProwess(card) {
     });
 }
 
+function combatPump(card) {
+    const oracleText = textOf(card);
+    const pumpMatch = /whenever you cast (?:a|an) (noncreature|instant or sorcery) spell, this creature gets \+(\d+)\/\+?(\d+) until end of turn/i.exec(oracleText);
+    if (pumpMatch) {
+        return {
+            power: parseInt(pumpMatch[2], 10),
+            toughness: parseInt(pumpMatch[3], 10),
+            trigger: pumpMatch[1].toLowerCase() === 'instant or sorcery' ? 'instantOrSorcery' : 'nonCreature',
+        };
+    }
+
+    if (/\bProwess\b/i.test(oracleText) || tokenHasProwess(card)) {
+        return {
+            power: 1,
+            toughness: 1,
+            trigger: 'nonCreature',
+        };
+    }
+
+    return null;
+}
+
+function combatSynergyApplies(source, feeder) {
+    const pump = combatPump(source);
+    if (!pump) {
+        return false;
+    }
+
+    return pump.trigger === 'instantOrSorcery'
+        ? isInstantOrSorcery(feeder)
+        : isNonCreatureNonLandSpell(feeder);
+}
+
 function isCombatSynergySource(card) {
-    return /\bProwess\b/i.test(textOf(card)) || tokenHasProwess(card);
+    return combatPump(card) !== null;
 }
 
 function isGraveyardPlaySynergySource(card) {
@@ -337,7 +370,12 @@ function isGraveyardPlaySynergySource(card) {
 }
 
 function isCreatureTokenSynergySource(card) {
-    return /whenever you cast an instant or sorcery spell, create/i.test(textOf(card));
+    return /whenever you cast an instant or sorcery spell, create/i.test(textOf(card)) ||
+        /if five or more mana was spent to cast that spell, create a token/i.test(textOf(card));
+}
+
+function hasManaSpentTokenCopyThreshold(card) {
+    return /if five or more mana was spent to cast that spell, create a token/i.test(textOf(card));
 }
 
 function isBattlefieldToHandSynergySource(card) {
@@ -349,11 +387,11 @@ function isEntersBattlefieldSynergyTarget(card) {
 }
 
 function addSynergyMatches(summary, card, relatedCard) {
-    if (isCombatSynergySource(card) && isNonCreatureNonLandSpell(relatedCard)) {
+    if (combatSynergyApplies(card, relatedCard)) {
         pushOnce(summary.synergy.combat.sources, card);
     }
 
-    if (isCombatSynergySource(relatedCard) && isNonCreatureNonLandSpell(card)) {
+    if (combatSynergyApplies(relatedCard, card)) {
         pushOnce(summary.synergy.combat.feeders, card);
     }
 
@@ -432,7 +470,8 @@ export function synergyInteractionDetail(card, relatedCard, categoryKey) {
 
     if (/^synergy\.combat\./.test(categoryKey)) {
         const speed = spellSpeed(feeder) === 'instant' ? 'I' : 'S';
-        return `${speed}:Feed 1+1 UED cost ${manaCostValue(manaCostOf(feeder))}`;
+        const pump = combatPump(source) ?? { power: 1, toughness: 1 };
+        return `${speed}:Combat pump +${pump.power}/+${pump.toughness} UED cost ${manaCostValue(manaCostOf(feeder))}`;
     }
 
     if (/^synergy\.graveyardPlay\./.test(categoryKey)) {
@@ -440,6 +479,10 @@ export function synergyInteractionDetail(card, relatedCard, categoryKey) {
     }
 
     if (/^synergy\.creatureTokens\./.test(categoryKey)) {
+        if (hasManaSpentTokenCopyThreshold(source)) {
+            return 'S:Copy token cost 5';
+        }
+
         return `S:Token engine cost ${classLevelCost(source, 3)}`;
     }
 
@@ -468,6 +511,10 @@ export function synergyActionCost(card, relatedCard, categoryKey) {
     }
 
     if (/^synergy\.creatureTokens\./.test(categoryKey)) {
+        if (hasManaSpentTokenCopyThreshold(source)) {
+            return 5;
+        }
+
         return classLevelCost(source, 3);
     }
 

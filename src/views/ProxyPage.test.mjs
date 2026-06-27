@@ -492,7 +492,7 @@ describe('Core Rendering', async () => {
         expect(visibleLabels).not.toContain('Feeds grave');
         expect(visibleLabels).not.toContain('Kill inst.');
         expect(cell.display).toBe('4');
-        expect(cell.title).toContain('4x opt - I:Feed 1+1 UED cost 1');
+        expect(cell.title).toContain('4x opt - I:Combat pump +1/+1 UED cost 1');
 
         const graveCell = component.ctx.cardAnalysisCell(
             stormchaserTalent,
@@ -636,7 +636,7 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.value-row-base .ms-instant').exists()).toBe(true);
         expect(wrapper.find('.value-rows-permanent').text()).toContain("stormchaser's talent class 1");
         expect(wrapper.find('.value-rows-permanent').text()).toContain('x4');
-        expect(wrapper.find('.value-rows-permanent').text()).toContain('Feed 1+1 UED');
+        expect(wrapper.find('.value-rows-permanent').text()).toContain('Combat pump +1/+1 UED');
         expect(wrapper.find('.value-rows-permanent').text()).toContain('Creature improvement');
         expect(wrapper.find('.value-rows-permanent').text()).not.toContain('Grave to hand');
         expect(wrapper.find('.value-rows-permanent .ms-1').exists()).toBe(true);

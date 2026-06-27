@@ -55,6 +55,9 @@
 - Creature combat analysis accounts for flying/reach blocking restrictions, first strike, double strike, deathtouch, and simple unblockable text before classifying whether the attacker survives, defender survives, both die, both survive, or damage reaches the player.
 - Cards that create creature tokens are analyzed for combat as virtual creatures using the generated token's power, toughness, type line, oracle text, and keywords.
 - Analysis separates synergy source rows from synergy feeder rows. Combat, graveyard-play, and creature-token synergies are shown separately, include trigger-card mana costs in cell details, and empty rows are hidden per analyzed card.
+- Combat synergy parsing uses source-card pump text, so Izzet cards such as Slickshot Show-Off show `+2/+0` while prowess-style cards show `+1/+1`.
+- Value analysis can render alternate cast options such as kicker and plot; kicker options can unlock mana-spent threshold synergies such as Colorstorm Stallion's copy-token trigger.
+- Card selection effects with word-number text, such as looking at the top two or three cards, count as card quality improvement.
 - Class-card synergy costs are cumulative: level 2 includes the initial class cost plus the level 2 cost, and level 3 includes the initial class cost plus each prior level cost.
 - Mana-value synergy columns use the synergy action cost rather than the synergy card's own mana value.
 - Bounce spells that return target permanents to hand create a battlefield-to-hand synergy with permanents, and permanents with enters-the-battlefield text get an additional ETB recast synergy.

@@ -177,9 +177,34 @@ describe('DeckInteractionAnalyzer', () => {
         expect(feederSummary.synergy.combat.feeders.map(item => item.name)).toEqual(['opt']);
         expect(feederSummary.synergy.graveyardPlay.feeders.map(item => item.name)).toEqual(['opt']);
         expect(feederSummary.synergy.creatureTokens.feeders.map(item => item.name)).toEqual(['opt']);
-        expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.combat.feeders')).toBe('I:Feed 1+1 UED cost 1');
+        expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.combat.feeders')).toBe('I:Combat pump +1/+1 UED cost 1');
         expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.graveyardPlay.feeders')).toBe('S:Grave to hand cost 5');
         expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.creatureTokens.feeders')).toBe('S:Token engine cost 11');
+    });
+
+    test('Feature: Izzet prowess combat triggers parse exact pump amounts from source text.', () => {
+        const opt = card('opt', {
+            typeLine: 'Instant',
+            oracleText: 'Scry 1. Draw a card.',
+            manaCost: '{U}',
+        });
+        const slickshot = card('slickshot show-off', {
+            typeLine: 'Creature - Bird Wizard',
+            oracleText: 'Flying, haste\nWhenever you cast a noncreature spell, this creature gets +2/+0 until end of turn.',
+            manaCost: '{1}{R}',
+            power: '1',
+            toughness: '2',
+        });
+        const colorstormStallion = card('colorstorm stallion', {
+            typeLine: 'Creature - Elemental Horse',
+            oracleText: 'Ward {1}, haste\nOpus — Whenever you cast an instant or sorcery spell, this creature gets +1/+1 until end of turn. If five or more mana was spent to cast that spell, create a token that\'s a copy of this creature.',
+            manaCost: '{1}{U}{R}',
+            power: '3',
+            toughness: '3',
+        });
+
+        expect(synergyInteractionDetail(opt, slickshot, 'synergy.combat.feeders')).toBe('I:Combat pump +2/+0 UED cost 1');
+        expect(synergyInteractionDetail(opt, colorstormStallion, 'synergy.combat.feeders')).toBe('I:Combat pump +1/+1 UED cost 1');
     });
 
     test('Feature: Bounce spells identify battlefield-to-hand and ETB recast synergies.', () => {
