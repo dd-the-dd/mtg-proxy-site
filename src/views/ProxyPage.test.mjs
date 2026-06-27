@@ -492,7 +492,7 @@ describe('Core Rendering', async () => {
         expect(visibleLabels).not.toContain('Feeds grave');
         expect(visibleLabels).not.toContain('Kill inst.');
         expect(cell.display).toBe('4');
-        expect(cell.title).toContain('4x opt - I:Combat pump +1/+1 UED cost 1');
+        expect(cell.title).toContain('4x opt - S:Combat pump +1/+1 UED cost 1');
 
         const graveCell = component.ctx.cardAnalysisCell(
             stormchaserTalent,

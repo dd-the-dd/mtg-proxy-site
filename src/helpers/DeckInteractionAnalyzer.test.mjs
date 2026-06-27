@@ -177,7 +177,8 @@ describe('DeckInteractionAnalyzer', () => {
         expect(feederSummary.synergy.combat.feeders.map(item => item.name)).toEqual(['opt']);
         expect(feederSummary.synergy.graveyardPlay.feeders.map(item => item.name)).toEqual(['opt']);
         expect(feederSummary.synergy.creatureTokens.feeders.map(item => item.name)).toEqual(['opt']);
-        expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.combat.feeders')).toBe('I:Combat pump +1/+1 UED cost 1');
+        expect(synergyInteractionDetail(stormchaserTalent, opt, 'synergy.combat.sources')).toBe('S:Combat pump +1/+1 UED cost 1');
+        expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.combat.feeders')).toBe('S:Combat pump +1/+1 UED cost 1');
         expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.graveyardPlay.feeders')).toBe('S:Grave to hand cost 5');
         expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.creatureTokens.feeders')).toBe('S:Token engine cost 11');
     });

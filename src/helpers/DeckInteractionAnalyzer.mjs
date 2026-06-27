@@ -387,6 +387,10 @@ function hasManaSpentTokenCopyThreshold(card) {
     return /if five or more mana was spent to cast that spell, create a token/i.test(textOf(card));
 }
 
+function isClassCard(card) {
+    return /\bClass\b/i.test(typeLineOf(card));
+}
+
 function isBattlefieldToHandSynergySource(card) {
     return /return target permanent to (?:its|their|his|her|that permanent's) owner's hand/i.test(textOf(card));
 }
@@ -555,7 +559,7 @@ export function synergyInteractionDetail(card, relatedCard, categoryKey) {
     const { source, feeder } = synergySourceAndFeeder(card, relatedCard, categoryKey);
 
     if (/^synergy\.combat\./.test(categoryKey)) {
-        const speed = spellSpeed(feeder) === 'instant' ? 'I' : 'S';
+        const speed = isClassCard(source) || spellSpeed(feeder) !== 'instant' ? 'S' : 'I';
         const pump = combatPump(source) ?? { power: 1, toughness: 1 };
         return `${speed}:Combat pump +${pump.power}/+${pump.toughness} UED cost ${manaCostValue(manaCostOf(feeder))}`;
     }

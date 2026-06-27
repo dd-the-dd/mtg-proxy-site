@@ -58,7 +58,7 @@ describe('CardValueAnalyzer', () => {
             speed: 'Sorcery',
             value: 'Creature improvement',
         }));
-        expect(cast.permanentOptions.map(option => option.detail)).toContain('I:Combat pump +1/+1 UED cost 1');
+        expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Combat pump +1/+1 UED cost 1');
         expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Token engine cost 11');
         expect(cast.permanentOptions.map(option => option.detail)).not.toContain('S:Grave to hand cost 5');
         expect(value.zoneOptions).toContainEqual(expect.objectContaining({

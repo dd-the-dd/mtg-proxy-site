@@ -56,6 +56,7 @@
 - Cards that create creature tokens are analyzed for combat as virtual creatures using the generated token's power, toughness, type line, oracle text, and keywords.
 - Analysis separates synergy source rows from synergy feeder rows. Combat, graveyard-play, and creature-token synergies are shown separately, include trigger-card mana costs in cell details, and empty rows are hidden per analyzed card.
 - Combat synergy parsing uses source-card pump text, so Izzet cards such as Slickshot Show-Off show `+2/+0` while prowess-style cards show `+1/+1`.
+- Combat synergies provided by Class cards keep sorcery-speed detail labels even when the feeder spell is an instant.
 - Value analysis can render alternate cast options such as kicker and plot; kicker options can unlock mana-spent threshold synergies such as Colorstorm Stallion's copy-token trigger.
 - Card selection effects with word-number text, such as looking at the top two or three cards, count as card quality improvement.
 - Value analysis renders activated ability rows for permanents and lands, including tap mana abilities, creature-conversion abilities, counter-spend token creation, and other board-action abilities.
