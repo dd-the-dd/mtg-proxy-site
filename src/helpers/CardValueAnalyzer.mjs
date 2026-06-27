@@ -163,6 +163,14 @@ function detailSpeed(detail) {
     return /^I:/.test(detail) ? 'Instant' : 'Sorcery';
 }
 
+function synergySpeed(key, relatedCard, detail) {
+    if (/\.feeders$/.test(key)) {
+        return castSpeed(relatedCard);
+    }
+
+    return detailSpeed(detail);
+}
+
 function detailEffect(detail) {
     return detail.replace(/^[IS]:/, '').replace(/\scost \d+$/, '');
 }
@@ -232,7 +240,7 @@ export function analyzeCardValue(card, relatedCards = []) {
                 quantity: relatedCard.quantity ?? 1,
                 source: relatedCard.name,
                 sourceLine: `x${relatedCard.quantity ?? 1}`,
-                speed: detailSpeed(detail),
+                speed: synergySpeed(key, relatedCard, detail),
                 value: synergyValueText(key),
             };
 

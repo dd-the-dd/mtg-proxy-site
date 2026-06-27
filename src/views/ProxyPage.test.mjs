@@ -640,6 +640,7 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.value-rows-permanent').text()).toContain('Creature improvement');
         expect(wrapper.find('.value-rows-permanent').text()).not.toContain('Grave to hand');
         expect(wrapper.find('.value-rows-permanent .ms-1').exists()).toBe(true);
+        expect(wrapper.find('.value-rows-permanent .ms-instant').exists()).toBe(false);
         expect(wrapper.find('.value-zone-options').text()).toContain('Zone movement');
         expect(wrapper.find('.value-zone-options').text()).toContain("stormchaser's talent class 2");
         expect(wrapper.find('.value-zone-options').text()).toContain('Grave to hand');

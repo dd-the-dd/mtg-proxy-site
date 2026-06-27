@@ -55,7 +55,7 @@ describe('CardValueAnalyzer', () => {
             quantity: 4,
             source: "stormchaser's talent",
             sourceLine: 'x4',
-            speed: 'Instant',
+            speed: 'Sorcery',
             value: 'Creature improvement',
         }));
         expect(cast.permanentOptions.map(option => option.detail)).toContain('I:Feed 1+1 UED cost 1');
