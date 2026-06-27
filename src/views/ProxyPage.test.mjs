@@ -579,6 +579,69 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Value view renders cast cost, base value, bonuses, and zone changes.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const opt = {
+            quantity: 1,
+            name: 'opt',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Instant',
+                oracleText: 'Scry 1. Draw a card.',
+                manaCost: '{U}',
+            },
+            setOptions: [],
+        };
+        const stormchaserTalent = {
+            quantity: 4,
+            name: "stormchaser's talent",
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Enchantment - Class',
+                oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.\n{3}{U}: Level 2\nWhen this Class becomes level 2, return target instant or sorcery card from your graveyard to your hand.\n{5}{U}: Level 3\nWhenever you cast an instant or sorcery spell, create a 1/1 Otter creature token with prowess.',
+                manaCost: '{U}',
+                relatedTokens: [
+                    {
+                        name: 'otter',
+                        typeLine: 'Token Creature - Otter',
+                        oracleText: 'Prowess',
+                        power: '1',
+                        toughness: '1',
+                    },
+                ],
+            },
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisView = 'value';
+        component.data.cards = [opt];
+        component.data.metaDeckStates = [
+            {
+                id: 'value-meta',
+                name: 'Value Meta',
+                state: {
+                    cards: [stormchaserTalent],
+                },
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+
+        const valueText = wrapper.find('.value-view').text();
+        expect(valueText).toContain('U');
+        expect(valueText).toContain('Hand 0');
+        expect(valueText).toContain('Quality Scry 1');
+        expect(valueText).toContain('I:Feed 1+1 UED cost 1');
+        expect(valueText).toContain('S:Token engine cost 11');
+        expect(valueText).toContain('S:Grave to hand cost 5');
+
+        component.data.config.analysisView = 'interaction';
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
     test('Feature: Bounce synergy rows identify permanents and ETB recast targets.', async () => {
         const component = wrapper.getCurrentComponent();
         const boomerang = {

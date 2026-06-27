@@ -138,6 +138,16 @@
                   </select>
                 </label>
                 <label class="form-label">
+                  View
+                  <select
+                    class="form-select select"
+                    v-model="config.analysisView"
+                  >
+                    <option value="interaction">Interaction</option>
+                    <option value="value">Value</option>
+                  </select>
+                </label>
+                <label class="form-label">
                   Columns
                   <select
                     class="form-select select"
@@ -565,7 +575,57 @@
                 </select>
               </div>
             </div>
-            <div class="analysis-grid-wrap">
+            <div v-if="config.analysisView === 'value'" class="value-view">
+              <div
+                v-for="(option, optionIndex) in valueAnalysis(card).castOptions"
+                :key="`value-${cardIndex}-${optionIndex}`"
+                class="value-cast"
+              >
+                <div class="value-cost" :title="option.cost">
+                  <span
+                    v-for="(symbol, symbolIndex) in option.symbols"
+                    :key="`symbol-${symbolIndex}`"
+                    class="mana-symbol"
+                    :class="`mana-symbol-${symbol.toLowerCase()}`"
+                  >
+                    {{ symbol }}
+                  </span>
+                </div>
+                <div class="value-line">
+                  <div class="value-line-header">
+                    {{ option.label }} / {{ option.speed }}
+                  </div>
+                  <div class="value-items value-items-base">
+                    <span
+                      v-for="item in option.values"
+                      :key="`${item.label}-${item.value}`"
+                      class="value-pill value-pill-base"
+                    >
+                      {{ item.label }} {{ item.value }}
+                    </span>
+                  </div>
+                  <div v-if="option.bonuses.length" class="value-items value-items-bonus">
+                    <span
+                      v-for="(bonus, bonusIndex) in option.bonuses"
+                      :key="`bonus-${bonusIndex}`"
+                      class="value-pill value-pill-bonus"
+                    >
+                      {{ bonus.condition }} / {{ bonus.detail }}
+                    </span>
+                  </div>
+                  <div v-if="option.zoneChanges.length" class="value-items value-items-zone">
+                    <span
+                      v-for="(zone, zoneIndex) in option.zoneChanges"
+                      :key="`zone-${zoneIndex}`"
+                      class="value-pill value-pill-zone"
+                    >
+                      {{ zone.condition }} / {{ zone.detail }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="analysis-grid-wrap">
               <table class="table table-striped analysis-grid">
                 <thead>
                   <tr>
@@ -751,6 +811,7 @@
 
 <script>
 import { parseDecklist } from "../helpers/DecklistParser.mjs";
+import { analyzeCardValue } from "../helpers/CardValueAnalyzer.mjs";
 import {
     cardAnalysisCharacteristics,
     isCreatureCard,
@@ -824,6 +885,7 @@ function createDefaultConfig() {
         tokenPlacementMode: "auto",
         cardsPerPage: null,
         analysisMode: false,
+        analysisView: "interaction",
         analysisMetric: "count",
         analysisColumnMode: "metaDeck",
         analysisMatchupSessionId: "all",
@@ -1277,6 +1339,9 @@ export default {
                 display: this.formatAnalysisValue(card, matchedQuantity, denominator),
                 title: matchedCards.join(', '),
             };
+        },
+        valueAnalysis(card) {
+            return analyzeCardValue(card, this.selectedMetaDeckStates.flatMap(session => session.state?.cards ?? []));
         },
         capturePrintOrderIndexes() {
             const baseSlots = [...this.printSlotsFrontBase];
@@ -1796,6 +1861,7 @@ export default {
             this.config.tokenBackMode = bindStorage('tokenBackMode', (v) => v ?? "opposite");
             this.config.tokenPlacementMode = bindStorage('tokenPlacementMode', (v) => v ?? "auto");
             this.config.analysisMode = bindStorage('analysisMode', (v) => v === "true");
+            this.config.analysisView = bindStorage('analysisView', (v) => v ?? "interaction");
             this.config.analysisMetric = bindStorage('analysisMetric', (v) => v ?? "count");
             this.config.analysisColumnMode = bindStorage('analysisColumnMode', (v) => v ?? "metaDeck");
             this.config.analysisMatchupSessionId = bindStorage('analysisMatchupSessionId', (v) => v ?? "all");
@@ -2254,6 +2320,84 @@ export default {
     background: #f1f1fc;
     color: #5755d9;
     font-weight: 600;
+}
+
+.value-view {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.value-cast {
+    display: grid;
+    gap: 0.45rem;
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+}
+
+.value-cost {
+    align-content: start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem;
+    justify-content: center;
+}
+
+.mana-symbol {
+    align-items: center;
+    background: #d8e5f8;
+    border: 1px solid #9bb7dd;
+    border-radius: 50%;
+    color: #1f3b57;
+    display: inline-flex;
+    font-size: 0.62rem;
+    font-weight: 700;
+    height: 1.25rem;
+    justify-content: center;
+    width: 1.25rem;
+}
+
+.value-line {
+    border-left: 2px solid #667085;
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+    padding-left: 0.5rem;
+}
+
+.value-line-header {
+    color: #475467;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.value-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.value-pill {
+    border-radius: 4px;
+    font-size: 0.62rem;
+    line-height: 1.2;
+    padding: 0.15rem 0.25rem;
+}
+
+.value-pill-base {
+    background: #eef4ff;
+    border: 1px solid #84adff;
+    color: #194185;
+}
+
+.value-pill-bonus {
+    background: #ecfdf3;
+    border: 1px solid #75e0a7;
+    color: #067647;
+}
+
+.value-pill-zone {
+    background: #fff6ed;
+    border: 1px solid #f7b27a;
+    color: #9c2a10;
 }
 
 @media (max-width: 960px) {

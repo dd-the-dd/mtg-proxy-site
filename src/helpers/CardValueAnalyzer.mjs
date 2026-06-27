@@ -1,0 +1,164 @@
+import {
+    synergyActionCost,
+    synergyInteractionDetail,
+    summarizeCreatureInteractions
+} from './DeckInteractionAnalyzer.mjs';
+
+function selected(card) {
+    return card.selectedOption ?? card;
+}
+
+function textOf(card) {
+    return selected(card).oracleText ?? '';
+}
+
+function typeLineOf(card) {
+    return selected(card).typeLine ?? '';
+}
+
+function manaCostOf(card) {
+    return selected(card).manaCost ?? '';
+}
+
+function manaSymbols(cost) {
+    return [...cost.matchAll(/\{([^}]+)\}/g)].map(match => match[1]);
+}
+
+function manaCostValue(cost) {
+    return manaSymbols(cost).reduce((total, symbol) => {
+        if (/^\d+$/.test(symbol)) {
+            return total + parseInt(symbol, 10);
+        }
+
+        return /^X$/i.test(symbol) ? total : total + 1;
+    }, 0);
+}
+
+function drawCount(card) {
+    const matches = textOf(card).match(/\bdraw (?:a card|one card|\d+ cards?)\b/gi) ?? [];
+    return matches.reduce((total, match) => {
+        const number = /\d+/.exec(match)?.[0];
+        return total + (number ? parseInt(number, 10) : 1);
+    }, 0);
+}
+
+function qualityValues(card) {
+    const text = textOf(card);
+    const values = [];
+    const scry = /\bscry (\d+)/i.exec(text);
+    if (scry) {
+        values.push(`Scry ${scry[1]}`);
+    }
+
+    const surveil = /\bsurveil (\d+)/i.exec(text);
+    if (surveil) {
+        values.push(`Surveil ${surveil[1]}`);
+    }
+
+    const look = /\blook at the top (\d+) cards?/i.exec(text);
+    if (look) {
+        values.push(`Look ${look[1]}`);
+    }
+
+    return values;
+}
+
+function castSpeed(card) {
+    return /\bInstant\b/i.test(typeLineOf(card)) ? 'Instant' : 'Sorcery';
+}
+
+function isCastableSpell(card) {
+    return !/\bLand\b/i.test(typeLineOf(card)) && manaCostOf(card) !== '';
+}
+
+function synergyCategories() {
+    return [
+        'synergy.combat.feeders',
+        'synergy.graveyardPlay.feeders',
+        'synergy.creatureTokens.feeders',
+        'synergy.battlefieldToHand.sources',
+        'synergy.entersBattlefield.sources',
+    ];
+}
+
+function hasSynergy(summary, key) {
+    return key.split('.').reduce((value, part) => value?.[part], summary)?.length > 0;
+}
+
+function synergyKind(key) {
+    if (/graveyardPlay|battlefieldToHand|entersBattlefield/.test(key)) {
+        return 'zone';
+    }
+
+    return 'bonus';
+}
+
+function synergyCondition(key, card, relatedCard) {
+    if (/graveyardPlay/.test(key)) {
+        return 'Class L2 unlocked';
+    }
+
+    if (/creatureTokens/.test(key)) {
+        return 'Class L3 unlocked';
+    }
+
+    const actionCost = synergyActionCost(card, relatedCard, key);
+    return actionCost === null ? '' : `Action ${actionCost}`;
+}
+
+export function analyzeCardValue(card, relatedCards = []) {
+    if (!isCastableSpell(card)) {
+        return {
+            castOptions: [],
+        };
+    }
+
+    const drawn = drawCount(card);
+    const handDelta = -1 + drawn;
+    const values = [
+        { label: 'Hand', value: handDelta > 0 ? `+${handDelta}` : String(handDelta) },
+    ];
+
+    for (const quality of qualityValues(card)) {
+        values.push({ label: 'Quality', value: quality });
+    }
+
+    const bonuses = [];
+    const zoneChanges = [];
+
+    for (const relatedCard of relatedCards) {
+        const summary = summarizeCreatureInteractions([card], relatedCard);
+        for (const key of synergyCategories()) {
+            if (!hasSynergy(summary, key)) {
+                continue;
+            }
+
+            const entry = {
+                condition: synergyCondition(key, card, relatedCard),
+                detail: synergyInteractionDetail(card, relatedCard, key),
+                source: relatedCard.name,
+            };
+
+            if (synergyKind(key) === 'zone') {
+                zoneChanges.push(entry);
+            } else {
+                bonuses.push(entry);
+            }
+        }
+    }
+
+    return {
+        castOptions: [
+            {
+                label: 'Cast',
+                cost: manaCostOf(card),
+                costValue: manaCostValue(manaCostOf(card)),
+                speed: castSpeed(card),
+                symbols: manaSymbols(manaCostOf(card)),
+                values,
+                bonuses,
+                zoneChanges,
+            },
+        ],
+    };
+}
