@@ -13,7 +13,18 @@
 - Associated token completion preserves complete token edition text and manual session selections.
 - Game pieces include tokens, reminders, trackers, mechanic helpers, dungeons, initiative, ring cards, and emblems for print back behavior.
 - Game pieces are paired on opposite sides with different game pieces when possible; identical game pieces leave the opposite side empty instead of duplicating.
+- The default game-piece back mode is opposite-side pairing rather than regular Magic backs.
 - The print controls show open physical card slots and open game piece faces for the current page size.
+- Print controls can include or exclude regular cards and game pieces independently after a decklist has been loaded.
+- Loaded cards can be reordered before printing in an advanced print-order modal by selecting one print-slot preview and then another, so users can recover alignment or place specific cards on specific print slots without editing the deck text.
+- The advanced print-order modal applies its draft order back to the parent print state only when confirmed, and the Print button uses that applied order.
+- Game-piece opposite-side printing can use automatic token placement or the confirmed advanced print order; confirming advanced placement switches token placement to the chosen order.
+- The advanced print-order modal previews the same front/back page structure as printing, including mirrored back pages, rather than showing only the raw source order.
+- When local app mode is enabled by environment variable, a collapsible session menu stores named page states in local file-backed storage and restores them after reload.
+- A collapsed combo-piece menu lets users choose which related pieces to auto-import: tokens, emblems, trackers, mechanic helpers, dungeons, initiative, ring cards, and real cards.
+- The combo-piece generation button stays visible while the menu is collapsed, appends only missing related pieces, and reloads the imported images.
+- Real-card combo piece links can be one-way when Scryfall lists both directions; a basic land linked from a source card should not import that source card back.
+- Real-card combo links to cards with `conjure` in their oracle text are one-way; non-conjure cards do not import the cards that conjure them, while conjure cards can import the cards they create.
 - Moxfield tags such as `#!ramp` are ignored after card edition text.
 - Flavor names such as `Aang's Shelter` resolve to the original Scryfall card printing.
 - If no matching token printing is found, import falls back to the existing default selection behavior.
@@ -26,6 +37,44 @@
 - Importing `Pestbrood Sloth` and `Pest [tsos] 8` keeps `Pest` on collector number `8`.
 - Printing `Experience` in token-opposite back mode uses its front image on the opposite side.
 - Printing four `Treasure`, one `Pest`, and one `Experience` uses four physical cards, with two empty opposite-side faces.
+- Printing can be narrowed to only game pieces from a loaded deck, or only regular cards from that same loaded deck.
+- Clicking one print-slot preview in the advanced order modal highlights it; clicking a second preview swaps their print order while preserving their selected printings.
+- Confirming an advanced order for opposite-side game-piece printing preserves that chosen order by pairing slots in sequence instead of recalculating automatic token pairs.
+- In opposite-side game-piece mode, the advanced order preview and the printed pages show the same front page slots and back page slots.
+- Local app sessions store the deck text, loaded cards, selected printings, print settings, errors, and chosen print order under a user-visible session name.
+- Local app sessions persist deck text quantity edits by synchronizing loaded card quantities from the current deck text before saving.
+- Local app sessions can be tagged as meta decks, and analysis mode renders loaded cards one per row with a matchup grid beside each card.
+- Analysis mode can show current-card interaction categories against all tagged meta decks or one selected matchup, with columns grouped by meta deck or by meta-creature mana value.
+- Analysis mode can switch between interaction grid view and a visual value view that shows cast options, mana symbols, base value, synergy bonuses, permanent-provided options, and zone-change opportunities, each with distinct visual treatment.
+- Visual value rows are structured as condition, cost, effect, and value columns; costs use Mana symbol glyphs, instant or flash-speed costs show a small speed marker, zero card-state changes are hidden, permanent-provided rows use the enabling card name as the condition, and the value column names the value category such as card quality improvement or creature improvement.
+- Permanent-provided value rows use the speed of the enabling permanent or class source, not the speed of the spell being cast to feed the synergy.
+- Zone movement value rows, such as class level 2 graveyard-to-hand recursion, render as a separate zone-action group instead of as permanent-provided cast improvement rows.
+- Analysis cells can show card counts or deck percentages, and sideboard cards use a `+` indicator in cells where they add interaction coverage.
+- Mana-value analysis columns are fixed from `0 mana` through `8 mana` and `9+ mana`; each cell sums matching meta cards in that column rather than echoing the evaluated card quantity.
+- Analysis percentage cells divide matching meta-card count by the selected meta deck card count, not by the current column total.
+- Creature combat analysis accounts for flying/reach blocking restrictions, first strike, double strike, deathtouch, and simple unblockable text before classifying whether the attacker survives, defender survives, both die, both survive, or damage reaches the player.
+- Cards that create creature tokens expose token creation as value, but do not inherit the generated token's combat stats or combat synergies; generated tokens carry their own combat and synergy characteristics when analyzed as separate game pieces.
+- Analysis separates synergy source rows from synergy feeder rows. Combat, graveyard-play, and creature-token synergies are shown separately, include trigger-card mana costs in cell details, and empty rows are hidden per analyzed card.
+- Combat synergy parsing uses source-card pump text, so Izzet cards such as Slickshot Show-Off show `+2/+0` while prowess-style cards show `+1/+1`.
+- Combat synergies provided by Class cards keep sorcery-speed detail labels even when the feeder spell is an instant.
+- Value analysis can render alternate cast options such as kicker and plot; kicker options can unlock mana-spent threshold synergies such as Colorstorm Stallion's copy-token trigger.
+- Card selection effects with word-number text, such as looking at the top two or three cards, count as card quality improvement.
+- Value analysis renders activated ability rows for permanents and lands, including tap mana abilities, creature-conversion abilities, counter-spend token creation, and other board-action abilities.
+- Stored local-session cards are hydrated from the minimized dataset on restore so older saved sessions regain analysis fields such as mana cost, mana value, characteristics, related tokens, and related game pieces without losing their selected printing.
+- Passive ETB lifegain sources, such as creatures that gain life whenever another creature enters, create value rows on creature and creature-token-generating feeders.
+- Passive creature-death payoff sources, such as Blood Artist or Pitiless Plunderer, create value rows on creature feeders and classify drain, Treasure, damage, draw, or generic death payoff value.
+- Class-card synergy costs are cumulative: level 2 includes the initial class cost plus the level 2 cost, and level 3 includes the initial class cost plus each prior level cost.
+- Mana-value synergy columns use the synergy action cost rather than the synergy card's own mana value.
+- Bounce spells that return target permanents to hand create a battlefield-to-hand synergy with permanents, and permanents with enters-the-battlefield text get an additional ETB recast synergy.
+- Synergy action rows use action labels instead of generic feed labels.
+- Loading surfaces appear over session, deck, and dataset-loading areas while local data is being read.
+- Analysis card rows show a small loading indicator beside each card name while card data, set data, or meta-session data is loading.
+- The left session/config rail can collapse toward the left; when open it uses a narrow sidebar layout so analysis content keeps most of the page width.
+- Analysis card rows prioritize a near-card-sized image beside a compact interaction grid that avoids horizontal scrolling for normal meta views.
+- Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
+- Generating combo pieces skips disabled categories and does not duplicate related pieces already in the decklist.
+- Generating real-card combo pieces for `Gilt-Leaf Alchemist` appends `Forest [ecl] 283`, but generating from `Forest [ecl] 283` does not append `Gilt-Leaf Alchemist`.
+- Generating real-card combo pieces for `Perforator Crocodile [ymkm] 11` appends `Stab Wound [pio] 111`, but generating from `Stab Wound [pio] 111` does not append `Perforator Crocodile`.
 - Importing `Aang's Shelter` selects `Teferi's Protection` from `TLE` collector number `7`.
 - Importing a token without set information keeps using the existing default.
 
@@ -41,3 +90,4 @@
 - Feature: Bracketed set code and collector number select exact token printing.
 - Feature: Associated session cards complete missing token edition text.
 - Feature: Flavor name imports resolve to original card printings.
+- Feature: Related combo piece generation appends missing selected piece types.

@@ -2,222 +2,485 @@
   <div class="section">
     <HelpModal ref="helpModal" />
 
-    <div class="columns">
-      <div class="column col-3 col-sm-12 mb-2" style="z-index: 300">
-        <div id="config" class="form-group p-sticky">
-          <div class="form-group">
-            <textarea
-              id="deck-input"
-              class="form-input"
-              title="Deck Input"
-              v-model="config.decklist"
-              autofocus
-              placeholder="4 Wild Nacatl&#10;0x Griselbrand&#10;4 Strip Mine (ATQ) 82d&#10;&#10;// Sideboard&#10;3x Rough // Tumble&#10;SB: dead/gone&#10;&#10;// Tokens&#10;5 Goblin&#10;Lost Mine of Phandelver"
-            />
-          </div>
-
-          <div class="form-group btn-group btn-group-block">
-            <button
-              id="submit-decklist"
-              class="btn btn-primary"
-              @click="loadCardList()"
-            >
-              {{ cards.length ? $t('buttons.update') : $t('buttons.submit') }}
-            </button>
-            <button
-              id="print"
-              class="btn btn-block tooltip"
-              @click="printList"
-              :disabled="cards.length == 0"
-              :data-tooltip="$t('consumedSlots', { count: cardCountWhenPrinting.count, bound: cardCountWhenPrinting.bound})"
-            >
-              <span class="icon-print" /> {{ $t('buttons.print') }}
-            </button>
-          </div>
-
-          <div class="form-group btn-group btn-group-block">
-            <div id="slot-usage" class="bar">
-              <template v-for="index in printCapacity.pageSize" :key="index">
-                <div
-                  :class="`bar-item ${index <= cardCountWhenPrinting.overflow ? 'consumed' : 'unconsumed'}`"
-                  role="progressbar"
-                />
-              </template>
-            </div>
-          </div>
+    <div
+      class="app-layout"
+      :class="{ 'app-layout-sidebar-collapsed': leftMenuCollapsed }"
+    >
+      <aside id="app-sidebar" class="app-sidebar">
+        <button
+          id="toggle-left-menu"
+          class="btn btn-block"
+          @click="leftMenuCollapsed = !leftMenuCollapsed"
+        >
+          {{ leftMenuCollapsed ? '>' : '<' }}
+        </button>
+        <div v-if="!leftMenuCollapsed" class="app-sidebar-content">
           <div
-            v-if="cards.length"
-            id="print-capacity"
-            class="text-small text-gray"
+            v-if="localAppEnabled"
+            id="local-session-menu"
+            class="mb-2 loading-surface"
+            :class="{ loading: isLoadingSessions }"
           >
-            Open: {{ printCapacity.missingCards }} card slot{{ printCapacity.missingCards === 1 ? '' : 's' }}
-            / {{ printCapacity.missingGamePieces }} game piece face{{ printCapacity.missingGamePieces === 1 ? '' : 's' }}
+            <button
+              id="toggle-session-menu"
+              class="btn btn-block"
+              @click="sessionsMenuOpen = !sessionsMenuOpen"
+            >
+              {{ sessionsMenuOpen ? 'Sessions' : 'Sessions >' }}
+            </button>
+            <div v-if="sessionsMenuOpen" class="local-session-menu-body">
+              <button
+                id="new-local-session"
+                class="btn btn-primary btn-block"
+                @click="createLocalSession"
+              >
+                + New Session
+              </button>
+              <div v-if="activeSessionId" class="form-group mt-2">
+                <label class="form-label" for="local-session-name">Name</label>
+                <input
+                  id="local-session-name"
+                  class="form-input"
+                  type="text"
+                  v-model="activeSessionName"
+                  @change="scheduleSessionSave"
+                >
+              </div>
+              <label v-if="activeSessionId" class="form-switch">
+                <input
+                  id="local-session-is-meta"
+                  type="checkbox"
+                  v-model="activeSessionIsMetaDeck"
+                >
+                <i class="form-icon" /> Meta deck
+              </label>
+              <div class="menu local-session-list">
+                <button
+                  v-for="session in localSessions"
+                  :key="session.id"
+                  type="button"
+                  class="menu-item btn btn-link local-session-item"
+                  :class="{ active: session.id === activeSessionId }"
+                  @click="loadLocalSession(session.id)"
+                >
+                  {{ session.name }}
+                  <span v-if="session.isMetaDeck" class="label label-primary float-right">Meta</span>
+                </button>
+              </div>
+            </div>
           </div>
+          <div class="mb-2" style="z-index: 300">
+            <div
+              id="config"
+              class="form-group p-sticky loading-surface"
+              :class="{ loading: isLoadingSets }"
+            >
+              <div class="form-group">
+                <textarea
+                  id="deck-input"
+                  class="form-input"
+                  title="Deck Input"
+                  v-model="config.decklist"
+                  autofocus
+                  placeholder="4 Wild Nacatl&#10;0x Griselbrand&#10;4 Strip Mine (ATQ) 82d&#10;&#10;// Sideboard&#10;3x Rough // Tumble&#10;SB: dead/gone&#10;&#10;// Tokens&#10;5 Goblin&#10;Lost Mine of Phandelver"
+                />
+              </div>
 
-          <div class="spacer" style="height: 0.4rem" />
-          <div
-            class="divider text-center"
-            :data-content="$t('configuration.label').toUpperCase()"
-          />
-
-          <div class="columns">
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="include-digital"
-                  v-model="config.includeDigital"
+              <div class="form-group btn-group btn-group-block">
+                <button
+                  id="submit-decklist"
+                  class="btn btn-primary"
+                  @click="loadCardList()"
+                  :class="{ loading: isLoadingCards }"
+                  :disabled="isLoadingCards"
                 >
-                <i class="form-icon" /> {{ $t('configuration.showDigitalPrintings') }}
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="include-promo"
-                  v-model="config.includePromo"
+                  {{ cards.length ? $t('buttons.update') : $t('buttons.submit') }}
+                </button>
+                <button
+                  id="print"
+                  class="btn btn-block tooltip"
+                  @click="printList"
+                  :disabled="cards.length == 0"
+                  :data-tooltip="$t('consumedSlots', { count: cardCountWhenPrinting.count, bound: cardCountWhenPrinting.bound})"
                 >
-                <i class="form-icon" /> {{ $t('configuration.showPromoPrintings') }}
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="match-editions"
-                  v-model="config.matchEditions"
+                  <span class="icon-print" /> {{ $t('buttons.print') }}
+                </button>
+              </div>
+              <div class="form-group">
+                <button
+                  id="open-print-order"
+                  class="btn btn-block"
+                  @click="openPrintOrderModal"
+                  :disabled="printSlotsFrontBase.length == 0"
                 >
-                <i class="form-icon" /> {{ $t('configuration.matchInputEditions') }}
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="include-basics"
-                  v-model="config.includeBasics"
-                >
-                <i class="form-icon" /> {{ $t('configuration.includeBasicLands') }}
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="show-cut-lines"
-                  v-model="config.showCutLines"
-                >
-                <i class="form-icon" /> {{ $t('configuration.showCutLines') }}
-              </label>
-            </div>
-            <div class="column col-12">
-              <label class="form-switch">
-                <input
-                  type="checkbox"
-                  name="fixed-page-size"
-                  v-model="config.fixedPageSize"
-                >
-                <i class="form-icon" /> Fixed page size (3×3)
-              </label>
-            </div>
-            
-          </div>
-          <div class="column col-12 divider" />
-          <div class="columns">
-            <div class="column col-12">
-              <label class="form-label">
-                <span
-                  class="tooltip tooltip-right"
-                  :data-tooltip="$t('configuration.imageType.tooltip')"
-                ><i class="form-icon" /> {{ $t('configuration.imageType.label') }}
-                  <span class="icon-info" /></span>
-                <select
-                  class="form-select select"
-                  name="image-type"
-                  v-model="config.imageType"
-                  style="width: 100%"
-                >
-                  <option value="normal">{{ $t('configuration.imageType.normal') }}</option>
-                  <option value="border_crop">{{ $t('configuration.imageType.borderCrop') }}</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-label">
-                <span
-                  class="tooltip tooltip-right"
-                  :data-tooltip="$t('configuration.printScale.tooltip')"
-                ><i class="form-icon" /> {{ $t('configuration.printScale.label') }}
-                  <span class="icon-info" /></span>
-                <select
-                  class="form-select select"
-                  name="scale"
-                  v-model="config.scale"
-                  style="width: 100%"
-                >
-                  <option value="small">{{ $t('configuration.printScale.small') }} (-2%)</option>
-                  <option value="normal">{{ $t('configuration.printScale.regular') }} (60mm x 85mm)</option>
-                  <option value="large">{{ $t('configuration.printScale.large') }} (+2%)</option>
-                  <option value="actual">{{ $t('configuration.printScale.actual') }} (63mm x 88mm)</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="column col-12">
-              <label class="form-label">
-                <i class="form-icon" /> {{ $t('configuration.cardBacks.label') }}
-                <select
-                  class="form-select select"
-                  name="card-backs"
-                  v-model="config.cardBacks"
-                  style="width: 100%"
-                >
-                  <option value="none">{{ $t('configuration.cardBacks.none') }}</option>
-                  <option value="dfc">{{ $t('configuration.cardBacks.dfcs') }}</option>
-                  <option value="all">{{ $t('configuration.cardBacks.all') }}</option>
-                  <option value="all-pages">{{ $t('configuration.cardBacks.allPages') }}</option>
-                  <option value="token-pairs">{{ $t('configuration.cardBacks.tokenPairs') }}</option>
-                </select>
-              </label>
-              <div v-if="config.cardBacks === 'all-pages'" style="margin-top: 0.5rem">
+                  Print Order
+                </button>
+              </div>
+              <div class="form-group">
+                <label class="form-switch">
+                  <input
+                    id="analysis-mode"
+                    type="checkbox"
+                    v-model="config.analysisMode"
+                  >
+                  <i class="form-icon" /> Analysis mode
+                </label>
+              </div>
+              <div v-if="config.analysisMode" id="analysis-config" class="form-group">
                 <label class="form-label">
-                  <i class="form-icon" /> Token backs: 
-                  <select class="form-select select" v-model="config.tokenBackMode" style="width: 100%">
-                    <option value="card">Use regular card back</option>
-                    <option value="opposite">Use token face on opposite side</option>
+                  Metric
+                  <select
+                    class="form-select select"
+                    v-model="config.analysisMetric"
+                  >
+                    <option value="count">Cards</option>
+                    <option value="percent">Percent</option>
+                  </select>
+                </label>
+                <label class="form-label">
+                  View
+                  <select
+                    class="form-select select"
+                    v-model="config.analysisView"
+                  >
+                    <option value="interaction">Interaction</option>
+                    <option value="value">Value</option>
+                  </select>
+                </label>
+                <label class="form-label">
+                  Columns
+                  <select
+                    class="form-select select"
+                    v-model="config.analysisColumnMode"
+                  >
+                    <option value="metaDeck">Meta decks</option>
+                    <option value="manaValue">Mana value</option>
+                  </select>
+                </label>
+                <label class="form-label">
+                  Matchup
+                  <select
+                    class="form-select select"
+                    v-model="config.analysisMatchupSessionId"
+                  >
+                    <option value="all">All meta decks</option>
+                    <option
+                      v-for="session in localSessions.filter(session => session.isMetaDeck)"
+                      :key="session.id"
+                      :value="session.id"
+                    >
+                      {{ session.name }}
+                    </option>
                   </select>
                 </label>
               </div>
-              <div v-if="config.cardBacks === 'all-pages' && !config.fixedPageSize" style="margin-top:0.5rem">
-                <label class="form-label">
-                  <i class="form-icon" /> Cards per page (leave empty to group all fronts/backs):
-                  <input type="number" min="1" max="36" class="form-input" v-model.number="config.cardsPerPage" style="width:100%" />
-                </label>
-              </div>
-            </div>
-          </div>
-          <div class="column col-12 divider" />
-          <div class="columns">
-            <div class="column col-12">
-              <button
-                class="btn p-centered"
-                @click="$refs.helpModal.show()"
-              >
-                {{ $t('configuration.help.label') }}
-              </button>
-            </div>
-          </div>
-          <div class="column col-12 divider" />
-        </div>
-      </div>
 
-      <div class="column col-9 col-sm-12">
+              <div class="form-group btn-group btn-group-block">
+                <div id="slot-usage" class="bar">
+                  <template v-for="index in printCapacity.pageSize" :key="index">
+                    <div
+                      :class="`bar-item ${index <= cardCountWhenPrinting.overflow ? 'consumed' : 'unconsumed'}`"
+                      role="progressbar"
+                    />
+                  </template>
+                </div>
+              </div>
+              <div
+                v-if="cards.length"
+                id="print-capacity"
+                class="text-small text-gray"
+              >
+                Open: {{ printCapacity.missingCards }} card slot{{ printCapacity.missingCards === 1 ? '' : 's' }}
+                / {{ printCapacity.missingGamePieces }} game piece face{{ printCapacity.missingGamePieces === 1 ? '' : 's' }}
+              </div>
+
+              <div class="spacer" style="height: 0.4rem" />
+              <div
+                class="divider text-center"
+                :data-content="$t('configuration.label').toUpperCase()"
+              />
+
+              <div class="columns">
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="include-digital"
+                      v-model="config.includeDigital"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.showDigitalPrintings') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="include-promo"
+                      v-model="config.includePromo"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.showPromoPrintings') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="match-editions"
+                      v-model="config.matchEditions"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.matchInputEditions') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="include-basics"
+                      v-model="config.includeBasics"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.includeBasicLands') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="include-cards"
+                      v-model="config.includeCards"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.includeCards') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="include-game-pieces"
+                      v-model="config.includeGamePieces"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.includeGamePieces') }}
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="show-cut-lines"
+                      v-model="config.showCutLines"
+                    >
+                    <i class="form-icon" /> {{ $t('configuration.showCutLines') }}
+                  </label>
+                </div>
+                <div class="column col-12">
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="fixed-page-size"
+                      v-model="config.fixedPageSize"
+                    >
+                    <i class="form-icon" /> Fixed page size (3×3)
+                  </label>
+                </div>
+              </div>
+              <div class="column col-12 divider" />
+              <div class="columns">
+                <div class="column col-12 btn-group btn-group-block">
+                  <button
+                    id="toggle-combo-piece-config"
+                    class="btn"
+                    @click="config.comboPieceConfigOpen = !config.comboPieceConfigOpen"
+                  >
+                    {{ config.comboPieceConfigOpen ? 'Hide' : 'Show' }} Combo Pieces
+                  </button>
+                  <button
+                    id="generate-combo-pieces"
+                    class="btn btn-primary"
+                    @click="generateRelatedComboPieces"
+                  >
+                    Generate
+                  </button>
+                </div>
+                <div
+                  v-if="config.comboPieceConfigOpen"
+                  id="combo-piece-config"
+                  class="column col-12"
+                >
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-token"
+                      v-model="config.comboPieceTypes.token"
+                    >
+                    <i class="form-icon" /> Tokens
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-emblem"
+                      v-model="config.comboPieceTypes.emblem"
+                    >
+                    <i class="form-icon" /> Emblems
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-tracker"
+                      v-model="config.comboPieceTypes.tracker"
+                    >
+                    <i class="form-icon" /> Trackers
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-mechanic-helper"
+                      v-model="config.comboPieceTypes.mechanicHelper"
+                    >
+                    <i class="form-icon" /> Mechanic helpers
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-dungeon"
+                      v-model="config.comboPieceTypes.dungeon"
+                    >
+                    <i class="form-icon" /> Dungeons
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-initiative"
+                      v-model="config.comboPieceTypes.initiative"
+                    >
+                    <i class="form-icon" /> Initiative
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-ring"
+                      v-model="config.comboPieceTypes.ring"
+                    >
+                    <i class="form-icon" /> Ring
+                  </label>
+                  <label class="form-switch">
+                    <input
+                      type="checkbox"
+                      name="combo-piece-real-card"
+                      v-model="config.comboPieceTypes.realCard"
+                    >
+                    <i class="form-icon" /> Real cards
+                  </label>
+                </div>
+              </div>
+              <div class="column col-12 divider" />
+              <div class="columns">
+                <div class="column col-12">
+                  <label class="form-label">
+                    <span
+                      class="tooltip tooltip-right"
+                      :data-tooltip="$t('configuration.imageType.tooltip')"
+                    ><i class="form-icon" /> {{ $t('configuration.imageType.label') }}
+                      <span class="icon-info" /></span>
+                    <select
+                      class="form-select select"
+                      name="image-type"
+                      v-model="config.imageType"
+                      style="width: 100%"
+                    >
+                      <option value="normal">{{ $t('configuration.imageType.normal') }}</option>
+                      <option value="border_crop">{{ $t('configuration.imageType.borderCrop') }}</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-label">
+                    <span
+                      class="tooltip tooltip-right"
+                      :data-tooltip="$t('configuration.printScale.tooltip')"
+                    ><i class="form-icon" /> {{ $t('configuration.printScale.label') }}
+                      <span class="icon-info" /></span>
+                    <select
+                      class="form-select select"
+                      name="scale"
+                      v-model="config.scale"
+                      style="width: 100%"
+                    >
+                      <option value="small">{{ $t('configuration.printScale.small') }} (-2%)</option>
+                      <option value="normal">{{ $t('configuration.printScale.regular') }} (60mm x 85mm)</option>
+                      <option value="large">{{ $t('configuration.printScale.large') }} (+2%)</option>
+                      <option value="actual">{{ $t('configuration.printScale.actual') }} (63mm x 88mm)</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="column col-12">
+                  <label class="form-label">
+                    <i class="form-icon" /> {{ $t('configuration.cardBacks.label') }}
+                    <select
+                      class="form-select select"
+                      name="card-backs"
+                      v-model="config.cardBacks"
+                      style="width: 100%"
+                    >
+                      <option value="none">{{ $t('configuration.cardBacks.none') }}</option>
+                      <option value="dfc">{{ $t('configuration.cardBacks.dfcs') }}</option>
+                      <option value="all">{{ $t('configuration.cardBacks.all') }}</option>
+                      <option value="all-pages">{{ $t('configuration.cardBacks.allPages') }}</option>
+                      <option value="token-pairs">{{ $t('configuration.cardBacks.tokenPairs') }}</option>
+                    </select>
+                  </label>
+                  <div v-if="config.cardBacks === 'all-pages'" style="margin-top: 0.5rem">
+                    <label class="form-label">
+                      <i class="form-icon" /> Token backs: 
+                      <select class="form-select select" v-model="config.tokenBackMode" style="width: 100%">
+                        <option value="card">Use regular card back</option>
+                        <option value="opposite">Use token face on opposite side</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div v-if="config.cardBacks === 'all-pages' && config.tokenBackMode === 'opposite'" style="margin-top: 0.5rem">
+                    <label class="form-switch">
+                      <input
+                        type="checkbox"
+                        name="automatic-token-placement"
+                        :checked="config.tokenPlacementMode === 'auto'"
+                        @change="config.tokenPlacementMode = $event.target.checked ? 'auto' : 'chosen'"
+                      >
+                      <i class="form-icon" /> Automatic token placement
+                    </label>
+                  </div>
+                  <div v-if="config.cardBacks === 'all-pages' && !config.fixedPageSize" style="margin-top:0.5rem">
+                    <label class="form-label">
+                      <i class="form-icon" /> Cards per page (leave empty to group all fronts/backs):
+                      <input type="number" min="1" max="36" class="form-input" v-model.number="config.cardsPerPage" style="width:100%">
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="column col-12 divider" />
+              <div class="columns">
+                <div class="column col-12">
+                  <button
+                    class="btn p-centered"
+                    @click="$refs.helpModal.show()"
+                  >
+                    {{ $t('configuration.help.label') }}
+                  </button>
+                </div>
+              </div>
+              <div class="column col-12 divider" />
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="app-main loading-surface" :class="{ loading: isLoadingCards }">
         <div
           class="empty"
           v-show="cards.length === 0 && errors.length === 0"
@@ -252,7 +515,287 @@
           </ul>
         </div>
 
-        <div class="cards columns">
+        <div v-if="config.analysisMode" id="analysis-card-list" class="analysis-card-list">
+          <div
+            v-if="analysisColumns.length === 0"
+            class="empty"
+          >
+            <p class="empty-title h5">
+              Tag a local session as a meta deck to show matchup analysis.
+            </p>
+          </div>
+          <div
+            v-for="(card, cardIndex) in cards"
+            :key="`analysis-${cardIndex}`"
+            class="analysis-card-row"
+            v-show="shouldShowCard(card)"
+          >
+            <div class="analysis-card-preview">
+              <ImageLoader
+                class="analysis-card-image"
+                :src="resolveCardImage(card)"
+                placeholder="./card_back_border_crop.jpg"
+                :alt="card.name"
+              />
+              <div class="analysis-card-details">
+                <div class="analysis-card-name">
+                  {{ card.quantity }}x {{ card.name }}
+                  <span v-if="card.isSideboard" class="label label-secondary">Sideboard</span>
+                  <span
+                    v-if="analysisStatsLoading"
+                    class="analysis-card-stat-loader loading loading-sm"
+                    title="Loading analysis stats"
+                    aria-label="Loading analysis stats"
+                  />
+                </div>
+                <div class="text-small text-gray">
+                  {{ card.selectedOption?.manaCost || 'No mana cost' }}
+                  <span v-if="card.selectedOption?.typeLine">/ {{ card.selectedOption.typeLine }}</span>
+                </div>
+                <select
+                  class="form-select select-sm mt-2"
+                  name="selected-option"
+                  v-model="card.selectedOption"
+                  @change="
+                    updateSessionSet(
+                      card.name,
+                      card.selectedOption,
+                      cardIndex,
+                    )
+                  "
+                >
+                  <option
+                    v-for="(set, setIndex) in card.setOptions"
+                    :value="set"
+                    :key="setIndex"
+                    v-show="shouldShowSetOption(card, set)"
+                  >
+                    {{ set.name }}
+                  </option>
+                </select>
+              </div>
+            </div>
+            <div v-if="config.analysisView === 'value'" class="value-view">
+              <div
+                v-for="(option, optionIndex) in valueAnalysis(card).castOptions"
+                :key="`value-${cardIndex}-${optionIndex}`"
+                class="value-cast"
+              >
+                <div class="value-line">
+                  <div class="value-line-header">
+                    {{ option.label }} / {{ option.speed }}
+                  </div>
+                  <div class="value-rows value-rows-base">
+                    <div
+                      v-for="(row, rowIndex) in option.baseRows"
+                      :key="`base-row-${rowIndex}`"
+                      class="value-row value-row-base"
+                    >
+                      <div class="value-row-cell value-row-condition">
+                        {{ row.condition }}
+                      </div>
+                      <div class="value-row-cell value-row-cost">
+                        <i
+                          v-if="row.speed === 'Instant' || row.speed === 'Flash'"
+                          class="ms value-speed"
+                          :class="speedSymbolClass(row.speed)"
+                          :title="row.speed"
+                        />
+                        <i
+                          v-for="(symbol, symbolIndex) in row.costSymbols"
+                          :key="`base-cost-${rowIndex}-${symbolIndex}`"
+                          class="ms ms-cost mana-symbol"
+                          :class="manaSymbolClass(symbol)"
+                          :title="symbol"
+                        />
+                      </div>
+                      <div class="value-row-cell value-row-effect">
+                        {{ row.effect || '-' }}
+                      </div>
+                      <div class="value-row-cell value-row-state">
+                        {{ row.value || '-' }}
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="option.bonuses.length" class="value-rows value-rows-bonus">
+                    <div
+                      v-for="(bonus, bonusIndex) in option.bonuses"
+                      :key="`bonus-${bonusIndex}`"
+                      class="value-row value-row-bonus"
+                    >
+                      <div class="value-row-cell value-row-condition">
+                        {{ bonus.condition }}
+                      </div>
+                      <div class="value-row-cell value-row-cost">
+                        <i
+                          v-if="bonus.speed === 'Instant' || bonus.speed === 'Flash'"
+                          class="ms value-speed"
+                          :class="speedSymbolClass(bonus.speed)"
+                          :title="bonus.speed"
+                        />
+                        <i
+                          v-for="(symbol, symbolIndex) in bonus.costSymbols"
+                          :key="`bonus-cost-${bonusIndex}-${symbolIndex}`"
+                          class="ms ms-cost mana-symbol"
+                          :class="manaSymbolClass(symbol)"
+                          :title="symbol"
+                        />
+                      </div>
+                      <div class="value-row-cell value-row-effect">
+                        {{ bonus.effect || bonus.detail }}
+                      </div>
+                      <div class="value-row-cell value-row-state">
+                        {{ bonus.value || '-' }}
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="option.permanentOptions.length" class="value-rows value-rows-permanent">
+                    <div
+                      v-for="(permanent, permanentIndex) in option.permanentOptions"
+                      :key="`permanent-${permanentIndex}`"
+                      class="value-row value-row-permanent"
+                    >
+                      <div class="value-row-cell value-row-condition">
+                        <div>{{ permanent.condition }}</div>
+                        <div class="value-row-source">
+                          {{ permanent.sourceLine }}
+                        </div>
+                      </div>
+                      <div class="value-row-cell value-row-cost">
+                        <i
+                          v-if="permanent.speed === 'Instant' || permanent.speed === 'Flash'"
+                          class="ms value-speed"
+                          :class="speedSymbolClass(permanent.speed)"
+                          :title="permanent.speed"
+                        />
+                        <i
+                          v-for="(symbol, symbolIndex) in permanent.costSymbols"
+                          :key="`permanent-cost-${permanentIndex}-${symbolIndex}`"
+                          class="ms ms-cost mana-symbol"
+                          :class="manaSymbolClass(symbol)"
+                          :title="symbol"
+                        />
+                      </div>
+                      <div class="value-row-cell value-row-effect">
+                        {{ permanent.effect }}
+                      </div>
+                      <div class="value-row-cell value-row-state">
+                        {{ permanent.value || '-' }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="valueAnalysis(card).activatedOptions.length"
+                class="value-activated-options"
+              >
+                <div class="value-line-header">
+                  Activated abilities
+                </div>
+                <div class="value-rows value-rows-activated">
+                  <div
+                    v-for="(activated, activatedIndex) in valueAnalysis(card).activatedOptions"
+                    :key="`activated-${cardIndex}-${activatedIndex}`"
+                    class="value-row value-row-activated"
+                  >
+                    <div class="value-row-cell value-row-condition">
+                      {{ activated.condition }}
+                    </div>
+                    <div class="value-row-cell value-row-cost">
+                      <i
+                        v-for="(symbol, symbolIndex) in activated.costSymbols"
+                        :key="`activated-cost-${cardIndex}-${activatedIndex}-${symbolIndex}`"
+                        class="ms ms-cost mana-symbol"
+                        :class="manaSymbolClass(symbol)"
+                        :title="symbol"
+                      />
+                    </div>
+                    <div class="value-row-cell value-row-effect">
+                      {{ activated.effect || '-' }}
+                    </div>
+                    <div class="value-row-cell value-row-state">
+                      {{ activated.value || '-' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="valueAnalysis(card).zoneOptions.length"
+                class="value-zone-options"
+              >
+                <div class="value-line-header">
+                  Zone movement
+                </div>
+                <div class="value-rows value-rows-zone">
+                  <div
+                    v-for="(zone, zoneIndex) in valueAnalysis(card).zoneOptions"
+                    :key="`zone-${cardIndex}-${zoneIndex}`"
+                    class="value-row value-row-zone"
+                  >
+                    <div class="value-row-cell value-row-condition">
+                      {{ zone.condition }}
+                    </div>
+                    <div class="value-row-cell value-row-cost">
+                      <i
+                        v-if="zone.speed === 'Instant' || zone.speed === 'Flash'"
+                        class="ms value-speed"
+                        :class="speedSymbolClass(zone.speed)"
+                        :title="zone.speed"
+                      />
+                      <i
+                        v-for="(symbol, symbolIndex) in zone.costSymbols"
+                        :key="`zone-cost-${cardIndex}-${zoneIndex}-${symbolIndex}`"
+                        class="ms ms-cost mana-symbol"
+                        :class="manaSymbolClass(symbol)"
+                        :title="symbol"
+                      />
+                    </div>
+                    <div class="value-row-cell value-row-effect">
+                      {{ zone.effect || zone.detail }}
+                    </div>
+                    <div class="value-row-cell value-row-state">
+                      {{ zone.value || '-' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="analysis-grid-wrap">
+              <table class="table table-striped analysis-grid">
+                <thead>
+                  <tr>
+                    <th>Interaction</th>
+                    <th
+                      v-for="column in analysisColumns"
+                      :key="column.key"
+                    >
+                      {{ column.label }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="category in visibleAnalysisCategories(card)"
+                    :key="category.key"
+                  >
+                    <td>{{ category.label }}</td>
+                    <td
+                      v-for="column in analysisColumns"
+                      :key="`${category.key}-${column.key}`"
+                      :class="{ 'analysis-cell-active': cardAnalysisCell(card, category, column).active }"
+                      :title="cardAnalysisCell(card, category, column).title"
+                    >
+                      {{ cardAnalysisCell(card, category, column).display }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="cards columns">
           <div
             v-for="(card, cardIndex) in cards"
             :key="cardIndex"
@@ -295,6 +838,86 @@
         </div>
 
         <ArnoldsApproval id="arnold" :cards="cards" />
+      </main>
+    </div>
+
+    <div
+      v-if="printOrderModalOpen"
+      id="print-order-modal"
+      class="modal active"
+    >
+      <a
+        class="modal-overlay"
+        href="#close"
+        aria-label="Close"
+        @click.prevent="closePrintOrderModal"
+      />
+      <div class="modal-container print-order-modal-container">
+        <div class="modal-header">
+          <button
+            class="btn btn-clear float-right"
+            aria-label="Close"
+            @click="closePrintOrderModal"
+          />
+          <div class="modal-title h5">
+            Print Order
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="content">
+            <div
+              v-for="(page, pageIndex) in printOrderPreviewPages"
+              :key="`print-order-page-${pageIndex}`"
+              class="print-order-page"
+            >
+              <div class="text-small text-gray mb-2">
+                Page
+                {{ pageIndex + 1 }}
+                <span v-if="page.isBack">(back)</span>
+              </div>
+              <div
+                class="print-order-grid"
+                :class="{ 'print-order-grid-backs': page.isBack }"
+                :style="{ gridTemplateColumns: `repeat(${printOrderGridColumns}, minmax(0, 1fr))` }"
+              >
+                <button
+                  v-for="slot in page.slots"
+                  :key="slot.key"
+                  type="button"
+                  class="print-order-slot"
+                  :class="{ 'print-order-slot-selected': selectedPrintOrderSlotIndex === slot.index }"
+                  :disabled="!slot.card"
+                  @click="selectPrintOrderSlot(slot.index)"
+                >
+                  <template v-if="slot.card">
+                    <ImageLoader
+                      class="print-order-image"
+                      :src="resolveCardImage(slot.card, slot.face)"
+                      placeholder="./card_back_border_crop.jpg"
+                      :alt="slot.card.name"
+                    />
+                    <span class="print-order-index">{{ slot.index + 1 }}</span>
+                  </template>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="btn"
+            @click="resetPrintOrder"
+          >
+            Reset
+          </button>
+          <button
+            id="apply-print-order"
+            class="btn btn-primary"
+            @click="applyPrintOrder"
+          >
+            Done
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -324,6 +947,15 @@
 
 <script>
 import { parseDecklist } from "../helpers/DecklistParser.mjs";
+import { analyzeCardValue } from "../helpers/CardValueAnalyzer.mjs";
+import {
+    cardAnalysisCharacteristics,
+    isCreatureCard,
+    summarizeCreatureInteractions,
+    synergyActionCost,
+    synergyInteractionDetail
+} from "../helpers/DeckInteractionAnalyzer.mjs";
+import { createSessionStorage } from "../helpers/SessionStorage.mjs";
 import { bindStorage } from "../helpers/VueLocalStorage.mjs";
 import ImageLoader from "../components/ImageLoader.vue";
 import HelpModal from "../components/HelpModal.vue";
@@ -347,6 +979,71 @@ const basicLands = [
     "snow-covered mountain",
 ];
 
+const analysisCategories = [
+    { key: "instantRemoval", label: "Kill inst." },
+    { key: "sorceryRemoval", label: "Kill sorc." },
+    { key: "combat.attacking.bothSurvive", label: "Atk hold" },
+    { key: "combat.attacking.bothDie", label: "Atk trade" },
+    { key: "combat.attacking.defenderSurvives", label: "Atk lose" },
+    { key: "combat.attacking.attackerSurvives", label: "Atk win" },
+    { key: "combat.attacking.damageOnPlayer", label: "Atk face" },
+    { key: "combat.defending.bothSurvive", label: "Blk hold" },
+    { key: "combat.defending.bothDie", label: "Blk trade" },
+    { key: "combat.defending.defenderSurvives", label: "Blk win" },
+    { key: "combat.defending.attackerSurvives", label: "Blk lose" },
+    { key: "combat.defending.damageOnPlayer", label: "No block" },
+    { key: "synergy.combat.sources", label: "Synergy combat", targetGroup: "cards" },
+    { key: "synergy.combat.feeders", label: "I/S:Combat pump", targetGroup: "cards" },
+    { key: "synergy.graveyardPlay.sources", label: "S:Grave to hand", targetGroup: "cards" },
+    { key: "synergy.graveyardPlay.feeders", label: "S:Grave to hand", targetGroup: "cards" },
+    { key: "synergy.creatureTokens.sources", label: "S:Token engine", targetGroup: "cards" },
+    { key: "synergy.creatureTokens.feeders", label: "S:Token engine", targetGroup: "cards" },
+    { key: "synergy.battlefieldToHand.sources", label: "Synergy hand", targetGroup: "cards" },
+    { key: "synergy.battlefieldToHand.feeders", label: "Feeds hand", targetGroup: "cards" },
+    { key: "synergy.entersBattlefield.sources", label: "Synergy ETB", targetGroup: "cards" },
+    { key: "synergy.entersBattlefield.feeders", label: "Feeds ETB", targetGroup: "cards" },
+    { key: "synergy.etbLifeGain.sources", label: "Synergy life ETB", targetGroup: "cards" },
+    { key: "synergy.etbLifeGain.feeders", label: "Feeds life ETB", targetGroup: "cards" },
+    { key: "synergy.creatureDeathValue.sources", label: "Synergy death", targetGroup: "cards" },
+    { key: "synergy.creatureDeathValue.feeders", label: "Feeds death", targetGroup: "cards" },
+];
+
+function createDefaultConfig() {
+    return {
+        includeDigital: false,
+        includePromo: false,
+        matchEditions: false,
+        includeBasics: false,
+        includeCards: true,
+        includeGamePieces: true,
+        showCutLines: false,
+        fixedPageSize: false,
+        imageType: "border_crop",
+        scale: "normal",
+        cardBacks: "dfc",
+        tokenBackMode: "opposite",
+        tokenPlacementMode: "auto",
+        cardsPerPage: null,
+        analysisMode: false,
+        analysisView: "interaction",
+        analysisMetric: "count",
+        analysisColumnMode: "metaDeck",
+        analysisMatchupSessionId: "all",
+        comboPieceConfigOpen: false,
+        comboPieceTypes: {
+            token: true,
+            emblem: true,
+            tracker: true,
+            mechanicHelper: true,
+            dungeon: true,
+            initiative: true,
+            ring: true,
+            realCard: false,
+        },
+        decklist: "",
+    };
+}
+
 function setImageVersion(url, version) {
     if (/cards\.scryfall\.io/.test(url)) {
         return url.replace(/\/(border_crop|normal|large|small|art_crop|png)\//, `/${version}/`);
@@ -368,27 +1065,70 @@ export default {
     },
     data() {
         return {
-            config: {
-                includeDigital: false,
-                includePromo: false,
-                matchEditions: false,
-                includeBasics: false,
-                showCutLines: false,
-                fixedPageSize: false,
-                imageType: "border_crop",
-                scale: "normal",
-                cardBacks: "dfc",
-                tokenBackMode: "card",
-                cardsPerPage: null,
-                decklist: "",
-            },
+            config: createDefaultConfig(),
             sets: {},
             tokenPool: [],
             nextTokenBackIndex: 0,
             cards: [],
             errors: [],
             sessionSetSelections: {},
+            printOrderModalOpen: false,
+            selectedPrintOrderSlotIndex: null,
+            customPrintOrderCards: [],
+            printOrderDraftCards: [],
+            localAppEnabled: import.meta.env.VITE_LOCAL_APP === 'true',
+            leftMenuCollapsed: false,
+            sessionsMenuOpen: true,
+            localSessionStorage: createSessionStorage(),
+            localSessions: [],
+            activeSessionId: null,
+            activeSessionName: '',
+            activeSessionIsMetaDeck: false,
+            metaDeckStates: [],
+            isLoadingSets: false,
+            isLoadingCards: false,
+            isLoadingSessions: false,
+            sessionSaveTimer: null,
+            restoringSession: false,
         };
+    },
+    watch: {
+        config: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        cards: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        errors: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        sessionSetSelections: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        customPrintOrderCards: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        activeSessionName() {
+            this.scheduleSessionSave();
+        },
+        activeSessionIsMetaDeck() {
+            this.scheduleSessionSave();
+        },
     },
     computed: {
         cardCountWhenPrinting() {
@@ -431,7 +1171,7 @@ export default {
                 missingGamePieces,
             };
         },
-        printSlotsFront() {
+        printSlotsFrontBase() {
             const slots = [];
 
             for (const card of this.cards) {
@@ -445,6 +1185,33 @@ export default {
             }
 
             return slots;
+        },
+        printSlotsFront() {
+            const baseSlots = this.printSlotsFrontBase;
+
+            if (this.isCustomPrintOrderCurrent(baseSlots)) {
+                return this.customPrintOrderCards;
+            }
+
+            return baseSlots;
+        },
+        printOrderGridColumns() {
+            const pageSize = this.getPrintPageSize();
+            const columnsByPageSize = {
+                6: 3,
+                8: 2,
+                9: 3,
+            };
+
+            return columnsByPageSize[pageSize] ?? Math.ceil(Math.sqrt(pageSize));
+        },
+        printOrderPreviewPages() {
+            const slots = this.printOrderModalOpen ? this.printOrderDraftCards : this.printSlotsFront;
+            const indexedSlots = slots.map((card, index) => {
+                return { card, index };
+            });
+
+            return this.buildPrintOrderPreviewPages(indexedSlots);
         },
         printPages() {
             const toPages = (slots, isBack, pageSize = null) => {
@@ -487,7 +1254,7 @@ export default {
 
             if (this.config.cardBacks === "all-pages") {
               const pairedSlots = this.config.tokenBackMode === "opposite"
-                ? this.buildPairedGamePieceSlots(this.printSlotsFront)
+                ? this.buildOppositeGamePieceSlots(this.printSlotsFront)
                 : {
                     frontSlots: this.printSlotsFront.map((card) => {
                       return { card, face: "front" };
@@ -516,29 +1283,515 @@ export default {
             }
 
             const slots = [];
-            for (const card of this.cards) {
-                if (!this.shouldShowCard(card, "front")) {
-                    continue;
-                }
+            for (const card of this.printSlotsFront) {
+                slots.push({ card, face: "front" });
 
-                for (let i = 0; i < card.quantity; i += 1) {
-                    slots.push({ card, face: "front" });
-
-                    if (this.shouldShowCard(card, "back")) {
-                        slots.push({ card, face: "back" });
-                    }
+                if (this.shouldShowCard(card, "back")) {
+                    slots.push({ card, face: "back" });
                 }
             }
 
             return toPages(slots, false);
         },
+        metaCreatureAnalyses() {
+            return this.metaDeckStates.flatMap(session => {
+                return (session.state?.cards ?? [])
+                    .filter(card => isCreatureCard(card))
+                    .map((creature, index) => {
+                        const summary = summarizeCreatureInteractions(this.cards, creature);
+
+                        return {
+                            sessionId: session.id,
+                            sessionName: session.name,
+                            creature,
+                            index,
+                            counts: this.countInteractionSummary(summary),
+                        };
+                    });
+            });
+        },
+        selectedMetaDeckStates() {
+            if (this.config.analysisMatchupSessionId === "all") {
+                return this.metaDeckStates;
+            }
+
+            return this.metaDeckStates.filter(session => session.id === this.config.analysisMatchupSessionId);
+        },
+        analysisCategories() {
+            return analysisCategories;
+        },
+        analysisColumns() {
+            const sessions = this.selectedMetaDeckStates;
+            const selectedCardTotal = this.countCards(sessions.flatMap(session => session.state?.cards ?? []));
+
+            if (this.config.analysisColumnMode === "manaValue") {
+                const columns = Array.from({ length: 10 }, (_, manaValue) => {
+                    const isNinePlus = manaValue === 9;
+
+                    return {
+                        key: isNinePlus ? '9-plus' : String(manaValue),
+                        sortValue: manaValue,
+                        label: isNinePlus ? '9+ mana' : `${manaValue} mana`,
+                        actionCost: manaValue,
+                        cards: [],
+                        allCards: sessions.flatMap(session => session.state?.cards ?? []),
+                        creatures: [],
+                        totalCards: selectedCardTotal,
+                    };
+                });
+
+                for (const session of sessions) {
+                    for (const card of (session.state?.cards ?? [])) {
+                        const manaValue = Number(card.selectedOption?.manaValue);
+                        if (!Number.isFinite(manaValue) || manaValue < 0) {
+                            continue;
+                        }
+
+                        const column = columns[Math.min(Math.floor(manaValue), 9)];
+                        column.cards.push(card);
+                        if (isCreatureCard(card)) {
+                            column.creatures.push(card);
+                        }
+                    }
+                }
+
+                return columns;
+            }
+
+            return sessions.map(session => {
+                return {
+                    key: session.id,
+                    label: session.name,
+                    cards: session.state?.cards ?? [],
+                    creatures: (session.state?.cards ?? []).filter(card => isCreatureCard(card)),
+                    totalCards: this.countCards(session.state?.cards ?? []),
+                };
+            });
+        },
+        analysisCardTotal() {
+            return this.cards.reduce((total, card) => total + (card.quantity ?? 1), 0);
+        },
+        analysisStatsLoading() {
+            return this.isLoadingCards || this.isLoadingSessions || this.isLoadingSets;
+        },
     },
-    mounted() {
+    async mounted() {
         // Trigger an immediate load of the card list + set names.
         this.loadSetList();
         this.initConfig();
+        await this.initLocalSessions();
+    },
+    beforeUnmount() {
+        clearTimeout(this.sessionSaveTimer);
     },
     methods: {
+        cloneForStorage(value) {
+            return JSON.parse(JSON.stringify(value));
+        },
+        countCards(cards) {
+            return cards.reduce((total, card) => total + (card.quantity ?? 1), 0);
+        },
+        countInteractionSummary(summary) {
+            const countCombat = combat => {
+                return {
+                    bothSurvive: this.countCards(combat.bothSurvive),
+                    bothDie: this.countCards(combat.bothDie),
+                    defenderSurvives: this.countCards(combat.defenderSurvives),
+                    attackerSurvives: this.countCards(combat.attackerSurvives),
+                    damageOnPlayer: this.countCards(combat.damageOnPlayer),
+                    unknown: this.countCards(combat.unknown),
+                };
+            };
+
+            return {
+                instantRemoval: this.countCards(summary.instantRemoval),
+                sorceryRemoval: this.countCards(summary.sorceryRemoval),
+                combat: {
+                    attacking: countCombat(summary.combat.attacking),
+                    defending: countCombat(summary.combat.defending),
+                },
+                synergies: this.countCards(summary.synergies),
+            };
+        },
+        cardsForAnalysisCategory(summary, categoryKey) {
+            return categoryKey.split('.').reduce((value, part) => {
+                return value?.[part];
+            }, summary) ?? [];
+        },
+        isSynergyCategory(category) {
+            return category.key.startsWith('synergy.');
+        },
+        visibleAnalysisCategories(card) {
+            return this.analysisCategories.filter(category => {
+                return this.analysisColumns.some(column => this.cardAnalysisCell(card, category, column).active);
+            });
+        },
+        formatAnalysisValue(card, quantity, total) {
+            const prefix = card.isSideboard ? '+' : '';
+
+            if (this.config.analysisMetric === "percent") {
+                const percent = total > 0
+                    ? quantity / total * 100
+                    : 0;
+                return `${prefix}${percent.toFixed(1)}%`;
+            }
+
+            return `${prefix}${quantity}`;
+        },
+        cardAnalysisCell(card, category, column) {
+            const targets = category.targetGroup === "cards" ? column.cards ?? [] : column.creatures ?? [];
+            const sourceTargets = this.isSynergyCategory(category) && column.allCards
+                ? column.allCards
+                : targets;
+            const matchedCards = [];
+            let matchedQuantity = 0;
+            const denominator = column.totalCards ?? this.countCards(column.creatures);
+
+            for (const targetCard of sourceTargets) {
+                const summary = summarizeCreatureInteractions([card], targetCard);
+                if (this.cardsForAnalysisCategory(summary, category.key).length > 0) {
+                    const actionCost = synergyActionCost(card, targetCard, category.key);
+                    if (
+                        this.isSynergyCategory(category) &&
+                        column.actionCost !== undefined &&
+                        (actionCost === null || Math.min(Math.floor(actionCost), 9) !== column.actionCost)
+                    ) {
+                        continue;
+                    }
+
+                    const detail = synergyInteractionDetail(card, targetCard, category.key);
+                    const detailText = detail ? ` - ${detail}` : '';
+                    matchedQuantity += targetCard.quantity ?? 1;
+                    matchedCards.push(`${targetCard.quantity ?? 1}x ${targetCard.name}${detailText}`);
+                }
+            }
+
+            if (matchedQuantity === 0) {
+                return {
+                    active: false,
+                    display: '-',
+                    title: '',
+                };
+            }
+
+            return {
+                active: true,
+                display: this.formatAnalysisValue(card, matchedQuantity, denominator),
+                title: matchedCards.join(', '),
+            };
+        },
+        valueAnalysis(card) {
+            return analyzeCardValue(card, this.selectedMetaDeckStates.flatMap(session => session.state?.cards ?? []));
+        },
+        manaSymbolClass(symbol) {
+            if (String(symbol).toUpperCase() === 'T') {
+                return 'ms-tap';
+            }
+
+            return `ms-${String(symbol).toLowerCase().replaceAll('/', '')}`;
+        },
+        speedSymbolClass(speed) {
+            return speed === 'Flash' ? 'ms-ability-flash' : 'ms-instant';
+        },
+        capturePrintOrderIndexes() {
+            const baseSlots = [...this.printSlotsFrontBase];
+
+            return this.customPrintOrderCards.map(card => {
+                const index = baseSlots.indexOf(card);
+                if (index === -1) {
+                    return null;
+                }
+
+                baseSlots[index] = null;
+                return index;
+            });
+        },
+        restorePrintOrderIndexes(indexes = []) {
+            const baseSlots = this.printSlotsFrontBase;
+            const restored = indexes.map(index => baseSlots[index]).filter(Boolean);
+            this.customPrintOrderCards = restored.length === baseSlots.length ? restored : [];
+        },
+        applyDeckTextQuantities(cards) {
+            const { lines } = parseDecklist(this.config.decklist);
+            const usedLineIndexes = new Set();
+
+            for (const card of cards) {
+                const lineIndex = lines.findIndex((line, index) => {
+                    if (usedLineIndexes.has(index) || line.name !== card.name) {
+                        return false;
+                    }
+
+                    if (line.set && card.requestedSet && line.set !== card.requestedSet) {
+                        return false;
+                    }
+
+                    if (
+                        line.collectorsNumber &&
+                        card.requestedCollectorNumber &&
+                        String(line.collectorsNumber).toLowerCase() !== String(card.requestedCollectorNumber).toLowerCase()
+                    ) {
+                        return false;
+                    }
+
+                    return true;
+                });
+
+                if (lineIndex === -1) {
+                    continue;
+                }
+
+                usedLineIndexes.add(lineIndex);
+                card.quantity = lines[lineIndex].quantity;
+            }
+        },
+        captureSessionState() {
+            const cards = this.cloneForStorage(this.cards);
+            this.applyDeckTextQuantities(cards);
+
+            return {
+                config: this.cloneForStorage(this.config),
+                cards,
+                errors: this.cloneForStorage(this.errors),
+                sessionSetSelections: this.cloneForStorage(this.sessionSetSelections),
+                printOrderIndexes: this.capturePrintOrderIndexes(),
+                nextTokenBackIndex: this.nextTokenBackIndex,
+            };
+        },
+        async restoreSessionState(state) {
+            this.restoringSession = true;
+
+            const config = {
+                ...createDefaultConfig(),
+                ...(state?.config ?? {}),
+                comboPieceTypes: {
+                    ...createDefaultConfig().comboPieceTypes,
+                    ...(state?.config?.comboPieceTypes ?? {}),
+                },
+            };
+
+            for (const [key, value] of Object.entries(config)) {
+                this.config[key] = value;
+            }
+
+            this.cards = this.cloneForStorage(state?.cards ?? []);
+            await this.hydrateStoredCards(this.cards);
+            this.errors = this.cloneForStorage(state?.errors ?? []);
+            this.sessionSetSelections = this.cloneForStorage(state?.sessionSetSelections ?? {});
+            this.nextTokenBackIndex = state?.nextTokenBackIndex ?? 0;
+            this.printOrderDraftCards = [];
+            this.selectedPrintOrderSlotIndex = null;
+            this.printOrderModalOpen = false;
+            this.restorePrintOrderIndexes(state?.printOrderIndexes ?? []);
+
+            await this.$nextTick();
+            this.restoringSession = false;
+        },
+        async initLocalSessions() {
+            if (!this.localAppEnabled || !(await this.localSessionStorage.isEnabled())) {
+                return;
+            }
+
+            this.isLoadingSessions = true;
+            try {
+                this.localSessions = await this.localSessionStorage.listSessions();
+                if (this.localSessions.length > 0) {
+                    await this.loadLocalSession(this.localSessions[0].id);
+                    await this.refreshMetaDeckStates();
+                    return;
+                }
+
+                await this.createLocalSession();
+            } finally {
+                this.isLoadingSessions = false;
+            }
+        },
+        async createLocalSession() {
+            if (!this.localAppEnabled) {
+                return;
+            }
+
+            await this.flushPendingSessionSave();
+            const name = `Session ${this.localSessions.length + 1}`;
+            await this.restoreSessionState(null);
+            const session = await this.localSessionStorage.createSession(name, this.captureSessionState());
+            this.activeSessionId = session.id;
+            this.activeSessionName = session.name;
+            this.activeSessionIsMetaDeck = Boolean(session.isMetaDeck);
+            this.localSessions = await this.localSessionStorage.listSessions();
+            await this.refreshMetaDeckStates();
+        },
+        async loadLocalSession(id) {
+            if (!this.localAppEnabled) {
+                return;
+            }
+
+            await this.flushPendingSessionSave();
+            const session = await this.localSessionStorage.loadSession(id);
+            this.restoringSession = true;
+            this.activeSessionId = session.id;
+            this.activeSessionName = session.name;
+            this.activeSessionIsMetaDeck = Boolean(session.isMetaDeck);
+            await this.restoreSessionState(session.state);
+            await this.refreshMetaDeckStates();
+        },
+        async refreshMetaDeckStates() {
+            if (!this.localAppEnabled) {
+                return;
+            }
+
+            this.isLoadingSessions = true;
+            try {
+                const metaSessions = this.localSessions.filter(session => session.isMetaDeck);
+                this.metaDeckStates = await Promise.all(
+                    metaSessions.map(session => this.localSessionStorage.loadSession(session.id)),
+                );
+                await Promise.all(this.metaDeckStates.map(session => this.hydrateStoredCards(session.state?.cards ?? [])));
+            } finally {
+                this.isLoadingSessions = false;
+            }
+        },
+        async flushPendingSessionSave() {
+            if (!this.sessionSaveTimer) {
+                return;
+            }
+
+            clearTimeout(this.sessionSaveTimer);
+            this.sessionSaveTimer = null;
+            await this.saveActiveSession();
+        },
+        scheduleSessionSave() {
+            if (
+                import.meta.env.MODE === 'test' ||
+                !this.localAppEnabled ||
+                !this.activeSessionId ||
+                this.restoringSession
+            ) {
+                return;
+            }
+
+            clearTimeout(this.sessionSaveTimer);
+            this.sessionSaveTimer = setTimeout(() => {
+                this.sessionSaveTimer = null;
+                this.saveActiveSession();
+            }, 350);
+        },
+        async saveActiveSession() {
+            if (!this.localAppEnabled || !this.activeSessionId || this.restoringSession) {
+                return;
+            }
+
+            const session = await this.localSessionStorage.saveSession({
+                id: this.activeSessionId,
+                name: this.activeSessionName || 'Untitled Session',
+                isMetaDeck: this.activeSessionIsMetaDeck,
+                state: this.captureSessionState(),
+            });
+
+            this.localSessions = this.localSessions.map(localSession => {
+                return localSession.id === session.id
+                    ? {
+                        id: session.id,
+                        name: session.name,
+                        isMetaDeck: Boolean(session.isMetaDeck),
+                        updatedAt: session.updatedAt,
+                    }
+                    : localSession;
+            });
+            await this.refreshMetaDeckStates();
+        },
+        buildPrintOrderPreviewPages(indexedSlots) {
+            const toPreviewPages = (slots, isBack, pageSize = null) => {
+                const buildSlot = (slot, pageStart, offset) => {
+                    if (!slot) {
+                        return {
+                            key: `empty-${isBack ? 'back' : 'front'}-${pageStart}-${offset}`,
+                            index: null,
+                            card: null,
+                            face: "front",
+                        };
+                    }
+
+                    return {
+                        key: `slot-${isBack ? 'back' : 'front'}-${slot.index}-${pageStart}-${offset}`,
+                        index: slot.index,
+                        card: slot.card,
+                        face: slot.face,
+                    };
+                };
+
+                if (pageSize && Number.isInteger(pageSize) && pageSize > 0) {
+                    const pages = [];
+                    for (let i = 0; i < slots.length; i += pageSize) {
+                        const pageSlots = slots.slice(i, i + pageSize).map((slot, offset) => buildSlot(slot, i, offset));
+                        while (pageSlots.length < pageSize) {
+                            pageSlots.push(buildSlot(null, i, pageSlots.length));
+                        }
+                        pages.push({ slots: pageSlots, isBack });
+                    }
+                    return pages.length ? pages : [];
+                }
+
+                if (this.config.fixedPageSize) {
+                    const pages = [];
+                    for (let i = 0; i < slots.length; i += 9) {
+                        const pageSlots = slots.slice(i, i + 9).map((slot, offset) => buildSlot(slot, i, offset));
+                        while (pageSlots.length < 9) {
+                            pageSlots.push(buildSlot(null, i, pageSlots.length));
+                        }
+                        pages.push({ slots: pageSlots, isBack });
+                    }
+                    return pages.length ? pages : [];
+                }
+
+                return [{
+                    slots: slots.map((slot, offset) => buildSlot(slot, 0, offset)),
+                    isBack,
+                }];
+            };
+
+            if (this.config.cardBacks === "none") {
+                const slots = indexedSlots.map(slot => {
+                    return { ...slot, face: "front" };
+                });
+
+                return toPreviewPages(slots, false);
+            }
+
+            if (this.config.cardBacks === "all-pages") {
+                const pairedSlots = this.config.tokenBackMode === "opposite"
+                    ? this.buildChosenPreviewGamePieceSlots(indexedSlots)
+                    : {
+                        frontSlots: indexedSlots.map(slot => ({ ...slot, face: "front" })),
+                        backSlots: indexedSlots.map(slot => ({ ...slot, face: "back" })),
+                    };
+                const pageSize = this.config.fixedPageSize ? 9 : (this.config.cardsPerPage ?? null);
+                const frontPages = toPreviewPages(pairedSlots.frontSlots, false, pageSize);
+                const backPages = toPreviewPages(pairedSlots.backSlots, true, pageSize);
+                const pages = [];
+
+                for (let i = 0; i < Math.max(frontPages.length, backPages.length); i += 1) {
+                    if (frontPages[i]) {
+                        pages.push(frontPages[i]);
+                    }
+                    if (backPages[i]) {
+                        pages.push(backPages[i]);
+                    }
+                }
+
+                return pages;
+            }
+
+            const slots = [];
+            for (const slot of indexedSlots) {
+                slots.push({ ...slot, face: "front" });
+
+                if (this.shouldShowCard(slot.card, "back")) {
+                    slots.push({ ...slot, face: "back" });
+                }
+            }
+
+            return toPreviewPages(slots, false);
+        },
         getPrintPageSize() {
             if (this.config.fixedPageSize) {
                 return 9;
@@ -557,6 +1810,117 @@ export default {
                 card.selectedOption?.setCode,
                 card.selectedOption?.collectorNumber,
             ].join("|");
+        },
+        buildOppositeGamePieceSlots(cards) {
+            if (this.config.tokenPlacementMode === 'chosen') {
+                return this.buildChosenGamePieceSlots(cards);
+            }
+
+            return this.buildPairedGamePieceSlots(cards);
+        },
+        buildChosenGamePieceSlots(cards) {
+            const pairs = [];
+
+            for (let i = 0; i < cards.length; i += 2) {
+                pairs.push({
+                    front: { card: cards[i], face: "front" },
+                    back: cards[i + 1] ? { card: cards[i + 1], face: "back" } : null,
+                });
+            }
+
+            return this.pairsToSlots(pairs);
+        },
+        buildChosenPreviewGamePieceSlots(indexedSlots) {
+            const frontSlots = [];
+            const backSlots = [];
+
+            for (let i = 0; i < indexedSlots.length; i += 2) {
+                frontSlots.push({ ...indexedSlots[i], face: "front" });
+                backSlots.push(indexedSlots[i + 1] ? { ...indexedSlots[i + 1], face: "back" } : null);
+            }
+
+            return {
+                frontSlots,
+                backSlots,
+            };
+        },
+        pairsToSlots(pairs) {
+            return {
+                frontSlots: pairs.map(pair => pair.front),
+                backSlots: pairs.map(pair => pair.back),
+            };
+        },
+        isCustomPrintOrderCurrent(baseSlots) {
+            return this.isPrintOrderCurrent(this.customPrintOrderCards, baseSlots);
+        },
+        isPrintOrderCurrent(orderCards, baseSlots) {
+            if (orderCards.length !== baseSlots.length || baseSlots.length === 0) {
+                return false;
+            }
+
+            const remainingSlots = [...baseSlots];
+            return orderCards.every(card => {
+                const index = remainingSlots.indexOf(card);
+                if (index === -1) {
+                    return false;
+                }
+
+                remainingSlots.splice(index, 1);
+                return true;
+            });
+        },
+        ensureCustomPrintOrder() {
+            if (!this.isCustomPrintOrderCurrent(this.printSlotsFrontBase)) {
+                this.customPrintOrderCards = [...this.printSlotsFrontBase];
+            }
+        },
+        openPrintOrderModal() {
+            this.ensureCustomPrintOrder();
+            this.printOrderDraftCards = [...this.printSlotsFront];
+            this.selectedPrintOrderSlotIndex = null;
+            this.printOrderModalOpen = true;
+        },
+        closePrintOrderModal() {
+            this.selectedPrintOrderSlotIndex = null;
+            this.printOrderDraftCards = [];
+            this.printOrderModalOpen = false;
+        },
+        resetPrintOrder() {
+            this.customPrintOrderCards = [];
+            this.printOrderDraftCards = this.printOrderModalOpen ? [...this.printSlotsFrontBase] : [];
+            this.selectedPrintOrderSlotIndex = null;
+        },
+        applyPrintOrder() {
+            if (this.isPrintOrderCurrent(this.printOrderDraftCards, this.printSlotsFrontBase)) {
+                this.customPrintOrderCards = [...this.printOrderDraftCards];
+                this.config.tokenPlacementMode = 'chosen';
+            }
+
+            this.closePrintOrderModal();
+        },
+        selectPrintOrderSlot(slotIndex) {
+            if (slotIndex === null) {
+                return;
+            }
+
+            if (!this.isPrintOrderCurrent(this.printOrderDraftCards, this.printSlotsFrontBase)) {
+                this.printOrderDraftCards = [...this.printSlotsFront];
+            }
+
+            if (this.selectedPrintOrderSlotIndex === null) {
+                this.selectedPrintOrderSlotIndex = slotIndex;
+                return;
+            }
+
+            if (this.selectedPrintOrderSlotIndex === slotIndex) {
+                this.selectedPrintOrderSlotIndex = null;
+                return;
+            }
+
+            const selectedCard = this.printOrderDraftCards[this.selectedPrintOrderSlotIndex];
+            this.printOrderDraftCards[this.selectedPrintOrderSlotIndex] = this.printOrderDraftCards[slotIndex];
+            this.printOrderDraftCards[slotIndex] = selectedCard;
+            this.selectedPrintOrderSlotIndex = null;
         },
         buildPairedGamePieceSlots(cards) {
             const normalCards = [];
@@ -613,35 +1977,161 @@ export default {
                 });
             }
 
-            return {
-                frontSlots: pairs.map(pair => pair.front),
-                backSlots: pairs.map(pair => pair.back),
-            };
+            return this.pairsToSlots(pairs);
         },
         async loadSetList() {
-          const dataset = (await ScryfallDatasetAsync());
-          this.sets = dataset.sets;
-          console.log(`Loaded ${Object.keys(dataset.cards).length} distinct cards from ${Object.keys(dataset.sets).length} sets.`)
-          // Build token pool for token-pairs mode
-          this.tokenPool = Object.values(dataset.cards)
-            .flat()
-            .filter((c) => c.cardFaces && c.cardFaces.length === 1 && c.cardFaces[0].type_line && /token/i.test(c.cardFaces[0].type_line))
-            .map((c) => ({
-              name: c.name,
-              urlBack: c.image_uris && c.image_uris.normal ? c.image_uris.normal : undefined,
-            }))
-            .filter((t) => t.urlBack);
+          this.isLoadingSets = true;
+          try {
+            const dataset = (await ScryfallDatasetAsync());
+            this.sets = dataset.sets;
+            console.log(`Loaded ${Object.keys(dataset.cards).length} distinct cards from ${Object.keys(dataset.sets).length} sets.`)
+            // Build token pool for token-pairs mode
+            this.tokenPool = Object.values(dataset.cards)
+              .flat()
+              .filter((c) => c.cardFaces && c.cardFaces.length === 1 && c.cardFaces[0].type_line && /token/i.test(c.cardFaces[0].type_line))
+              .map((c) => ({
+                name: c.name,
+                urlBack: c.image_uris && c.image_uris.normal ? c.image_uris.normal : undefined,
+              }))
+              .filter((t) => t.urlBack);
+          } finally {
+            this.isLoadingSets = false;
+          }
+        },
+        datasetSetOption(option) {
+            return {
+                name: `${this.sets[option.setCode]} (${option.collectorNumber})`,
+                setCode: option.setCode,
+                collectorNumber: option.collectorNumber,
+                urlFront: option.urlFront,
+                urlBack: option.urlBack,
+                isDigital: option.isDigital,
+                isPromo: option.isPromo,
+                isToken: option.isToken,
+                isGamePiece: option.isGamePiece,
+                typeLine: option.typeLine,
+                oracleText: option.oracleText,
+                manaCost: option.manaCost,
+                manaValue: option.manaValue,
+                power: option.power,
+                toughness: option.toughness,
+                analysisCharacteristics: cardAnalysisCharacteristics(option),
+                relatedTokens: option.relatedTokens,
+                relatedGamePieces: option.relatedGamePieces,
+            };
+        },
+        mergeDefinedOptionFields(baseOption, savedOption = {}) {
+            const merged = { ...baseOption };
+            for (const [key, value] of Object.entries(savedOption)) {
+                if (value !== undefined && value !== null) {
+                    merged[key] = value;
+                }
+            }
+
+            return merged;
+        },
+        async hydrateStoredCards(cards = []) {
+            if (cards.length === 0) {
+                return;
+            }
+
+            const dataset = await ScryfallDatasetAsync();
+            this.sets = Object.keys(this.sets).length > 0 ? this.sets : dataset.sets;
+
+            for (const card of cards) {
+                const cardLookup = dataset.cards?.[card.name];
+                if (!cardLookup) {
+                    continue;
+                }
+
+                const setOptions = cardLookup.map(option => this.datasetSetOption(option));
+                card.setOptions = setOptions;
+
+                if (!card.selectedOption) {
+                    card.selectedOption = setOptions[0];
+                    continue;
+                }
+
+                const matchedOption = setOptions.find(option => {
+                    return option.setCode === card.selectedOption.setCode &&
+                        String(option.collectorNumber) === String(card.selectedOption.collectorNumber);
+                }) ?? setOptions[0];
+
+                card.selectedOption = this.mergeDefinedOptionFields(matchedOption, card.selectedOption);
+            }
         },
         initConfig() {
             this.config.includeDigital = bindStorage('includeDigital', (v) => v === "true");
             this.config.includePromo = bindStorage('includePromo', (v) => v === "true");
             this.config.matchEditions = bindStorage('matchEditions', (v) => v === "true");
             this.config.includeBasics = bindStorage('includeBasics', (v) => v === "true");
+            this.config.includeCards = bindStorage('includeCards', (v) => v !== "false");
+            this.config.includeGamePieces = bindStorage('includeGamePieces', (v) => v !== "false");
             this.config.showCutLines = bindStorage('showCutLines', (v) => v === "true");
             this.config.fixedPageSize = bindStorage('fixedPageSize', (v) => v === "true");
             this.config.imageType = bindStorage('imageType', (v) => v ?? "border_crop");
             this.config.scale = bindStorage('scale', (v) => v ?? "normal");
             this.config.cardBacks = bindStorage('cardBacks', (v) => v ?? "dfc");
+            this.config.tokenBackMode = bindStorage('tokenBackMode', (v) => v ?? "opposite");
+            this.config.tokenPlacementMode = bindStorage('tokenPlacementMode', (v) => v ?? "auto");
+            this.config.analysisMode = bindStorage('analysisMode', (v) => v === "true");
+            this.config.analysisView = bindStorage('analysisView', (v) => v ?? "interaction");
+            this.config.analysisMetric = bindStorage('analysisMetric', (v) => v ?? "count");
+            this.config.analysisColumnMode = bindStorage('analysisColumnMode', (v) => v ?? "metaDeck");
+            this.config.analysisMatchupSessionId = bindStorage('analysisMatchupSessionId', (v) => v ?? "all");
+            this.config.comboPieceConfigOpen = bindStorage('comboPieceConfigOpen', (v) => v === "true");
+            this.config.comboPieceTypes.token = bindStorage('comboPieceToken', (v) => v !== "false");
+            this.config.comboPieceTypes.emblem = bindStorage('comboPieceEmblem', (v) => v !== "false");
+            this.config.comboPieceTypes.tracker = bindStorage('comboPieceTracker', (v) => v !== "false");
+            this.config.comboPieceTypes.mechanicHelper = bindStorage('comboPieceMechanicHelper', (v) => v !== "false");
+            this.config.comboPieceTypes.dungeon = bindStorage('comboPieceDungeon', (v) => v !== "false");
+            this.config.comboPieceTypes.initiative = bindStorage('comboPieceInitiative', (v) => v !== "false");
+            this.config.comboPieceTypes.ring = bindStorage('comboPieceRing', (v) => v !== "false");
+            this.config.comboPieceTypes.realCard = bindStorage('comboPieceRealCard', (v) => v === "true");
+        },
+        formatRelatedGamePieceLine(gamePiece) {
+            return `${gamePiece.displayName ?? gamePiece.name} [${gamePiece.setCode}] ${gamePiece.collectorNumber}`;
+        },
+        getExistingDecklistNames() {
+            return new Set(parseDecklist(this.config.decklist).lines.map(line => line.name));
+        },
+        getMissingRelatedGamePieces() {
+            const existingNames = this.getExistingDecklistNames();
+            const addedNames = new Set();
+            const missingGamePieces = [];
+
+            for (const card of this.cards) {
+                for (const gamePiece of card.selectedOption?.relatedGamePieces ?? []) {
+                    if (!this.config.comboPieceTypes[gamePiece.category]) {
+                        continue;
+                    }
+
+                    if (existingNames.has(gamePiece.name) || addedNames.has(gamePiece.name)) {
+                        continue;
+                    }
+
+                    missingGamePieces.push(gamePiece);
+                    addedNames.add(gamePiece.name);
+                }
+            }
+
+            return missingGamePieces;
+        },
+        async generateRelatedComboPieces() {
+            if (this.cards.length === 0 && this.config.decklist.trim()) {
+                await this.loadCardList();
+            }
+
+            const missingGamePieces = this.getMissingRelatedGamePieces();
+            if (missingGamePieces.length > 0) {
+                const additions = missingGamePieces.map(piece => this.formatRelatedGamePieceLine(piece));
+                this.config.decklist = [
+                    this.config.decklist.trimEnd(),
+                    additions.join("\n"),
+                ].filter(Boolean).join("\n");
+            }
+
+            await this.loadCardList();
         },
         shouldShowSetOption(card, option) {
             // FIXME: Need a better filter method to detect promo-only garbage.
@@ -657,6 +2147,14 @@ export default {
         },
         shouldShowCard(card, face = "front") {
             if (!this.config.includeBasics && card.isBasic) {
+                return false;
+            }
+
+            if (card.selectedOption?.isGamePiece) {
+                if (!this.config.includeGamePieces) {
+                    return false;
+                }
+            } else if (!this.config.includeCards) {
                 return false;
             }
 
@@ -736,92 +2234,85 @@ export default {
             window.print();
         },
         async loadCardList() {
-            this.cards = [];
-            this.errors = [];
+            this.isLoadingCards = true;
+            try {
+                this.cards = [];
+                this.errors = [];
+                this.resetPrintOrder();
 
-            const { lines, errors } = parseDecklist(this.config.decklist);
-            this.errors = errors;
-            
+                const { lines, errors } = parseDecklist(this.config.decklist);
+                this.errors = errors;
+                const dataset = await ScryfallDatasetAsync();
 
-            const _cards = [];
+                const _cards = [];
 
-            for (let line of lines) {
-                let cardLookup = (await ScryfallDatasetAsync()).cards[line.name];
+                for (let line of lines) {
+                    let cardLookup = dataset.cards[line.name];
 
-                if (!cardLookup) {
-                    this.errors.push(line.name);
-                    console.warn(
-                        `Failed to identify card on line: ${JSON.stringify(line)}`,
-                    );
-                    continue;
-                }
-
-                const cardIndex = _cards.filter((v) => { return v.name === line.name }).length;
-
-                const options = {
-                    quantity: line.quantity,
-                    name: line.name,
-                    setOptions: cardLookup.map((option) => {
-                        // This could use spread syntax, but it's nice to have all the property names in this file explicitly.
-                        return {
-                            name: `${this.sets[option.setCode]} (${option.collectorNumber})`,
-                            setCode: option.setCode,
-                            collectorNumber: option.collectorNumber,
-                            urlFront: option.urlFront,
-                            urlBack: option.urlBack,
-                            isDigital: option.isDigital,
-                            isPromo: option.isPromo,
-                            isToken: option.isToken,
-                            isGamePiece: option.isGamePiece,
-                            relatedTokens: option.relatedTokens,
-                        };
-                    }),
-                    isBasic: basicLands.includes(line.name.toLowerCase()),
-                    requestedSet: line.set,
-                    requestedCollectorNumber: line.collectorsNumber,
-                    selectedOption: this.sessionSetSelections[line.name]?.[cardIndex],
-                    selectedFromSession: Boolean(this.sessionSetSelections[line.name]?.[cardIndex]),
-                };
-
-                if (!options.selectedOption) {
-                    // Set a default selection.
-                    // First, if enabled, attempt to find an exact match from the decklist.
-                    if (this.config.matchEditions) {
-                        options.selectedOption = options.setOptions.filter(option => {
-                            return option.setCode === line.set && option.collectorNumber == line.collectorsNumber
-                        })?.[0] ?? undefined;
+                    if (!cardLookup) {
+                        this.errors.push(line.name);
+                        console.warn(
+                            `Failed to identify card on line: ${JSON.stringify(line)}`,
+                        );
+                        continue;
                     }
 
-                    if (!options.selectedOption && line.set) {
-                        options.selectedOption = options.setOptions.find(option => {
-                            return option.isGamePiece &&
-                                option.setCode === line.set &&
-                                (!line.collectorsNumber || option.collectorNumber == line.collectorsNumber);
-                        });
-                    }
+                    const cardIndex = _cards.filter((v) => { return v.name === line.name }).length;
 
-                    // If we failed there, then we can set a default based on characteristics.
+                    const options = {
+                        quantity: line.quantity,
+                        name: line.name,
+                        setOptions: cardLookup.map(option => this.datasetSetOption(option)),
+                        isBasic: basicLands.includes(line.name.toLowerCase()),
+                        isSideboard: Boolean(line.isSideboard),
+                        requestedSet: line.set,
+                        requestedCollectorNumber: line.collectorsNumber,
+                        selectedOption: this.sessionSetSelections[line.name]?.[cardIndex],
+                        selectedFromSession: Boolean(this.sessionSetSelections[line.name]?.[cardIndex]),
+                    };
+
                     if (!options.selectedOption) {
-                        options.selectedOption = options.setOptions.filter(option => {
-                            return !option.isDigital && !option.isPromo && !option.isGamePiece;
-                        })?.[0] ?? options.setOptions[0];
+                        // Set a default selection.
+                        // First, if enabled, attempt to find an exact match from the decklist.
+                        if (this.config.matchEditions) {
+                            options.selectedOption = options.setOptions.filter(option => {
+                                return option.setCode === line.set && option.collectorNumber == line.collectorsNumber
+                            })?.[0] ?? undefined;
+                        }
+
+                        if (!options.selectedOption && line.set) {
+                            options.selectedOption = options.setOptions.find(option => {
+                                return option.isGamePiece &&
+                                    option.setCode === line.set &&
+                                    (!line.collectorsNumber || option.collectorNumber == line.collectorsNumber);
+                            });
+                        }
+
+                        // If we failed there, then we can set a default based on characteristics.
+                        if (!options.selectedOption) {
+                            options.selectedOption = options.setOptions.filter(option => {
+                                return !option.isDigital && !option.isPromo && !option.isGamePiece;
+                            })?.[0] ?? options.setOptions[0];
+                        }
                     }
+
+                    _cards.push(options);
                 }
 
-                _cards.push(options);
-            }
+                this.applySessionRelatedTokenSelections(_cards);
 
-            this.applySessionRelatedTokenSelections(_cards);
+                this.cards = _cards;
 
-            this.cards = _cards;
-
-            // attach tokenBackUrl when token-pairs mode is enabled
-            if (this.config.cardBacks === 'token-pairs') {
-              for (const c of this.cards) {
-                if (c.selectedOption && c.selectedOption.isGamePiece) {
-                  c.tokenBackUrl = this.getTokenPairBackUrl(c.selectedOption.urlFront, c.name);
+                // attach tokenBackUrl when token-pairs mode is enabled
+                if (this.config.cardBacks === 'token-pairs') {
+                  for (const c of this.cards) {
+                    if (c.selectedOption && c.selectedOption.isGamePiece) {
+                      c.tokenBackUrl = this.getTokenPairBackUrl(c.selectedOption.urlFront, c.name);
+                    }
+                  }
                 }
-              }
+            } finally {
+                this.isLoadingCards = false;
             }
         },
         applySessionRelatedTokenSelections(cards) {
@@ -866,6 +2357,47 @@ export default {
     height: 14rem;
 }
 
+.app-layout {
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: minmax(13rem, 15%) minmax(0, 85%);
+}
+
+.app-layout-sidebar-collapsed {
+    grid-template-columns: 2.4rem minmax(0, 1fr);
+}
+
+.app-sidebar {
+    position: sticky;
+    top: 0.6rem;
+    z-index: 320;
+}
+
+.app-main {
+    min-width: 0;
+}
+
+.loading-surface {
+    position: relative;
+
+    &.loading::after {
+        align-items: center;
+        background: rgb(255 255 255 / 70%);
+        border: 1px solid #dadee4;
+        border-radius: 4px;
+        color: #5755d9;
+        content: "Loading...";
+        display: flex;
+        font-size: 0.7rem;
+        font-weight: 600;
+        inset: 0;
+        justify-content: center;
+        min-height: 2.2rem;
+        position: absolute;
+        z-index: 500;
+    }
+}
+
 @media (max-width: 600px) {
     #deck-input {
         height: 10rem;
@@ -874,6 +2406,280 @@ export default {
 
 #config {
     top: 0.6rem;
+}
+
+#local-session-menu {
+    min-width: 0;
+}
+
+.local-session-menu-body {
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    margin-top: 0.4rem;
+    padding: 0.4rem;
+}
+
+.local-session-list {
+    margin-top: 0.4rem;
+    max-height: 18rem;
+    overflow-y: auto;
+}
+
+.local-session-item {
+    display: block;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+
+    &.active {
+        background: #f1f1fc;
+        color: #5755d9;
+        font-weight: 600;
+    }
+}
+
+.analysis-card-list {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.analysis-card-row {
+    align-items: flex-start;
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.7rem;
+    grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr);
+    padding: 0.6rem;
+}
+
+.analysis-card-preview {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.analysis-card-image {
+    border-radius: 4px;
+    max-height: 21rem;
+    object-fit: contain;
+    width: 100%;
+}
+
+.analysis-card-name {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    font-weight: 600;
+}
+
+.analysis-card-stat-loader {
+    display: inline-block;
+    flex: 0 0 auto;
+    height: 0.8rem;
+    width: 0.8rem;
+}
+
+.analysis-grid-wrap {
+    min-width: 0;
+}
+
+.analysis-grid {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.analysis-grid th,
+.analysis-grid td {
+    font-size: 0.65rem;
+    line-height: 1.05;
+    padding: 0.18rem 0.22rem;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.analysis-grid th:first-child,
+.analysis-grid td:first-child {
+    text-align: left;
+    width: 5.5rem;
+}
+
+.analysis-cell-active {
+    background: #f1f1fc;
+    color: #5755d9;
+    font-weight: 600;
+}
+
+.value-view {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.value-cast {
+    display: block;
+}
+
+.value-zone-options,
+.value-activated-options {
+    display: grid;
+    gap: 0.28rem;
+    margin-top: 0.1rem;
+}
+
+.value-line {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+.value-line-header {
+    color: #475467;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.value-rows {
+    display: grid;
+    gap: 0.22rem;
+}
+
+.value-row {
+    align-items: stretch;
+    border-radius: 5px;
+    display: grid;
+    font-size: 0.62rem;
+    grid-template-columns: minmax(4.6rem, 1.15fr) minmax(3.3rem, 0.7fr) minmax(5.4rem, 1.4fr) minmax(3.2rem, 0.65fr);
+    line-height: 1.2;
+    overflow: hidden;
+}
+
+.value-row-base {
+    background: #eef4ff;
+    border: 1px solid #84adff;
+    color: #194185;
+    font-size: 0.66rem;
+    max-width: 100%;
+    min-height: 2.2rem;
+}
+
+.value-row-bonus {
+    background: #ecfdf3;
+    border: 1px solid #75e0a7;
+    color: #067647;
+    max-width: 94%;
+}
+
+.value-row-permanent {
+    background: #f4f3ff;
+    border: 1px solid #bdb4fe;
+    color: #5925dc;
+    max-width: 92%;
+}
+
+.value-row-zone {
+    background: #fff6ed;
+    border: 1px solid #f7b27a;
+    color: #9c2a10;
+    max-width: 94%;
+}
+
+.value-row-activated {
+    background: #ecfeff;
+    border: 1px solid #67e8f9;
+    color: #155e75;
+    max-width: 94%;
+}
+
+.value-row-cell {
+    align-items: center;
+    border-left: 1px solid rgb(255 255 255 / 70%);
+    display: flex;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 0.25rem 0.32rem;
+}
+
+.value-row-cell:first-child {
+    border-left: 0;
+}
+
+.value-row-condition {
+    align-items: flex-start;
+    flex-direction: column;
+    font-weight: 700;
+}
+
+.value-row-cost {
+    font-weight: 700;
+    gap: 0.18rem;
+}
+
+.mana-symbol {
+    font-size: 0.92rem;
+}
+
+.value-row-effect {
+    font-weight: 600;
+}
+
+.value-row-state {
+    font-weight: 700;
+    justify-content: center;
+}
+
+.value-row-source {
+    color: currentColor;
+    font-size: 0.56rem;
+    font-weight: 600;
+    opacity: 0.76;
+}
+
+.value-speed {
+    color: currentColor;
+    font-size: 0.78rem;
+    opacity: 0.74;
+}
+
+@media (max-width: 960px) {
+    .app-layout,
+    .app-layout-sidebar-collapsed {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .app-sidebar {
+        position: static;
+    }
+
+    .analysis-card-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+html.dark-theme {
+    .local-session-menu-body {
+        border-color: #667085;
+    }
+
+    .analysis-card-row {
+        border-color: #667085;
+    }
+
+    .analysis-cell-active {
+        background: #303742;
+    }
+
+    .loading-surface.loading::after {
+        background: rgb(48 55 66 / 75%);
+        border-color: #667085;
+    }
+
+    .local-session-item.active {
+        background: #303742;
+    }
 }
 
 #slot-usage {
@@ -914,6 +2720,71 @@ html.dark-theme {
     left: 0.6rem;
     padding: 0.2rem;
     line-height: 1rem;
+}
+
+.print-order-modal-container {
+    max-width: 58rem;
+}
+
+.print-order-page + .print-order-page {
+    margin-top: 1rem;
+}
+
+.print-order-grid {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.print-order-grid-backs {
+    direction: rtl;
+}
+
+.print-order-slot {
+    aspect-ratio: 63 / 88;
+    background: #eef0f3;
+    border: 2px solid #bcc3ce;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 0;
+    overflow: hidden;
+    padding: 0;
+    position: relative;
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.45;
+    }
+}
+
+.print-order-slot-selected {
+    border-color: #5755d9;
+    box-shadow: 0 0 0 3px rgba(87, 85, 217, 0.24);
+}
+
+.print-order-image {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+}
+
+.print-order-index {
+    background: rgba(48, 55, 66, 0.84);
+    border-radius: 2px;
+    color: #fff;
+    font-size: 0.65rem;
+    left: 0.25rem;
+    line-height: 1;
+    padding: 0.18rem 0.24rem;
+    position: absolute;
+    top: 0.25rem;
+}
+
+html.dark-theme {
+    .print-order-slot {
+        background: #303742;
+        border-color: #667085;
+    }
 }
 
 #arnold {
