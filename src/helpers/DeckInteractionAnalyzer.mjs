@@ -456,6 +456,32 @@ export function synergyInteractionDetail(card, relatedCard, categoryKey) {
     return '';
 }
 
+export function synergyActionCost(card, relatedCard, categoryKey) {
+    const { source, feeder } = synergySourceAndFeeder(card, relatedCard, categoryKey);
+
+    if (/^synergy\.combat\./.test(categoryKey)) {
+        return manaCostValue(manaCostOf(feeder));
+    }
+
+    if (/^synergy\.graveyardPlay\./.test(categoryKey)) {
+        return classLevelCost(source, 2);
+    }
+
+    if (/^synergy\.creatureTokens\./.test(categoryKey)) {
+        return classLevelCost(source, 3);
+    }
+
+    if (/^synergy\.battlefieldToHand\./.test(categoryKey)) {
+        return manaCostValue(manaCostOf(source));
+    }
+
+    if (/^synergy\.entersBattlefield\./.test(categoryKey)) {
+        return manaCostValue(manaCostOf(source)) + manaCostValue(manaCostOf(feeder));
+    }
+
+    return null;
+}
+
 export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
     const summary = {
         instantRemoval: [],

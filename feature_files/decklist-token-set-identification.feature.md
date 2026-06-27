@@ -52,7 +52,9 @@
 - Cards that create creature tokens are analyzed for combat as virtual creatures using the generated token's power, toughness, type line, oracle text, and keywords.
 - Analysis separates synergy source rows from synergy feeder rows. Combat, graveyard-play, and creature-token synergies are shown separately, include trigger-card mana costs in cell details, and empty rows are hidden per analyzed card.
 - Class-card synergy costs are cumulative: level 2 includes the initial class cost plus the level 2 cost, and level 3 includes the initial class cost plus each prior level cost.
+- Mana-value synergy columns use the synergy action cost rather than the synergy card's own mana value.
 - Bounce spells that return target permanents to hand create a battlefield-to-hand synergy with permanents, and permanents with enters-the-battlefield text get an additional ETB recast synergy.
+- Synergy action rows use action labels instead of generic feed labels.
 - Loading surfaces appear over session, deck, and dataset-loading areas while local data is being read.
 - Analysis card rows show a small loading indicator beside each card name while card data, set data, or meta-session data is loading.
 - The left session/config rail can collapse toward the left; when open it uses a narrow sidebar layout so analysis content keeps most of the page width.

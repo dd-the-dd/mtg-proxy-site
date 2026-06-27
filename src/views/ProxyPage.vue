@@ -755,6 +755,7 @@ import {
     cardAnalysisCharacteristics,
     isCreatureCard,
     summarizeCreatureInteractions,
+    synergyActionCost,
     synergyInteractionDetail
 } from "../helpers/DeckInteractionAnalyzer.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
@@ -795,11 +796,11 @@ const analysisCategories = [
     { key: "combat.defending.attackerSurvives", label: "Blk lose" },
     { key: "combat.defending.damageOnPlayer", label: "No block" },
     { key: "synergy.combat.sources", label: "Synergy combat", targetGroup: "cards" },
-    { key: "synergy.combat.feeders", label: "Feeds combat", targetGroup: "cards" },
-    { key: "synergy.graveyardPlay.sources", label: "Synergy grave", targetGroup: "cards" },
-    { key: "synergy.graveyardPlay.feeders", label: "Feeds grave", targetGroup: "cards" },
-    { key: "synergy.creatureTokens.sources", label: "Synergy tokens", targetGroup: "cards" },
-    { key: "synergy.creatureTokens.feeders", label: "Feeds tokens", targetGroup: "cards" },
+    { key: "synergy.combat.feeders", label: "I/S:Feed 1+1 UED", targetGroup: "cards" },
+    { key: "synergy.graveyardPlay.sources", label: "S:Grave to hand", targetGroup: "cards" },
+    { key: "synergy.graveyardPlay.feeders", label: "S:Grave to hand", targetGroup: "cards" },
+    { key: "synergy.creatureTokens.sources", label: "S:Token engine", targetGroup: "cards" },
+    { key: "synergy.creatureTokens.feeders", label: "S:Token engine", targetGroup: "cards" },
     { key: "synergy.battlefieldToHand.sources", label: "Synergy hand", targetGroup: "cards" },
     { key: "synergy.battlefieldToHand.feeders", label: "Feeds hand", targetGroup: "cards" },
     { key: "synergy.entersBattlefield.sources", label: "Synergy ETB", targetGroup: "cards" },
@@ -1129,7 +1130,9 @@ export default {
                         key: isNinePlus ? '9-plus' : String(manaValue),
                         sortValue: manaValue,
                         label: isNinePlus ? '9+ mana' : `${manaValue} mana`,
+                        actionCost: manaValue,
                         cards: [],
+                        allCards: sessions.flatMap(session => session.state?.cards ?? []),
                         creatures: [],
                         totalCards: selectedCardTotal,
                     };
@@ -1213,6 +1216,9 @@ export default {
                 return value?.[part];
             }, summary) ?? [];
         },
+        isSynergyCategory(category) {
+            return category.key.startsWith('synergy.');
+        },
         visibleAnalysisCategories(card) {
             return this.analysisCategories.filter(category => {
                 return this.analysisColumns.some(column => this.cardAnalysisCell(card, category, column).active);
@@ -1232,13 +1238,25 @@ export default {
         },
         cardAnalysisCell(card, category, column) {
             const targets = category.targetGroup === "cards" ? column.cards ?? [] : column.creatures ?? [];
+            const sourceTargets = this.isSynergyCategory(category) && column.allCards
+                ? column.allCards
+                : targets;
             const matchedCards = [];
             let matchedQuantity = 0;
             const denominator = column.totalCards ?? this.countCards(column.creatures);
 
-            for (const targetCard of targets) {
+            for (const targetCard of sourceTargets) {
                 const summary = summarizeCreatureInteractions([card], targetCard);
                 if (this.cardsForAnalysisCategory(summary, category.key).length > 0) {
+                    const actionCost = synergyActionCost(card, targetCard, category.key);
+                    if (
+                        this.isSynergyCategory(category) &&
+                        column.actionCost !== undefined &&
+                        (actionCost === null || Math.min(Math.floor(actionCost), 9) !== column.actionCost)
+                    ) {
+                        continue;
+                    }
+
                     const detail = synergyInteractionDetail(card, targetCard, category.key);
                     const detailText = detail ? ` - ${detail}` : '';
                     matchedQuantity += targetCard.quantity ?? 1;

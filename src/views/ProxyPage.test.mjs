@@ -487,8 +487,9 @@ describe('Core Rendering', async () => {
         );
 
         expect(visibleLabels).toContain('Synergy combat');
-        expect(visibleLabels).toContain('Synergy grave');
-        expect(visibleLabels).toContain('Synergy tokens');
+        expect(visibleLabels).toContain('S:Grave to hand');
+        expect(visibleLabels).toContain('S:Token engine');
+        expect(visibleLabels).not.toContain('Feeds grave');
         expect(visibleLabels).not.toContain('Kill inst.');
         expect(cell.display).toBe('4');
         expect(cell.title).toContain('4x opt - I:Feed 1+1 UED cost 1');
@@ -508,6 +509,71 @@ describe('Core Rendering', async () => {
         expect(tokenCell.title).toContain('4x opt - S:Token engine cost 11');
 
         component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
+    test('Feature: Mana-value synergy columns use action cost instead of card mana value.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const opt = {
+            quantity: 1,
+            name: 'opt',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Instant',
+                oracleText: 'Scry 1. Draw a card.',
+                manaCost: '{U}',
+            },
+            setOptions: [],
+        };
+        const stormchaserTalent = {
+            quantity: 4,
+            name: "stormchaser's talent",
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Enchantment - Class',
+                oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.\n{3}{U}: Level 2\nWhen this Class becomes level 2, return target instant or sorcery card from your graveyard to your hand.\n{5}{U}: Level 3\nWhenever you cast an instant or sorcery spell, create a 1/1 Otter creature token with prowess.',
+                manaCost: '{U}',
+                relatedTokens: [
+                    {
+                        name: 'otter',
+                        typeLine: 'Token Creature - Otter',
+                        oracleText: 'Prowess',
+                        power: '1',
+                        toughness: '1',
+                    },
+                ],
+            },
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisMetric = 'count';
+        component.data.config.analysisColumnMode = 'manaValue';
+        component.data.config.analysisMatchupSessionId = 'all';
+        component.data.cards = [opt];
+        component.data.metaDeckStates = [
+            {
+                id: 'stormchaser-meta',
+                name: 'Stormchaser Meta',
+                state: {
+                    cards: [stormchaserTalent],
+                },
+            },
+        ];
+
+        const graveCategory = component.proxy.analysisCategories.find(category => category.key === 'synergy.graveyardPlay.feeders');
+        const tokenCategory = component.proxy.analysisCategories.find(category => category.key === 'synergy.creatureTokens.feeders');
+        const oneManaColumn = component.proxy.analysisColumns.find(column => column.key === '1');
+        const fiveManaColumn = component.proxy.analysisColumns.find(column => column.key === '5');
+        const ninePlusColumn = component.proxy.analysisColumns.find(column => column.key === '9-plus');
+
+        expect(component.ctx.cardAnalysisCell(opt, graveCategory, oneManaColumn).display).toBe('-');
+        expect(component.ctx.cardAnalysisCell(opt, graveCategory, fiveManaColumn).display).toBe('4');
+        expect(component.ctx.cardAnalysisCell(opt, tokenCategory, ninePlusColumn).display).toBe('4');
+
+        component.data.config.analysisMode = false;
+        component.data.config.analysisColumnMode = 'metaDeck';
         component.data.metaDeckStates = [];
         component.data.config.decklist = '4 Wild Nacatl';
         await component.ctx.loadCardList();
