@@ -47,18 +47,7 @@ describe('CardValueAnalyzer', () => {
         });
         expect(cast.values).toContainEqual({ label: 'Effect', value: 'Scry 1' });
         expect(cast.values).not.toContainEqual({ label: 'State', value: 'Card 0' });
-        expect(cast.permanentOptions).toContainEqual(expect.objectContaining({
-            condition: "stormchaser's talent class 1",
-            cost: '1',
-            costSymbols: ['1'],
-            effect: 'Combat pump +1/+1 UED',
-            quantity: 4,
-            source: "stormchaser's talent",
-            sourceLine: 'x4',
-            speed: 'Sorcery',
-            value: 'Creature improvement',
-        }));
-        expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Combat pump +1/+1 UED cost 1');
+        expect(cast.permanentOptions.map(option => option.detail)).not.toContain('S:Combat pump +1/+1 UED cost 1');
         expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Token engine cost 11');
         expect(cast.permanentOptions.map(option => option.detail)).not.toContain('S:Grave to hand cost 5');
         expect(value.zoneOptions).toContainEqual(expect.objectContaining({
@@ -70,6 +59,57 @@ describe('CardValueAnalyzer', () => {
         }));
         expect(cast.bonuses).toEqual([]);
         expect(cast.zoneChanges).toEqual([]);
+    });
+
+    test('Feature: Value analysis separates token generation from generated-token combat synergies.', () => {
+        const stormchaserTalent = card("stormchaser's talent", {
+            typeLine: 'Enchantment - Class',
+            oracleText: 'When this Class enters, create a 1/1 Otter creature token with prowess.\n{3}{U}: Level 2\nWhen this Class becomes level 2, return target instant or sorcery card from your graveyard to your hand.\n{5}{U}: Level 3\nWhenever you cast an instant or sorcery spell, create a 1/1 Otter creature token with prowess.',
+            manaCost: '{U}',
+            manaValue: 1,
+            relatedTokens: [
+                {
+                    name: 'otter',
+                    typeLine: 'Token Creature - Otter',
+                    oracleText: 'Prowess',
+                    power: '1',
+                    toughness: '1',
+                },
+            ],
+        });
+        const opt = card('opt', {
+            typeLine: 'Instant',
+            oracleText: 'Scry 1. Draw a card.',
+            manaCost: '{U}',
+            manaValue: 1,
+        });
+        const otter = card('otter', {
+            typeLine: 'Token Creature - Otter',
+            oracleText: 'Prowess',
+            power: '1',
+            toughness: '1',
+            isToken: true,
+            isGamePiece: true,
+        }, 1);
+
+        const stormchaserValue = analyzeCardValue(stormchaserTalent);
+        expect(stormchaserValue.castOptions[0].baseRows[0]).toMatchObject({
+            effect: 'Create 1/1 Otter with prowess',
+            value: 'Creature token generation; Card -1',
+        });
+
+        const optValue = analyzeCardValue(opt, [stormchaserTalent, otter]);
+        const permanentOptions = optValue.castOptions[0].permanentOptions;
+        expect(permanentOptions).toContainEqual(expect.objectContaining({
+            condition: 'otter',
+            effect: 'Combat pump +1/+1 UED',
+            source: 'otter',
+            value: 'Creature improvement',
+        }));
+        expect(permanentOptions).not.toContainEqual(expect.objectContaining({
+            condition: "stormchaser's talent class 1",
+            effect: 'Combat pump +1/+1 UED',
+        }));
     });
 
     test('Feature: Value analysis shows card loss for spells that do not draw.', () => {

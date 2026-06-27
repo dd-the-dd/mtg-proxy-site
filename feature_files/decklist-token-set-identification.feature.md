@@ -53,7 +53,7 @@
 - Mana-value analysis columns are fixed from `0 mana` through `8 mana` and `9+ mana`; each cell sums matching meta cards in that column rather than echoing the evaluated card quantity.
 - Analysis percentage cells divide matching meta-card count by the selected meta deck card count, not by the current column total.
 - Creature combat analysis accounts for flying/reach blocking restrictions, first strike, double strike, deathtouch, and simple unblockable text before classifying whether the attacker survives, defender survives, both die, both survive, or damage reaches the player.
-- Cards that create creature tokens are analyzed for combat as virtual creatures using the generated token's power, toughness, type line, oracle text, and keywords.
+- Cards that create creature tokens expose token creation as value, but do not inherit the generated token's combat stats or combat synergies; generated tokens carry their own combat and synergy characteristics when analyzed as separate game pieces.
 - Analysis separates synergy source rows from synergy feeder rows. Combat, graveyard-play, and creature-token synergies are shown separately, include trigger-card mana costs in cell details, and empty rows are hidden per analyzed card.
 - Combat synergy parsing uses source-card pump text, so Izzet cards such as Slickshot Show-Off show `+2/+0` while prowess-style cards show `+1/+1`.
 - Combat synergies provided by Class cards keep sorcery-speed detail labels even when the feeder spell is an instant.

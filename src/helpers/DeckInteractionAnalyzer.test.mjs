@@ -120,7 +120,7 @@ describe('DeckInteractionAnalyzer', () => {
         expect(summary.combat.defending.damageOnPlayer.map(item => item.name)).toEqual(['ground creature']);
     });
 
-    test('Feature: Token generators are analyzed in combat using generated creature token stats.', () => {
+    test('Feature: Token generators do not inherit generated creature token combat stats.', () => {
         const tokenMaker = card('raise the alarm', {
             typeLine: 'Instant',
             oracleText: 'Create two 1/1 white Soldier creature tokens.',
@@ -143,8 +143,8 @@ describe('DeckInteractionAnalyzer', () => {
 
         const summary = summarizeCreatureInteractions([tokenMaker], enemyCreature);
 
-        expect(summary.combat.attacking.bothDie.map(item => item.name)).toEqual(['raise the alarm']);
-        expect(summary.combat.defending.bothDie.map(item => item.name)).toEqual(['raise the alarm']);
+        expect(summary.combat.attacking.bothDie).toEqual([]);
+        expect(summary.combat.defending.bothDie).toEqual([]);
     });
 
     test('Feature: Stormchaser-style cards separate synergy sources from synergy feeders.', () => {
@@ -167,18 +167,25 @@ describe('DeckInteractionAnalyzer', () => {
             oracleText: 'Scry 1. Draw a card.',
             manaCost: '{U}',
         });
+        const otter = card('otter', {
+            typeLine: 'Token Creature - Otter',
+            oracleText: 'Prowess',
+            power: '1',
+            toughness: '1',
+        });
 
         const sourceSummary = summarizeCreatureInteractions([stormchaserTalent], opt);
         const feederSummary = summarizeCreatureInteractions([opt], stormchaserTalent);
+        const tokenFeederSummary = summarizeCreatureInteractions([opt], otter);
 
-        expect(sourceSummary.synergy.combat.sources.map(item => item.name)).toEqual(["stormchaser's talent"]);
+        expect(sourceSummary.synergy.combat.sources).toEqual([]);
         expect(sourceSummary.synergy.graveyardPlay.sources.map(item => item.name)).toEqual(["stormchaser's talent"]);
         expect(sourceSummary.synergy.creatureTokens.sources.map(item => item.name)).toEqual(["stormchaser's talent"]);
-        expect(feederSummary.synergy.combat.feeders.map(item => item.name)).toEqual(['opt']);
+        expect(feederSummary.synergy.combat.feeders).toEqual([]);
+        expect(tokenFeederSummary.synergy.combat.feeders.map(item => item.name)).toEqual(['opt']);
         expect(feederSummary.synergy.graveyardPlay.feeders.map(item => item.name)).toEqual(['opt']);
         expect(feederSummary.synergy.creatureTokens.feeders.map(item => item.name)).toEqual(['opt']);
-        expect(synergyInteractionDetail(stormchaserTalent, opt, 'synergy.combat.sources')).toBe('S:Combat pump +1/+1 UED cost 1');
-        expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.combat.feeders')).toBe('S:Combat pump +1/+1 UED cost 1');
+        expect(synergyInteractionDetail(opt, otter, 'synergy.combat.feeders')).toBe('I:Combat pump +1/+1 UED cost 1');
         expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.graveyardPlay.feeders')).toBe('S:Grave to hand cost 5');
         expect(synergyInteractionDetail(opt, stormchaserTalent, 'synergy.creatureTokens.feeders')).toBe('S:Token engine cost 11');
     });

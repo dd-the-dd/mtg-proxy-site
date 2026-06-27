@@ -313,28 +313,13 @@ function combatRepresentatives(card) {
         return [card];
     }
 
-    return (selected(card).relatedTokens ?? [])
-        .filter(token => /\bCreature\b/i.test(token.typeLine ?? ''))
-        .map(token => {
-            return {
-                name: card.name,
-                quantity: card.quantity,
-                selectedOption: token,
-            };
-        });
+    return [];
 }
 
 function pushOnce(cards, card) {
     if (!cards.includes(card)) {
         cards.push(card);
     }
-}
-
-function tokenHasProwess(card) {
-    return (selected(card).relatedTokens ?? []).some(token => {
-        return /\bCreature\b/i.test(token.typeLine ?? '') &&
-            /\bProwess\b/i.test(token.oracleText ?? '');
-    });
 }
 
 function combatPump(card) {
@@ -348,7 +333,7 @@ function combatPump(card) {
         };
     }
 
-    if (/\bProwess\b/i.test(oracleText) || tokenHasProwess(card)) {
+    if (isCreatureCard(card) && /\bProwess\b/i.test(oracleText)) {
         return {
             power: 1,
             toughness: 1,

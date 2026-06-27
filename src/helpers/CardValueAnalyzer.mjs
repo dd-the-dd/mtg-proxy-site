@@ -123,6 +123,26 @@ function plotCosts(card) {
         .map(match => match[1]);
 }
 
+function tokenQuantityText(quantity) {
+    if (!quantity || /^(?:a|an|one)$/i.test(quantity)) {
+        return '';
+    }
+
+    return `${quantity.toLowerCase()} `;
+}
+
+function creatureTokenEffects(card) {
+    const effects = [...textOf(card).matchAll(/\bcreate (?:(a|an|one|two|three|four|five|six|seven|eight|nine|ten|\d+) )?(\d+\/\d+) (?:[a-z]+ )*?([a-z][a-z-]*) creature tokens?(?: with ([^.]+))?/gi)]
+        .map(match => {
+            const quantity = tokenQuantityText(match[1]);
+            const tokenType = sentenceCase(match[3]);
+            const abilityText = match[4] ? ` with ${match[4].trim()}` : '';
+            return `Create ${quantity}${match[2]} ${tokenType}${abilityText}`;
+        });
+
+    return [...new Set(effects)];
+}
+
 function abilityLines(card) {
     return textOf(card)
         .split('\n')
@@ -406,7 +426,7 @@ function castEffectText(card, drawn, option = {}) {
         return 'Exile for later cast';
     }
 
-    const effects = [...qualityValues(card)];
+    const effects = [...creatureTokenEffects(card), ...qualityValues(card)];
     if (drawn > 0) {
         effects.push(`Draw ${drawn}`);
     }
@@ -422,6 +442,10 @@ function castEffectText(card, drawn, option = {}) {
 function castValueText(card, handValue, option = {}) {
     if (option.plotted) {
         return ['Delayed cast option', handValue].filter(Boolean).join('; ');
+    }
+
+    if (creatureTokenEffects(card).length > 0) {
+        return ['Creature token generation', handValue].filter(Boolean).join('; ');
     }
 
     if (qualityValues(card).length > 0) {

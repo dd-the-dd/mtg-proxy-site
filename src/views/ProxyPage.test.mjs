@@ -486,13 +486,13 @@ describe('Core Rendering', async () => {
             component.proxy.analysisColumns[0],
         );
 
-        expect(visibleLabels).toContain('Synergy combat');
+        expect(visibleLabels).not.toContain('Synergy combat');
         expect(visibleLabels).toContain('S:Grave to hand');
         expect(visibleLabels).toContain('S:Token engine');
         expect(visibleLabels).not.toContain('Feeds grave');
         expect(visibleLabels).not.toContain('Kill inst.');
-        expect(cell.display).toBe('4');
-        expect(cell.title).toContain('4x opt - S:Combat pump +1/+1 UED cost 1');
+        expect(cell.display).toBe('-');
+        expect(cell.title).toBe('');
 
         const graveCell = component.ctx.cardAnalysisCell(
             stormchaserTalent,
@@ -611,6 +611,19 @@ describe('Core Rendering', async () => {
                 ],
             },
         };
+        const otter = {
+            quantity: 1,
+            name: 'otter',
+            selectedOption: {
+                manaValue: 0,
+                typeLine: 'Token Creature - Otter',
+                oracleText: 'Prowess',
+                power: '1',
+                toughness: '1',
+                isToken: true,
+                isGamePiece: true,
+            },
+        };
 
         component.data.config.analysisMode = true;
         component.data.config.analysisView = 'value';
@@ -620,7 +633,7 @@ describe('Core Rendering', async () => {
                 id: 'value-meta',
                 name: 'Value Meta',
                 state: {
-                    cards: [stormchaserTalent],
+                    cards: [stormchaserTalent, otter],
                 },
             },
         ];
@@ -634,8 +647,8 @@ describe('Core Rendering', async () => {
         expect(valueText).not.toContain('Card 0');
         expect(wrapper.find('.value-row-base .ms-u').exists()).toBe(true);
         expect(wrapper.find('.value-row-base .ms-instant').exists()).toBe(true);
-        expect(wrapper.find('.value-rows-permanent').text()).toContain("stormchaser's talent class 1");
-        expect(wrapper.find('.value-rows-permanent').text()).toContain('x4');
+        expect(wrapper.find('.value-rows-permanent').text()).not.toContain("stormchaser's talent class 1");
+        expect(wrapper.find('.value-rows-permanent').text()).toContain('otter');
         expect(wrapper.find('.value-rows-permanent').text()).toContain('Combat pump +1/+1 UED');
         expect(wrapper.find('.value-rows-permanent').text()).toContain('Creature improvement');
         expect(wrapper.find('.value-rows-permanent').text()).not.toContain('Grave to hand');
