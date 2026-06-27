@@ -161,4 +161,136 @@ describe('CardValueAnalyzer', () => {
             value: 'Delayed cast option; Card -1',
         });
     });
+
+    test('Feature: Value analysis exposes activated abilities on permanents and lands.', () => {
+        const greatHall = card('great hall of the biblioplex', {
+            typeLine: 'Land',
+            oracleText: '{T}: Add {C}.\n{5}: If this land isn\'t a creature, it becomes a 2/4 Wizard creature with "Whenever you cast an instant or sorcery spell, this creature gets +1/+0 until end of turn."',
+            manaCost: '',
+            manaValue: 0,
+        });
+        const drakeHatcher = card('drake hatcher', {
+            typeLine: 'Creature - Human Wizard',
+            oracleText: 'Whenever you cast an instant or sorcery spell, put an incubation counter on this creature.\nRemove three incubation counters from this creature: Create a 2/2 blue Drake creature token with flying.',
+            manaCost: '{2}{U}',
+            manaValue: 3,
+        });
+
+        const hallValue = analyzeCardValue(greatHall);
+        expect(hallValue.castOptions).toEqual([]);
+        expect(hallValue.activatedOptions).toContainEqual(expect.objectContaining({
+            condition: 'Activated ability',
+            cost: '{T}',
+            costSymbols: ['T'],
+            effect: 'Add {C}',
+            speed: 'Sorcery',
+            value: 'Mana production',
+        }));
+        expect(hallValue.activatedOptions).toContainEqual(expect.objectContaining({
+            condition: 'Activated ability',
+            cost: '{5}',
+            costSymbols: ['5'],
+            effect: 'Become 2/4 Wizard creature',
+            value: 'Creature conversion; Creature improvement',
+        }));
+
+        const drakeValue = analyzeCardValue(drakeHatcher);
+        expect(drakeValue.activatedOptions).toContainEqual(expect.objectContaining({
+            condition: '3 incubation counters',
+            cost: 'Remove three incubation counters from this creature',
+            costSymbols: [],
+            effect: 'Create 2/2 Drake with flying',
+            value: 'Creature token generation',
+        }));
+    });
+
+    test('Feature: Activated ability parsing ignores reminder-text abilities granted to created tokens.', () => {
+        const pitilessPlunderer = card('pitiless plunderer', {
+            typeLine: 'Creature - Human Pirate',
+            oracleText: 'Whenever another creature you control dies, create a Treasure token. (It\'s an artifact with "{T}, Sacrifice this token: Add one mana of any color.")',
+            manaCost: '{3}{B}',
+            manaValue: 4,
+        });
+        const grimBackwoods = card('grim backwoods', {
+            typeLine: 'Land',
+            oracleText: '{T}: Add {C}.\n{2}{B}{G}, {T}, Sacrifice a creature: Draw a card.',
+            manaCost: '',
+            manaValue: 0,
+        });
+
+        expect(analyzeCardValue(pitilessPlunderer).activatedOptions).toEqual([]);
+        expect(analyzeCardValue(grimBackwoods).activatedOptions).toContainEqual(expect.objectContaining({
+            cost: '{2}{B}{G}, {T}, Sacrifice a creature',
+            effect: 'Draw a card',
+            value: 'Card draw',
+        }));
+    });
+
+    test('Feature: Value analysis shows passive ETB lifegain supplied by another permanent.', () => {
+        const lumaret = card('bogwater lumaret', {
+            typeLine: 'Creature - Frog',
+            oracleText: 'Whenever this creature or another creature you control enters, you gain 1 life.',
+            manaCost: '{B}{G}',
+            manaValue: 2,
+            power: '2',
+            toughness: '2',
+        }, 2);
+        const rat = card('persistent specimen', {
+            typeLine: 'Creature - Skeleton',
+            oracleText: '',
+            manaCost: '{B}',
+            manaValue: 1,
+            power: '1',
+            toughness: '1',
+        }, 4);
+
+        expect(analyzeCardValue(rat, [lumaret]).castOptions[0].permanentOptions).toContainEqual(expect.objectContaining({
+            condition: 'bogwater lumaret',
+            cost: '1',
+            effect: 'ETB life gain +1',
+            quantity: 2,
+            sourceLine: 'x2',
+            speed: 'Sorcery',
+            value: 'Life gain',
+        }));
+    });
+
+    test('Feature: Value analysis shows passive death payoffs supplied by another permanent.', () => {
+        const bloodArtist = card('blood artist', {
+            typeLine: 'Creature - Vampire',
+            oracleText: 'Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.',
+            manaCost: '{1}{B}',
+            manaValue: 2,
+            power: '0',
+            toughness: '1',
+        });
+        const pitilessPlunderer = card('pitiless plunderer', {
+            typeLine: 'Creature - Human Pirate',
+            oracleText: 'Whenever another creature you control dies, create a Treasure token.',
+            manaCost: '{3}{B}',
+            manaValue: 4,
+            power: '1',
+            toughness: '4',
+        });
+        const rat = card('persistent specimen', {
+            typeLine: 'Creature - Skeleton',
+            oracleText: '',
+            manaCost: '{B}',
+            manaValue: 1,
+            power: '1',
+            toughness: '1',
+        });
+
+        const options = analyzeCardValue(rat, [bloodArtist, pitilessPlunderer]).castOptions[0].permanentOptions;
+        expect(options).toContainEqual(expect.objectContaining({
+            condition: 'blood artist',
+            effect: 'Death drain +1',
+            value: 'Life drain',
+        }));
+        expect(options).toContainEqual(expect.objectContaining({
+            condition: 'pitiless plunderer',
+            effect: 'Death treasure',
+            value: 'Treasure generation',
+        }));
+    });
 });

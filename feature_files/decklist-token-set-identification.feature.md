@@ -58,6 +58,10 @@
 - Combat synergy parsing uses source-card pump text, so Izzet cards such as Slickshot Show-Off show `+2/+0` while prowess-style cards show `+1/+1`.
 - Value analysis can render alternate cast options such as kicker and plot; kicker options can unlock mana-spent threshold synergies such as Colorstorm Stallion's copy-token trigger.
 - Card selection effects with word-number text, such as looking at the top two or three cards, count as card quality improvement.
+- Value analysis renders activated ability rows for permanents and lands, including tap mana abilities, creature-conversion abilities, counter-spend token creation, and other board-action abilities.
+- Stored local-session cards are hydrated from the minimized dataset on restore so older saved sessions regain analysis fields such as mana cost, mana value, characteristics, related tokens, and related game pieces without losing their selected printing.
+- Passive ETB lifegain sources, such as creatures that gain life whenever another creature enters, create value rows on creature and creature-token-generating feeders.
+- Passive creature-death payoff sources, such as Blood Artist or Pitiless Plunderer, create value rows on creature feeders and classify drain, Treasure, damage, draw, or generic death payoff value.
 - Class-card synergy costs are cumulative: level 2 includes the initial class cost plus the level 2 cost, and level 3 includes the initial class cost plus each prior level cost.
 - Mana-value synergy columns use the synergy action cost rather than the synergy card's own mana value.
 - Bounce spells that return target permanents to hand create a battlefield-to-hand synergy with permanents, and permanents with enters-the-battlefield text get an additional ETB recast synergy.

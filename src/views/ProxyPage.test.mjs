@@ -655,6 +655,40 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Value view renders activated ability rows for permanents.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const greatHall = {
+            quantity: 1,
+            name: 'great hall of the biblioplex',
+            selectedOption: {
+                manaValue: 0,
+                typeLine: 'Land',
+                oracleText: '{T}: Add {C}.\n{5}: If this land isn\'t a creature, it becomes a 2/4 Wizard creature with "Whenever you cast an instant or sorcery spell, this creature gets +1/+0 until end of turn."',
+                manaCost: '',
+            },
+            setOptions: [],
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisView = 'value';
+        component.data.cards = [greatHall];
+
+        await wrapper.vm.$nextTick();
+
+        const activatedRows = wrapper.find('.value-rows-activated');
+        expect(wrapper.find('.value-activated-options').text()).toContain('Activated abilities');
+        expect(activatedRows.text()).toContain('Add {C}');
+        expect(activatedRows.text()).toContain('Mana production');
+        expect(activatedRows.text()).toContain('Become 2/4 Wizard creature');
+        expect(activatedRows.text()).toContain('Creature conversion; Creature improvement');
+        expect(activatedRows.find('.ms-tap').exists()).toBe(true);
+
+        component.data.config.analysisView = 'interaction';
+        component.data.config.analysisMode = false;
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
     test('Feature: Bounce synergy rows identify permanents and ETB recast targets.', async () => {
         const component = wrapper.getCurrentComponent();
         const boomerang = {

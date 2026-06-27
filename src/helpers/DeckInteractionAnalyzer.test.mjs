@@ -226,4 +226,57 @@ describe('DeckInteractionAnalyzer', () => {
         expect(synergyInteractionDetail(boomerang, stormchaserTalent, 'synergy.battlefieldToHand.sources')).toBe('I:Battlefield to hand draw cost 2');
         expect(synergyInteractionDetail(boomerang, stormchaserTalent, 'synergy.entersBattlefield.sources')).toBe('I:ETB recast cost 3');
     });
+
+    test('Feature: ETB lifegain passives identify creatures as feeders.', () => {
+        const lumaret = card('bogwater lumaret', {
+            typeLine: 'Creature - Frog',
+            oracleText: 'Whenever this creature or another creature you control enters, you gain 1 life.',
+            manaCost: '{B}{G}',
+            power: '2',
+            toughness: '2',
+        });
+        const rat = card('persistent specimen', {
+            typeLine: 'Creature - Skeleton',
+            oracleText: '',
+            manaCost: '{B}',
+            power: '1',
+            toughness: '1',
+        });
+
+        const sourceSummary = summarizeCreatureInteractions([lumaret], rat);
+        const feederSummary = summarizeCreatureInteractions([rat], lumaret);
+
+        expect(sourceSummary.synergy.etbLifeGain.sources.map(item => item.name)).toEqual(['bogwater lumaret']);
+        expect(feederSummary.synergy.etbLifeGain.feeders.map(item => item.name)).toEqual(['persistent specimen']);
+        expect(synergyInteractionDetail(rat, lumaret, 'synergy.etbLifeGain.feeders')).toBe('S:ETB life gain +1 cost 1');
+    });
+
+    test('Feature: Creature death passives identify creatures as sacrifice-value feeders.', () => {
+        const bloodArtist = card('blood artist', {
+            typeLine: 'Creature - Vampire',
+            oracleText: 'Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.',
+            manaCost: '{1}{B}',
+            power: '0',
+            toughness: '1',
+        });
+        const pitilessPlunderer = card('pitiless plunderer', {
+            typeLine: 'Creature - Human Pirate',
+            oracleText: 'Whenever another creature you control dies, create a Treasure token.',
+            manaCost: '{3}{B}',
+            power: '1',
+            toughness: '4',
+        });
+        const rat = card('persistent specimen', {
+            typeLine: 'Creature - Skeleton',
+            oracleText: '',
+            manaCost: '{B}',
+            power: '1',
+            toughness: '1',
+        });
+
+        expect(summarizeCreatureInteractions([rat], bloodArtist).synergy.creatureDeathValue.feeders.map(item => item.name)).toEqual(['persistent specimen']);
+        expect(summarizeCreatureInteractions([rat], pitilessPlunderer).synergy.creatureDeathValue.feeders.map(item => item.name)).toEqual(['persistent specimen']);
+        expect(synergyInteractionDetail(rat, bloodArtist, 'synergy.creatureDeathValue.feeders')).toBe('S:Death drain +1 cost 1');
+        expect(synergyInteractionDetail(rat, pitilessPlunderer, 'synergy.creatureDeathValue.feeders')).toBe('S:Death treasure cost 1');
+    });
 });

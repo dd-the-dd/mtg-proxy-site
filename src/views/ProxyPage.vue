@@ -687,6 +687,40 @@
                 </div>
               </div>
               <div
+                v-if="valueAnalysis(card).activatedOptions.length"
+                class="value-activated-options"
+              >
+                <div class="value-line-header">
+                  Activated abilities
+                </div>
+                <div class="value-rows value-rows-activated">
+                  <div
+                    v-for="(activated, activatedIndex) in valueAnalysis(card).activatedOptions"
+                    :key="`activated-${cardIndex}-${activatedIndex}`"
+                    class="value-row value-row-activated"
+                  >
+                    <div class="value-row-cell value-row-condition">
+                      {{ activated.condition }}
+                    </div>
+                    <div class="value-row-cell value-row-cost">
+                      <i
+                        v-for="(symbol, symbolIndex) in activated.costSymbols"
+                        :key="`activated-cost-${cardIndex}-${activatedIndex}-${symbolIndex}`"
+                        class="ms ms-cost mana-symbol"
+                        :class="manaSymbolClass(symbol)"
+                        :title="symbol"
+                      />
+                    </div>
+                    <div class="value-row-cell value-row-effect">
+                      {{ activated.effect || '-' }}
+                    </div>
+                    <div class="value-row-cell value-row-state">
+                      {{ activated.value || '-' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
                 v-if="valueAnalysis(card).zoneOptions.length"
                 class="value-zone-options"
               >
@@ -959,7 +993,7 @@ const analysisCategories = [
     { key: "combat.defending.attackerSurvives", label: "Blk lose" },
     { key: "combat.defending.damageOnPlayer", label: "No block" },
     { key: "synergy.combat.sources", label: "Synergy combat", targetGroup: "cards" },
-    { key: "synergy.combat.feeders", label: "I/S:Feed 1+1 UED", targetGroup: "cards" },
+    { key: "synergy.combat.feeders", label: "I/S:Combat pump", targetGroup: "cards" },
     { key: "synergy.graveyardPlay.sources", label: "S:Grave to hand", targetGroup: "cards" },
     { key: "synergy.graveyardPlay.feeders", label: "S:Grave to hand", targetGroup: "cards" },
     { key: "synergy.creatureTokens.sources", label: "S:Token engine", targetGroup: "cards" },
@@ -968,6 +1002,10 @@ const analysisCategories = [
     { key: "synergy.battlefieldToHand.feeders", label: "Feeds hand", targetGroup: "cards" },
     { key: "synergy.entersBattlefield.sources", label: "Synergy ETB", targetGroup: "cards" },
     { key: "synergy.entersBattlefield.feeders", label: "Feeds ETB", targetGroup: "cards" },
+    { key: "synergy.etbLifeGain.sources", label: "Synergy life ETB", targetGroup: "cards" },
+    { key: "synergy.etbLifeGain.feeders", label: "Feeds life ETB", targetGroup: "cards" },
+    { key: "synergy.creatureDeathValue.sources", label: "Synergy death", targetGroup: "cards" },
+    { key: "synergy.creatureDeathValue.feeders", label: "Feeds death", targetGroup: "cards" },
 ];
 
 function createDefaultConfig() {
@@ -1446,6 +1484,10 @@ export default {
             return analyzeCardValue(card, this.selectedMetaDeckStates.flatMap(session => session.state?.cards ?? []));
         },
         manaSymbolClass(symbol) {
+            if (String(symbol).toUpperCase() === 'T') {
+                return 'ms-tap';
+            }
+
             return `ms-${String(symbol).toLowerCase().replaceAll('/', '')}`;
         },
         speedSymbolClass(speed) {
@@ -1532,6 +1574,7 @@ export default {
             }
 
             this.cards = this.cloneForStorage(state?.cards ?? []);
+            await this.hydrateStoredCards(this.cards);
             this.errors = this.cloneForStorage(state?.errors ?? []);
             this.sessionSetSelections = this.cloneForStorage(state?.sessionSetSelections ?? {});
             this.nextTokenBackIndex = state?.nextTokenBackIndex ?? 0;
@@ -1602,6 +1645,7 @@ export default {
                 this.metaDeckStates = await Promise.all(
                     metaSessions.map(session => this.localSessionStorage.loadSession(session.id)),
                 );
+                await Promise.all(this.metaDeckStates.map(session => this.hydrateStoredCards(session.state?.cards ?? [])));
             } finally {
                 this.isLoadingSessions = false;
             }
@@ -1954,6 +1998,68 @@ export default {
             this.isLoadingSets = false;
           }
         },
+        datasetSetOption(option) {
+            return {
+                name: `${this.sets[option.setCode]} (${option.collectorNumber})`,
+                setCode: option.setCode,
+                collectorNumber: option.collectorNumber,
+                urlFront: option.urlFront,
+                urlBack: option.urlBack,
+                isDigital: option.isDigital,
+                isPromo: option.isPromo,
+                isToken: option.isToken,
+                isGamePiece: option.isGamePiece,
+                typeLine: option.typeLine,
+                oracleText: option.oracleText,
+                manaCost: option.manaCost,
+                manaValue: option.manaValue,
+                power: option.power,
+                toughness: option.toughness,
+                analysisCharacteristics: cardAnalysisCharacteristics(option),
+                relatedTokens: option.relatedTokens,
+                relatedGamePieces: option.relatedGamePieces,
+            };
+        },
+        mergeDefinedOptionFields(baseOption, savedOption = {}) {
+            const merged = { ...baseOption };
+            for (const [key, value] of Object.entries(savedOption)) {
+                if (value !== undefined && value !== null) {
+                    merged[key] = value;
+                }
+            }
+
+            return merged;
+        },
+        async hydrateStoredCards(cards = []) {
+            if (cards.length === 0) {
+                return;
+            }
+
+            const dataset = await ScryfallDatasetAsync();
+            this.sets = Object.keys(this.sets).length > 0 ? this.sets : dataset.sets;
+
+            for (const card of cards) {
+                const cardLookup = dataset.cards?.[card.name];
+                if (!cardLookup) {
+                    continue;
+                }
+
+                const setOptions = cardLookup.map(option => this.datasetSetOption(option));
+                card.setOptions = setOptions;
+
+                if (!card.selectedOption) {
+                    card.selectedOption = setOptions[0];
+                    continue;
+                }
+
+                const matchedOption = setOptions.find(option => {
+                    return option.setCode === card.selectedOption.setCode &&
+                        String(option.collectorNumber) === String(card.selectedOption.collectorNumber);
+                }) ?? setOptions[0];
+
+                card.selectedOption = this.mergeDefinedOptionFields(matchedOption, card.selectedOption);
+            }
+        },
         initConfig() {
             this.config.includeDigital = bindStorage('includeDigital', (v) => v === "true");
             this.config.includePromo = bindStorage('includePromo', (v) => v === "true");
@@ -2156,29 +2262,7 @@ export default {
                     const options = {
                         quantity: line.quantity,
                         name: line.name,
-                        setOptions: cardLookup.map((option) => {
-                            // This could use spread syntax, but it's nice to have all the property names in this file explicitly.
-                            return {
-                                name: `${this.sets[option.setCode]} (${option.collectorNumber})`,
-                                setCode: option.setCode,
-                                collectorNumber: option.collectorNumber,
-                                urlFront: option.urlFront,
-                                urlBack: option.urlBack,
-                                isDigital: option.isDigital,
-                                isPromo: option.isPromo,
-                                isToken: option.isToken,
-                                isGamePiece: option.isGamePiece,
-                                typeLine: option.typeLine,
-                                oracleText: option.oracleText,
-                                manaCost: option.manaCost,
-                                manaValue: option.manaValue,
-                                power: option.power,
-                                toughness: option.toughness,
-                                analysisCharacteristics: cardAnalysisCharacteristics(option),
-                                relatedTokens: option.relatedTokens,
-                                relatedGamePieces: option.relatedGamePieces,
-                            };
-                        }),
+                        setOptions: cardLookup.map(option => this.datasetSetOption(option)),
                         isBasic: basicLands.includes(line.name.toLowerCase()),
                         isSideboard: Boolean(line.isSideboard),
                         requestedSet: line.set,
@@ -2439,7 +2523,8 @@ export default {
     display: block;
 }
 
-.value-zone-options {
+.value-zone-options,
+.value-activated-options {
     display: grid;
     gap: 0.28rem;
     margin-top: 0.1rem;
@@ -2499,6 +2584,13 @@ export default {
     background: #fff6ed;
     border: 1px solid #f7b27a;
     color: #9c2a10;
+    max-width: 94%;
+}
+
+.value-row-activated {
+    background: #ecfeff;
+    border: 1px solid #67e8f9;
+    color: #155e75;
     max-width: 94%;
 }
 

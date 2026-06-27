@@ -1,6 +1,7 @@
 import {
     synergyActionCost,
     synergyInteractionDetail,
+    synergyValueCategory,
     summarizeCreatureInteractions
 } from './DeckInteractionAnalyzer.mjs';
 
@@ -17,7 +18,14 @@ function typeLineOf(card) {
 }
 
 function manaCostOf(card) {
-    return selected(card).manaCost ?? '';
+    const selectedCard = selected(card);
+    if (selectedCard.manaCost !== undefined) {
+        return selectedCard.manaCost;
+    }
+
+    return Number.isFinite(Number(selectedCard.manaValue))
+        ? `{${Math.max(0, Math.floor(Number(selectedCard.manaValue)))}}`
+        : '';
 }
 
 function manaSymbols(cost) {
@@ -26,6 +34,10 @@ function manaSymbols(cost) {
 
 function numericCostSymbols(cost) {
     return cost === '' ? [] : [cost];
+}
+
+function sentenceCase(value) {
+    return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function addManaCosts(...costs) {
@@ -97,7 +109,8 @@ function castSpeed(card) {
 }
 
 function isCastableSpell(card) {
-    return !/\bLand\b/i.test(typeLineOf(card)) && manaCostOf(card) !== '';
+    const selectedCard = selected(card);
+    return !selectedCard.isGamePiece && !selectedCard.isToken && !/\bLand\b/i.test(typeLineOf(card)) && manaCostOf(card) !== '';
 }
 
 function kickerCosts(card) {
@@ -110,11 +123,211 @@ function plotCosts(card) {
         .map(match => match[1]);
 }
 
+function abilityLines(card) {
+    return textOf(card)
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+}
+
+function cleanAbilityText(value) {
+    return value
+        .replace(/^[("]+/, '')
+        .replace(/[.)"]+$/, '')
+        .trim();
+}
+
+function normalizedAbilityCost(cost) {
+    if (/^(cycling|basic landcycling|landcycling|equip)\b/i.test(cost)) {
+        return cost.split(' (')[0].trim();
+    }
+
+    return cost;
+}
+
+function isActivatedAbilityCost(cost) {
+    if (/^(whenever|when|at the beginning|until end of turn|enchanted|equipped|if\b)/i.test(cost)) {
+        return false;
+    }
+
+    return /(\{[^}]+\}|^remove\b|^sacrifice\b|^discard\b|^pay\b|^cycling\b|^basic landcycling\b|^landcycling\b|^equip\b|^[+\u2212-]\d+)/i.test(cost);
+}
+
+function activatedAbilityParts(line) {
+    if (/^level\s+\d+/i.test(line)) {
+        return null;
+    }
+
+    const separatorIndex = line.indexOf(':');
+    if (separatorIndex === -1) {
+        return null;
+    }
+
+    const cost = normalizedAbilityCost(cleanAbilityText(line.slice(0, separatorIndex)));
+    const effect = cleanAbilityText(line.slice(separatorIndex + 1));
+    if (cost === '' || effect === '' || /^level\s+\d+/i.test(effect) || !isActivatedAbilityCost(cost)) {
+        return null;
+    }
+
+    return { cost, effect };
+}
+
+function activatedCondition(cost) {
+    const counters = /remove (\d+|one|two|three|four|five|six|seven|eight|nine|ten) ([^.:\n]+? counters?) from/i.exec(cost);
+    if (counters) {
+        return `${numberWordValue(counters[1])} ${counters[2].toLowerCase()}`;
+    }
+
+    return 'Activated ability';
+}
+
+function activatedEffectText(effect) {
+    const mana = /\badd ({[^}]+}|one mana(?: of any color)?)/i.exec(effect);
+    if (mana) {
+        return `Add ${mana[1]}`;
+    }
+
+    const become = /\bbecomes? (?:a |an )?([^."“”]+? creature)(?: with\b| until\b|\.|$)/i.exec(effect);
+    if (become) {
+        return `Become ${sentenceCase(become[1].trim())}`;
+    }
+
+    const createToken = /\bcreate (?:a |an )?(\d+\/\d+) [^.]*?\b([A-Za-z]+) creature token(?: with ([^.]+))?/i.exec(effect);
+    if (createToken) {
+        return `Create ${createToken[1]} ${createToken[2]}${createToken[3] ? ` with ${createToken[3]}` : ''}`;
+    }
+
+    if (/\bcreate a token that's a copy of/i.test(effect)) {
+        return 'Create token copy';
+    }
+
+    const destroy = /\bdestroy target ([^.]+)/i.exec(effect);
+    if (destroy) {
+        return `Destroy target ${destroy[1]}`;
+    }
+
+    const search = /\bsearch your library for ([^.]+)/i.exec(effect);
+    if (search) {
+        return `Search library for ${search[1]}`;
+    }
+
+    const attach = /\battach to target ([^.]+)/i.exec(effect);
+    if (attach) {
+        return `Attach to target ${attach[1]}`;
+    }
+
+    const returnFromGraveyard = /\breturn target ([^.]+?) from your graveyard to the battlefield/i.exec(effect);
+    if (returnFromGraveyard) {
+        return `Reanimate ${returnFromGraveyard[1]}`;
+    }
+
+    const returnThisFromGraveyard = /\breturn this card from your graveyard to the battlefield/i.exec(effect);
+    if (returnThisFromGraveyard) {
+        return 'Reanimate this card';
+    }
+
+    const returnFromGraveyardToHand = /\breturn (?:a |target )?([^.]+?) from your graveyard to your hand/i.exec(effect);
+    if (returnFromGraveyardToHand) {
+        return `Return ${returnFromGraveyardToHand[1]} to hand`;
+    }
+
+    if (/\bdraw a card\b/i.test(effect)) {
+        return 'Draw a card';
+    }
+
+    const counter = /\bput (?:a |\d+ )?\+1\/\+1 counters? on ([^.]+)/i.exec(effect);
+    if (counter) {
+        return `Put +1/+1 counter on ${counter[1]}`;
+    }
+
+    const firstSentence = effect.split('.')[0]?.trim() ?? effect;
+    return sentenceCase(firstSentence);
+}
+
+function activatedValueText(effect) {
+    const values = [];
+
+    if (/\badd\b.*\bmana\b|\badd \{[^}]+\}/i.test(effect)) {
+        values.push('Mana production');
+    }
+
+    if (/\bbecomes?\b.*\bcreature\b/i.test(effect)) {
+        values.push('Creature conversion');
+    }
+
+    if (/\bcreate\b.*\bcreature token\b/i.test(effect)) {
+        values.push('Creature token generation');
+    }
+
+    if (/\bcreate a token that's a copy of/i.test(effect)) {
+        values.push('Token copy');
+    }
+
+    if (/\bdestroy target\b/i.test(effect)) {
+        values.push('Removal');
+    }
+
+    if (/\bsearch your library\b/i.test(effect)) {
+        values.push('Ramp/fixing');
+    }
+
+    if (/\battach to target\b/i.test(effect)) {
+        values.push('Equipment attachment');
+    }
+
+    if (/\breturn target\b.*\bfrom your graveyard to the battlefield\b/i.test(effect)) {
+        values.push('Reanimation');
+    }
+
+    if (/\breturn this card from your graveyard to the battlefield\b/i.test(effect)) {
+        values.push('Reanimation');
+    }
+
+    if (/\breturn (?:a |target )?.*from your graveyard to your hand\b/i.test(effect)) {
+        values.push('Card recursion');
+    }
+
+    if (/\bdiscard a card\b/i.test(effect) && /\bdraw a card\b/i.test(effect)) {
+        values.push('Card filtering');
+    } else if (/\bdraw a card\b/i.test(effect)) {
+        values.push('Card draw');
+    }
+
+    if (/\bput\b.*\+1\/\+1 counters?\b|\bgets \+\d+\/\+\d+/i.test(effect)) {
+        values.push('Creature improvement');
+    }
+
+    if (/\byou gain \d+ life\b/i.test(effect)) {
+        values.push('Life gain');
+    }
+
+    return [...new Set(values)].join('; ');
+}
+
+function activatedOptionsForCard(card) {
+    return abilityLines(card)
+        .map(activatedAbilityParts)
+        .filter(Boolean)
+        .map(({ cost, effect }) => {
+            return {
+                condition: activatedCondition(cost),
+                cost,
+                costSymbols: manaSymbols(cost),
+                effect: activatedEffectText(effect),
+                speed: 'Sorcery',
+                value: activatedValueText(effect),
+            };
+        })
+        .filter(option => option.value !== '' || option.costSymbols.length > 0);
+}
+
 function synergyCategories() {
     return [
         'synergy.combat.feeders',
         'synergy.graveyardPlay.feeders',
         'synergy.creatureTokens.feeders',
+        'synergy.etbLifeGain.feeders',
+        'synergy.creatureDeathValue.feeders',
         'synergy.battlefieldToHand.sources',
         'synergy.entersBattlefield.sources',
     ];
@@ -242,7 +455,7 @@ function isThresholdTokenCopyDetail(detail) {
     return /Copy token cost 5/.test(detail);
 }
 
-function synergyValueText(key) {
+function synergyValueText(key, card, relatedCard) {
     if (/^synergy\.combat\./.test(key)) {
         return 'Creature improvement';
     }
@@ -253,6 +466,21 @@ function synergyValueText(key) {
 
     if (/^synergy\.creatureTokens\./.test(key)) {
         return 'Creature token generation';
+    }
+
+    if (/^synergy\.etbLifeGain\./.test(key)) {
+        return 'Life gain';
+    }
+
+    if (/^synergy\.creatureDeathValue\./.test(key)) {
+        const valueCategory = synergyValueCategory(card, relatedCard, key);
+        return {
+            lifeDrain: 'Life drain',
+            treasure: 'Treasure generation',
+            damage: 'Direct damage',
+            cardDraw: 'Card draw',
+            payoff: 'Death payoff',
+        }[valueCategory] ?? 'Death payoff';
     }
 
     if (/^synergy\.battlefieldToHand\./.test(key)) {
@@ -315,9 +543,13 @@ function castOptionsForCard(card, drawn, handValue) {
 }
 
 export function analyzeCardValue(card, relatedCards = []) {
+    const activatedOptions = activatedOptionsForCard(card);
+
     if (!isCastableSpell(card)) {
         return {
             castOptions: [],
+            zoneOptions: [],
+            activatedOptions,
         };
     }
 
@@ -369,7 +601,7 @@ export function analyzeCardValue(card, relatedCards = []) {
                 source: relatedCard.name,
                 sourceLine: `x${relatedCard.quantity ?? 1}`,
                 speed: synergySpeed(key, relatedCard, detail),
-                value: synergyValueText(key),
+                value: synergyValueText(key, card, relatedCard),
             };
 
             const kind = synergyKind(key);
@@ -398,5 +630,6 @@ export function analyzeCardValue(card, relatedCards = []) {
     return {
         castOptions,
         zoneOptions,
+        activatedOptions,
     };
 }

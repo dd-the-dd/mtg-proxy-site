@@ -13,7 +13,14 @@ function typeLineOf(card) {
 }
 
 function manaCostOf(card) {
-    return selected(card).manaCost ?? '';
+    const selectedCard = selected(card);
+    if (selectedCard.manaCost !== undefined) {
+        return selectedCard.manaCost;
+    }
+
+    return Number.isFinite(Number(selectedCard.manaValue))
+        ? `{${Math.max(0, Math.floor(Number(selectedCard.manaValue)))}}`
+        : '';
 }
 
 function manaCostValue(cost) {
@@ -285,6 +292,8 @@ function createSynergySummary() {
         creatureTokens: emptySynergySummary(),
         battlefieldToHand: emptySynergySummary(),
         entersBattlefield: emptySynergySummary(),
+        etbLifeGain: emptySynergySummary(),
+        creatureDeathValue: emptySynergySummary(),
     };
 }
 
@@ -386,6 +395,67 @@ function isEntersBattlefieldSynergyTarget(card) {
     return /\b(?:when|whenever) (?:this|[^.]+) enters\b/i.test(textOf(card));
 }
 
+function isCreatureEnterLifeGainSource(card) {
+    return /whenever (?:this creature or another creature you control|another creature you control|a creature you control) enters\b[^.]*you gain (\d+) life/i.test(textOf(card));
+}
+
+function creatureEnterLifeGainAmount(card) {
+    const match = /whenever (?:this creature or another creature you control|another creature you control|a creature you control) enters\b[^.]*you gain (\d+) life/i.exec(textOf(card));
+    return match ? parseInt(match[1], 10) : 1;
+}
+
+function createsCreatureToken(card) {
+    return /\bcreate\b[^.]*\b\d+\/\d+\b[^.]*\bcreature tokens?\b/i.test(textOf(card));
+}
+
+function feedsCreatureEnter(card) {
+    return isCreatureCard(card) || createsCreatureToken(card);
+}
+
+function isCreatureDeathValueSource(card) {
+    const oracleText = textOf(card);
+    return /whenever (?:this creature or another creature|another creature(?: you control)?|a creature|one or more creatures)[^.]*\bdies\b/i.test(oracleText) ||
+        /for each creature that died this turn/i.test(oracleText);
+}
+
+function creatureDeathEffect(source) {
+    const oracleText = textOf(source);
+    const drain = /loses (\d+) life and you gain \1 life/i.exec(oracleText);
+    if (drain) {
+        return {
+            detail: `Death drain +${drain[1]}`,
+            value: 'lifeDrain',
+        };
+    }
+
+    if (/create (?:a )?Treasure token/i.test(oracleText)) {
+        return {
+            detail: 'Death treasure',
+            value: 'treasure',
+        };
+    }
+
+    const damage = /deals? (\d+) damage/i.exec(oracleText);
+    if (damage) {
+        return {
+            detail: `Death ping +${damage[1]}`,
+            value: 'damage',
+        };
+    }
+
+    if (/draw a card/i.test(oracleText)) {
+        return {
+            detail: 'Death draw',
+            value: 'cardDraw',
+        };
+    }
+
+    return {
+        detail: 'Death payoff',
+        value: 'payoff',
+    };
+}
+
 function addSynergyMatches(summary, card, relatedCard) {
     if (combatSynergyApplies(card, relatedCard)) {
         pushOnce(summary.synergy.combat.sources, card);
@@ -425,6 +495,22 @@ function addSynergyMatches(summary, card, relatedCard) {
 
     if (isBattlefieldToHandSynergySource(relatedCard) && isPermanentCard(card) && isEntersBattlefieldSynergyTarget(card)) {
         pushOnce(summary.synergy.entersBattlefield.feeders, card);
+    }
+
+    if (isCreatureEnterLifeGainSource(card) && feedsCreatureEnter(relatedCard)) {
+        pushOnce(summary.synergy.etbLifeGain.sources, card);
+    }
+
+    if (isCreatureEnterLifeGainSource(relatedCard) && feedsCreatureEnter(card)) {
+        pushOnce(summary.synergy.etbLifeGain.feeders, card);
+    }
+
+    if (isCreatureDeathValueSource(card) && isCreatureCard(relatedCard)) {
+        pushOnce(summary.synergy.creatureDeathValue.sources, card);
+    }
+
+    if (isCreatureDeathValueSource(relatedCard) && isCreatureCard(card)) {
+        pushOnce(summary.synergy.creatureDeathValue.feeders, card);
     }
 }
 
@@ -496,6 +582,16 @@ export function synergyInteractionDetail(card, relatedCard, categoryKey) {
         return `${speed}:ETB recast cost ${manaCostValue(manaCostOf(source)) + manaCostValue(manaCostOf(feeder))}`;
     }
 
+    if (/^synergy\.etbLifeGain\./.test(categoryKey)) {
+        const speed = spellSpeed(feeder) === 'instant' ? 'I' : 'S';
+        return `${speed}:ETB life gain +${creatureEnterLifeGainAmount(source)} cost ${manaCostValue(manaCostOf(feeder))}`;
+    }
+
+    if (/^synergy\.creatureDeathValue\./.test(categoryKey)) {
+        const speed = spellSpeed(feeder) === 'instant' ? 'I' : 'S';
+        return `${speed}:${creatureDeathEffect(source).detail} cost ${manaCostValue(manaCostOf(feeder))}`;
+    }
+
     return '';
 }
 
@@ -526,7 +622,25 @@ export function synergyActionCost(card, relatedCard, categoryKey) {
         return manaCostValue(manaCostOf(source)) + manaCostValue(manaCostOf(feeder));
     }
 
+    if (/^synergy\.etbLifeGain\./.test(categoryKey)) {
+        return manaCostValue(manaCostOf(feeder));
+    }
+
+    if (/^synergy\.creatureDeathValue\./.test(categoryKey)) {
+        return manaCostValue(manaCostOf(feeder));
+    }
+
     return null;
+}
+
+export function synergyValueCategory(card, relatedCard, categoryKey) {
+    const { source } = synergySourceAndFeeder(card, relatedCard, categoryKey);
+
+    if (/^synergy\.creatureDeathValue\./.test(categoryKey)) {
+        return creatureDeathEffect(source).value;
+    }
+
+    return '';
 }
 
 export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
