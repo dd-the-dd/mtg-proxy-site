@@ -638,10 +638,14 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.value-rows-permanent').text()).toContain('x4');
         expect(wrapper.find('.value-rows-permanent').text()).toContain('Feed 1+1 UED');
         expect(wrapper.find('.value-rows-permanent').text()).toContain('Creature improvement');
-        expect(wrapper.find('.value-rows-permanent').text()).toContain('Grave to hand');
+        expect(wrapper.find('.value-rows-permanent').text()).not.toContain('Grave to hand');
         expect(wrapper.find('.value-rows-permanent .ms-1').exists()).toBe(true);
+        expect(wrapper.find('.value-zone-options').text()).toContain('Zone movement');
+        expect(wrapper.find('.value-zone-options').text()).toContain("stormchaser's talent class 2");
+        expect(wrapper.find('.value-zone-options').text()).toContain('Grave to hand');
+        expect(wrapper.find('.value-zone-options').text()).toContain('Card recursion');
+        expect(wrapper.find('.value-zone-options .ms-5').exists()).toBe(true);
         expect(wrapper.find('.value-rows-bonus').exists()).toBe(false);
-        expect(wrapper.find('.value-rows-zone').exists()).toBe(false);
 
         component.data.config.analysisView = 'interaction';
         component.data.config.analysisMode = false;

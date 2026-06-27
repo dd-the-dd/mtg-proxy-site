@@ -684,36 +684,44 @@
                       </div>
                     </div>
                   </div>
-                  <div v-if="option.zoneChanges.length" class="value-rows value-rows-zone">
-                    <div
-                      v-for="(zone, zoneIndex) in option.zoneChanges"
-                      :key="`zone-${zoneIndex}`"
-                      class="value-row value-row-zone"
-                    >
-                      <div class="value-row-cell value-row-condition">
-                        {{ zone.condition }}
-                      </div>
-                      <div class="value-row-cell value-row-cost">
-                        <i
-                          v-if="zone.speed === 'Instant' || zone.speed === 'Flash'"
-                          class="ms value-speed"
-                          :class="speedSymbolClass(zone.speed)"
-                          :title="zone.speed"
-                        />
-                        <i
-                          v-for="(symbol, symbolIndex) in zone.costSymbols"
-                          :key="`zone-cost-${zoneIndex}-${symbolIndex}`"
-                          class="ms ms-cost mana-symbol"
-                          :class="manaSymbolClass(symbol)"
-                          :title="symbol"
-                        />
-                      </div>
-                      <div class="value-row-cell value-row-effect">
-                        {{ zone.effect || zone.detail }}
-                      </div>
-                      <div class="value-row-cell value-row-state">
-                        {{ zone.value || '-' }}
-                      </div>
+                </div>
+              </div>
+              <div
+                v-if="valueAnalysis(card).zoneOptions.length"
+                class="value-zone-options"
+              >
+                <div class="value-line-header">
+                  Zone movement
+                </div>
+                <div class="value-rows value-rows-zone">
+                  <div
+                    v-for="(zone, zoneIndex) in valueAnalysis(card).zoneOptions"
+                    :key="`zone-${cardIndex}-${zoneIndex}`"
+                    class="value-row value-row-zone"
+                  >
+                    <div class="value-row-cell value-row-condition">
+                      {{ zone.condition }}
+                    </div>
+                    <div class="value-row-cell value-row-cost">
+                      <i
+                        v-if="zone.speed === 'Instant' || zone.speed === 'Flash'"
+                        class="ms value-speed"
+                        :class="speedSymbolClass(zone.speed)"
+                        :title="zone.speed"
+                      />
+                      <i
+                        v-for="(symbol, symbolIndex) in zone.costSymbols"
+                        :key="`zone-cost-${cardIndex}-${zoneIndex}-${symbolIndex}`"
+                        class="ms ms-cost mana-symbol"
+                        :class="manaSymbolClass(symbol)"
+                        :title="symbol"
+                      />
+                    </div>
+                    <div class="value-row-cell value-row-effect">
+                      {{ zone.effect || zone.detail }}
+                    </div>
+                    <div class="value-row-cell value-row-state">
+                      {{ zone.value || '-' }}
                     </div>
                   </div>
                 </div>
@@ -2429,6 +2437,12 @@ export default {
 
 .value-cast {
     display: block;
+}
+
+.value-zone-options {
+    display: grid;
+    gap: 0.28rem;
+    margin-top: 0.1rem;
 }
 
 .value-line {

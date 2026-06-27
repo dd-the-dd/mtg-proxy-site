@@ -58,16 +58,16 @@ describe('CardValueAnalyzer', () => {
             speed: 'Instant',
             value: 'Creature improvement',
         }));
-        expect(cast.permanentOptions).toContainEqual(expect.objectContaining({
+        expect(cast.permanentOptions.map(option => option.detail)).toContain('I:Feed 1+1 UED cost 1');
+        expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Token engine cost 11');
+        expect(cast.permanentOptions.map(option => option.detail)).not.toContain('S:Grave to hand cost 5');
+        expect(value.zoneOptions).toContainEqual(expect.objectContaining({
             condition: "stormchaser's talent class 2",
             cost: '5',
             effect: 'Grave to hand',
             quantity: 4,
             value: 'Card recursion',
         }));
-        expect(cast.permanentOptions.map(option => option.detail)).toContain('I:Feed 1+1 UED cost 1');
-        expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Token engine cost 11');
-        expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Grave to hand cost 5');
         expect(cast.bonuses).toEqual([]);
         expect(cast.zoneChanges).toEqual([]);
     });

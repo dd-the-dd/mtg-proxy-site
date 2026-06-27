@@ -94,12 +94,12 @@ function hasSynergy(summary, key) {
 }
 
 function synergyKind(key) {
-    if (/\.feeders$/.test(key)) {
-        return 'permanent';
-    }
-
     if (/graveyardPlay|battlefieldToHand|entersBattlefield/.test(key)) {
         return 'zone';
+    }
+
+    if (/\.feeders$/.test(key)) {
+        return 'permanent';
     }
 
     return 'bonus';
@@ -212,7 +212,7 @@ export function analyzeCardValue(card, relatedCards = []) {
 
     const bonuses = [];
     const permanentOptions = [];
-    const zoneChanges = [];
+    const zoneOptions = [];
 
     for (const relatedCard of relatedCards) {
         const summary = summarizeCreatureInteractions([card], relatedCard);
@@ -240,7 +240,7 @@ export function analyzeCardValue(card, relatedCards = []) {
             if (kind === 'permanent') {
                 permanentOptions.push(entry);
             } else if (kind === 'zone') {
-                zoneChanges.push(entry);
+                zoneOptions.push(entry);
             } else {
                 bonuses.push(entry);
             }
@@ -268,8 +268,9 @@ export function analyzeCardValue(card, relatedCards = []) {
                 values,
                 bonuses,
                 permanentOptions,
-                zoneChanges,
+                zoneChanges: [],
             },
         ],
+        zoneOptions,
     };
 }
