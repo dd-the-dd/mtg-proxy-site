@@ -595,41 +595,108 @@
                   <div class="value-line-header">
                     {{ option.label }} / {{ option.speed }}
                   </div>
-                  <div class="value-items value-items-base">
-                    <span
-                      v-for="item in option.values"
-                      :key="`${item.label}-${item.value}`"
-                      class="value-pill value-pill-base"
+                  <div class="value-rows value-rows-base">
+                    <div
+                      v-for="(row, rowIndex) in option.baseRows"
+                      :key="`base-row-${rowIndex}`"
+                      class="value-row value-row-base"
                     >
-                      {{ item.label }} {{ item.value }}
-                    </span>
+                      <div class="value-row-cell value-row-condition">
+                        {{ row.condition }}
+                      </div>
+                      <div class="value-row-cell value-row-cost">
+                        <span
+                          v-if="row.speed === 'Instant' || row.speed === 'Flash'"
+                          class="value-speed"
+                          :title="row.speed"
+                        >⚡</span>
+                        {{ row.cost }}
+                      </div>
+                      <div class="value-row-cell value-row-effect">
+                        {{ row.effect || '-' }}
+                      </div>
+                      <div class="value-row-cell value-row-state">
+                        {{ row.value || '-' }}
+                      </div>
+                    </div>
                   </div>
-                  <div v-if="option.bonuses.length" class="value-items value-items-bonus">
-                    <span
+                  <div v-if="option.bonuses.length" class="value-rows value-rows-bonus">
+                    <div
                       v-for="(bonus, bonusIndex) in option.bonuses"
                       :key="`bonus-${bonusIndex}`"
-                      class="value-pill value-pill-bonus"
+                      class="value-row value-row-bonus"
                     >
-                      {{ bonus.condition }} / {{ bonus.detail }}
-                    </span>
+                      <div class="value-row-cell value-row-condition">
+                        {{ bonus.condition }}
+                      </div>
+                      <div class="value-row-cell value-row-cost">
+                        <span
+                          v-if="bonus.speed === 'Instant' || bonus.speed === 'Flash'"
+                          class="value-speed"
+                          :title="bonus.speed"
+                        >⚡</span>
+                        {{ bonus.cost }}
+                      </div>
+                      <div class="value-row-cell value-row-effect">
+                        {{ bonus.effect || bonus.detail }}
+                      </div>
+                      <div class="value-row-cell value-row-state">
+                        {{ bonus.value || '-' }}
+                      </div>
+                    </div>
                   </div>
-                  <div v-if="option.permanentOptions.length" class="value-items value-items-permanent">
-                    <span
+                  <div v-if="option.permanentOptions.length" class="value-rows value-rows-permanent">
+                    <div
                       v-for="(permanent, permanentIndex) in option.permanentOptions"
                       :key="`permanent-${permanentIndex}`"
-                      class="value-pill value-pill-permanent"
+                      class="value-row value-row-permanent"
                     >
-                      {{ permanent.condition }} / {{ permanent.detail }}
-                    </span>
+                      <div class="value-row-cell value-row-condition">
+                        <div>{{ permanent.condition }}</div>
+                        <div class="value-row-source">
+                          x{{ permanent.quantity }} {{ permanent.source }}
+                        </div>
+                      </div>
+                      <div class="value-row-cell value-row-cost">
+                        <span
+                          v-if="permanent.speed === 'Instant' || permanent.speed === 'Flash'"
+                          class="value-speed"
+                          :title="permanent.speed"
+                        >⚡</span>
+                        {{ permanent.cost }}
+                      </div>
+                      <div class="value-row-cell value-row-effect">
+                        {{ permanent.effect }}
+                      </div>
+                      <div class="value-row-cell value-row-state">
+                        {{ permanent.value || '-' }}
+                      </div>
+                    </div>
                   </div>
-                  <div v-if="option.zoneChanges.length" class="value-items value-items-zone">
-                    <span
+                  <div v-if="option.zoneChanges.length" class="value-rows value-rows-zone">
+                    <div
                       v-for="(zone, zoneIndex) in option.zoneChanges"
                       :key="`zone-${zoneIndex}`"
-                      class="value-pill value-pill-zone"
+                      class="value-row value-row-zone"
                     >
-                      {{ zone.condition }} / {{ zone.detail }}
-                    </span>
+                      <div class="value-row-cell value-row-condition">
+                        {{ zone.condition }}
+                      </div>
+                      <div class="value-row-cell value-row-cost">
+                        <span
+                          v-if="zone.speed === 'Instant' || zone.speed === 'Flash'"
+                          class="value-speed"
+                          :title="zone.speed"
+                        >⚡</span>
+                        {{ zone.cost }}
+                      </div>
+                      <div class="value-row-cell value-row-effect">
+                        {{ zone.effect || zone.detail }}
+                      </div>
+                      <div class="value-row-cell value-row-state">
+                        {{ zone.value || '-' }}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2378,41 +2445,100 @@ export default {
     font-weight: 700;
 }
 
-.value-items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
+.value-rows {
+    display: grid;
+    gap: 0.22rem;
 }
 
-.value-pill {
-    border-radius: 4px;
+.value-row {
+    align-items: stretch;
+    border-radius: 5px;
+    display: grid;
     font-size: 0.62rem;
+    grid-template-columns: minmax(4.6rem, 1.15fr) minmax(3.3rem, 0.7fr) minmax(5.4rem, 1.4fr) minmax(3.2rem, 0.65fr);
     line-height: 1.2;
-    padding: 0.15rem 0.25rem;
+    overflow: hidden;
 }
 
-.value-pill-base {
+.value-row-base {
     background: #eef4ff;
     border: 1px solid #84adff;
     color: #194185;
+    font-size: 0.66rem;
+    max-width: 100%;
+    min-height: 2.2rem;
 }
 
-.value-pill-bonus {
+.value-row-bonus {
     background: #ecfdf3;
     border: 1px solid #75e0a7;
     color: #067647;
+    max-width: 94%;
 }
 
-.value-pill-permanent {
+.value-row-permanent {
     background: #f4f3ff;
     border: 1px solid #bdb4fe;
     color: #5925dc;
+    max-width: 92%;
 }
 
-.value-pill-zone {
+.value-row-zone {
     background: #fff6ed;
     border: 1px solid #f7b27a;
     color: #9c2a10;
+    max-width: 94%;
+}
+
+.value-row-cell {
+    align-items: center;
+    border-left: 1px solid rgb(255 255 255 / 70%);
+    display: flex;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 0.25rem 0.32rem;
+}
+
+.value-row-cell:first-child {
+    border-left: 0;
+}
+
+.value-row-condition {
+    align-items: flex-start;
+    flex-direction: column;
+    font-weight: 700;
+}
+
+.value-row-cost {
+    font-weight: 700;
+    gap: 0.18rem;
+}
+
+.value-row-effect {
+    font-weight: 600;
+}
+
+.value-row-state {
+    font-weight: 700;
+    justify-content: center;
+}
+
+.value-row-source {
+    color: currentColor;
+    font-size: 0.56rem;
+    font-weight: 600;
+    opacity: 0.76;
+}
+
+.value-speed {
+    align-items: center;
+    background: rgb(255 255 255 / 70%);
+    border-radius: 50%;
+    display: inline-flex;
+    font-size: 0.62rem;
+    height: 1rem;
+    justify-content: center;
+    width: 1rem;
 }
 
 @media (max-width: 960px) {

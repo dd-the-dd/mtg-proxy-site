@@ -64,6 +64,10 @@ function qualityValues(card) {
 }
 
 function castSpeed(card) {
+    if (/\bflash\b/i.test(textOf(card))) {
+        return 'Flash';
+    }
+
     return /\bInstant\b/i.test(typeLineOf(card)) ? 'Instant' : 'Sorcery';
 }
 
@@ -98,6 +102,22 @@ function synergyKind(key) {
 }
 
 function synergyCondition(key, card, relatedCard) {
+    if (/\.feeders$/.test(key) && /\bClass\b/i.test(typeLineOf(relatedCard))) {
+        if (/graveyardPlay/.test(key)) {
+            return 'Permanent in play class 2';
+        }
+
+        if (/creatureTokens/.test(key)) {
+            return 'Permanent in play class 3';
+        }
+
+        return 'Permanent in play class 1';
+    }
+
+    if (/\.feeders$/.test(key)) {
+        return 'Permanent in play';
+    }
+
     if (/graveyardPlay/.test(key)) {
         return 'Class L2 unlocked';
     }
@@ -110,6 +130,31 @@ function synergyCondition(key, card, relatedCard) {
     return actionCost === null ? '' : `Action ${actionCost}`;
 }
 
+function stateValue(handDelta) {
+    if (handDelta === 0) {
+        return '';
+    }
+
+    return `Card ${handDelta > 0 ? `+${handDelta}` : handDelta}`;
+}
+
+function castEffectText(card, drawn) {
+    const effects = [...qualityValues(card)];
+    if (drawn > 0) {
+        effects.push(`Draw ${drawn}`);
+    }
+
+    return effects.join(', ');
+}
+
+function detailSpeed(detail) {
+    return /^I:/.test(detail) ? 'Instant' : 'Sorcery';
+}
+
+function detailEffect(detail) {
+    return detail.replace(/^[IS]:/, '').replace(/\scost \d+$/, '');
+}
+
 export function analyzeCardValue(card, relatedCards = []) {
     if (!isCastableSpell(card)) {
         return {
@@ -119,12 +164,14 @@ export function analyzeCardValue(card, relatedCards = []) {
 
     const drawn = drawCount(card);
     const handDelta = -1 + drawn;
-    const values = [
-        { label: 'Hand', value: handDelta > 0 ? `+${handDelta}` : String(handDelta) },
-    ];
+    const values = [];
+    const handValue = stateValue(handDelta);
+    if (handValue !== '') {
+        values.push({ label: 'State', value: handValue });
+    }
 
     for (const quality of qualityValues(card)) {
-        values.push({ label: 'Quality', value: quality });
+        values.push({ label: 'Effect', value: quality });
     }
 
     const bonuses = [];
@@ -138,10 +185,16 @@ export function analyzeCardValue(card, relatedCards = []) {
                 continue;
             }
 
+            const detail = synergyInteractionDetail(card, relatedCard, key);
             const entry = {
                 condition: synergyCondition(key, card, relatedCard),
-                detail: synergyInteractionDetail(card, relatedCard, key),
+                cost: String(synergyActionCost(card, relatedCard, key) ?? ''),
+                detail,
+                effect: detailEffect(detail),
+                quantity: relatedCard.quantity ?? 1,
                 source: relatedCard.name,
+                speed: detailSpeed(detail),
+                value: '',
             };
 
             const kind = synergyKind(key);
@@ -163,6 +216,15 @@ export function analyzeCardValue(card, relatedCards = []) {
                 costValue: manaCostValue(manaCostOf(card)),
                 speed: castSpeed(card),
                 symbols: manaSymbols(manaCostOf(card)),
+                baseRows: [
+                    {
+                        condition: 'Cast',
+                        cost: manaCostOf(card),
+                        effect: castEffectText(card, drawn),
+                        speed: castSpeed(card),
+                        value: handValue,
+                    },
+                ],
                 values,
                 bonuses,
                 permanentOptions,

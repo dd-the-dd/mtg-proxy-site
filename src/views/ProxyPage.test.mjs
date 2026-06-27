@@ -579,7 +579,7 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
-    test('Feature: Value view renders cast cost, base value, and permanent-provided options.', async () => {
+    test('Feature: Value view renders cast and permanent options as structured value rows.', async () => {
         const component = wrapper.getCurrentComponent();
         const opt = {
             quantity: 1,
@@ -629,15 +629,16 @@ describe('Core Rendering', async () => {
 
         const valueText = wrapper.find('.value-view').text();
         expect(valueText).toContain('U');
-        expect(valueText).toContain('Hand 0');
-        expect(valueText).toContain('Quality Scry 1');
-        expect(valueText).toContain('I:Feed 1+1 UED cost 1');
-        expect(valueText).toContain('S:Token engine cost 11');
-        expect(valueText).toContain('S:Grave to hand cost 5');
-        expect(wrapper.find('.value-items-permanent').text()).toContain('I:Feed 1+1 UED cost 1');
-        expect(wrapper.find('.value-items-permanent').text()).toContain('S:Grave to hand cost 5');
-        expect(wrapper.find('.value-items-bonus').exists()).toBe(false);
-        expect(wrapper.find('.value-items-zone').exists()).toBe(false);
+        expect(valueText).toContain('Cast');
+        expect(valueText).toContain('Scry 1, Draw 1');
+        expect(valueText).not.toContain('Card 0');
+        expect(wrapper.find('.value-row-base').text()).toContain('⚡');
+        expect(wrapper.find('.value-rows-permanent').text()).toContain('Permanent in play class 1');
+        expect(wrapper.find('.value-rows-permanent').text()).toContain('x4 stormchaser');
+        expect(wrapper.find('.value-rows-permanent').text()).toContain('Feed 1+1 UED');
+        expect(wrapper.find('.value-rows-permanent').text()).toContain('Grave to hand');
+        expect(wrapper.find('.value-rows-bonus').exists()).toBe(false);
+        expect(wrapper.find('.value-rows-zone').exists()).toBe(false);
 
         component.data.config.analysisView = 'interaction';
         component.data.config.analysisMode = false;
