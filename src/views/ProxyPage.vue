@@ -18,8 +18,7 @@
           <div
             v-if="localAppEnabled"
             id="local-session-menu"
-            class="mb-2 loading-surface"
-            :class="{ loading: isLoadingSessions }"
+            class="mb-2"
           >
             <button
               id="toggle-session-menu"
@@ -27,6 +26,11 @@
               @click="sessionsMenuOpen = !sessionsMenuOpen"
             >
               {{ sessionsMenuOpen ? 'Sessions' : 'Sessions >' }}
+              <LoadingSpinner
+                v-if="isLoadingSessionList"
+                size="sm"
+                label="Loading sessions"
+              />
             </button>
             <div v-if="sessionsMenuOpen" class="local-session-menu-body">
               <button
@@ -72,8 +76,7 @@
           <div class="mb-2" style="z-index: 300">
             <div
               id="config"
-              class="form-group p-sticky loading-surface"
-              :class="{ loading: isLoadingSets }"
+              class="form-group p-sticky"
             >
               <div class="form-group">
                 <textarea
@@ -91,8 +94,8 @@
                   id="submit-decklist"
                   class="btn btn-primary"
                   @click="loadCardList()"
-                  :class="{ loading: isLoadingCards }"
-                  :disabled="isLoadingCards"
+                  :class="{ loading: isLoadingDeckList || isHydratingCards }"
+                  :disabled="isLoadingDeckList || isHydratingCards"
                 >
                   {{ cards.length ? $t('buttons.update') : $t('buttons.submit') }}
                 </button>
@@ -480,7 +483,7 @@
         </div>
       </aside>
 
-      <main class="app-main loading-surface" :class="{ loading: isLoadingCards }">
+      <main class="app-main">
         <div
           class="empty"
           v-show="cards.length === 0 && errors.length === 0"
@@ -542,11 +545,16 @@
                   {{ card.quantity }}x {{ card.name }}
                   <span v-if="card.isSideboard" class="label label-secondary">Sideboard</span>
                   <span
-                    v-if="analysisStatsLoading"
-                    class="analysis-card-stat-loader loading loading-sm"
+                    v-if="isCardLoading(card)"
+                    class="analysis-card-stat-loader"
                     title="Loading analysis stats"
                     aria-label="Loading analysis stats"
-                  />
+                  >
+                    <LoadingSpinner
+                      size="sm"
+                      label="Loading card analysis"
+                    />
+                  </span>
                 </div>
                 <div class="text-small text-gray">
                   {{ card.selectedOption?.manaCost || 'No mana cost' }}
@@ -577,7 +585,16 @@
             </div>
             <div v-if="config.analysisView === 'value'" class="value-view">
               <div
-                v-for="(option, optionIndex) in valueAnalysis(card).castOptions"
+                v-if="isCardAnalysisLoading(card) && valueAnalysisForCard(card).castOptions.length === 0"
+                class="value-analysis-loading"
+              >
+                <LoadingSpinner
+                  size="sm"
+                  label="Loading card value"
+                />
+              </div>
+              <div
+                v-for="(option, optionIndex) in valueAnalysisForCard(card).castOptions"
                 :key="`value-${cardIndex}-${optionIndex}`"
                 class="value-cast"
               >
@@ -687,7 +704,7 @@
                 </div>
               </div>
               <div
-                v-if="valueAnalysis(card).activatedOptions.length"
+                v-if="valueAnalysisForCard(card).activatedOptions.length"
                 class="value-activated-options"
               >
                 <div class="value-line-header">
@@ -695,7 +712,7 @@
                 </div>
                 <div class="value-rows value-rows-activated">
                   <div
-                    v-for="(activated, activatedIndex) in valueAnalysis(card).activatedOptions"
+                    v-for="(activated, activatedIndex) in valueAnalysisForCard(card).activatedOptions"
                     :key="`activated-${cardIndex}-${activatedIndex}`"
                     class="value-row value-row-activated"
                   >
@@ -721,7 +738,7 @@
                 </div>
               </div>
               <div
-                v-if="valueAnalysis(card).zoneOptions.length"
+                v-if="valueAnalysisForCard(card).zoneOptions.length"
                 class="value-zone-options"
               >
                 <div class="value-line-header">
@@ -729,7 +746,7 @@
                 </div>
                 <div class="value-rows value-rows-zone">
                   <div
-                    v-for="(zone, zoneIndex) in valueAnalysis(card).zoneOptions"
+                    v-for="(zone, zoneIndex) in valueAnalysisForCard(card).zoneOptions"
                     :key="`zone-${cardIndex}-${zoneIndex}`"
                     class="value-row value-row-zone"
                   >
@@ -776,17 +793,25 @@
                 </thead>
                 <tbody>
                   <tr
-                    v-for="category in visibleAnalysisCategories(card)"
-                    :key="category.key"
+                    v-for="row in analysisRowsForCard(card)"
+                    :key="row.category.key"
                   >
-                    <td>{{ category.label }}</td>
+                    <td>{{ row.category.label }}</td>
                     <td
-                      v-for="column in analysisColumns"
-                      :key="`${category.key}-${column.key}`"
-                      :class="{ 'analysis-cell-active': cardAnalysisCell(card, category, column).active }"
-                      :title="cardAnalysisCell(card, category, column).title"
+                      v-for="{ column, cell } in row.cells"
+                      :key="`${row.category.key}-${column.key}`"
+                      :class="{ 'analysis-cell-active': cell.active }"
+                      :title="cell.title"
                     >
-                      {{ cardAnalysisCell(card, category, column).display }}
+                      {{ cell.display }}
+                    </td>
+                  </tr>
+                  <tr v-if="isCardAnalysisLoading(card) && analysisRowsForCard(card).length === 0">
+                    <td colspan="99" class="analysis-grid-loading-cell">
+                      <LoadingSpinner
+                        size="sm"
+                        label="Loading card analysis"
+                      />
                     </td>
                   </tr>
                 </tbody>
@@ -947,17 +972,24 @@
 
 <script>
 import { parseDecklist } from "../helpers/DecklistParser.mjs";
-import { analyzeCardValue } from "../helpers/CardValueAnalyzer.mjs";
 import {
     cardAnalysisCharacteristics,
     isCreatureCard,
-    summarizeCreatureInteractions,
-    synergyActionCost,
-    synergyInteractionDetail
+    summarizeCreatureInteractions
 } from "../helpers/DeckInteractionAnalyzer.mjs";
+import {
+    buildAnalysisCell,
+    buildAnalysisRowsForCard,
+    buildValueAnalysisForCard,
+    cardsForAnalysisCategory,
+    countCards,
+    isSynergyCategory
+} from "../helpers/AnalysisModel.mjs";
+import { createAnalysisWorkerClient } from "../helpers/AnalysisWorkerClient.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
 import { bindStorage } from "../helpers/VueLocalStorage.mjs";
 import ImageLoader from "../components/ImageLoader.vue";
+import LoadingSpinner from "../components/LoadingSpinner.vue";
 import HelpModal from "../components/HelpModal.vue";
 import ArnoldsApproval from "../components/ArnoldsApproval.vue";
 
@@ -1060,6 +1092,7 @@ export default {
     name: "ProxyPage",
     components: {
         ImageLoader,
+        LoadingSpinner,
         HelpModal,
         ArnoldsApproval,
     },
@@ -1088,6 +1121,22 @@ export default {
             isLoadingSets: false,
             isLoadingCards: false,
             isLoadingSessions: false,
+            isLoadingDataset: false,
+            isLoadingDeckList: false,
+            isHydratingCards: false,
+            isLoadingSessionList: false,
+            isLoadingSessionState: false,
+            isLoadingMetaDecks: false,
+            hydratingCardIds: {},
+            analysisLoadingCardIds: {},
+            analysisRowsByCardId: {},
+            valueAnalysisByCardId: {},
+            analysisQueueTimer: null,
+            analysisGeneration: 0,
+            analysisClient: null,
+            cardRuntimeId: 0,
+            cardLoadGeneration: 0,
+            datasetPromise: null,
             sessionSaveTimer: null,
             restoringSession: false,
         };
@@ -1097,12 +1146,14 @@ export default {
             deep: true,
             handler() {
                 this.scheduleSessionSave();
+                this.scheduleAnalysisRefresh();
             },
         },
         cards: {
             deep: true,
             handler() {
                 this.scheduleSessionSave();
+                this.scheduleAnalysisRefresh();
             },
         },
         errors: {
@@ -1121,6 +1172,12 @@ export default {
             deep: true,
             handler() {
                 this.scheduleSessionSave();
+            },
+        },
+        metaDeckStates: {
+            deep: true,
+            handler() {
+                this.scheduleAnalysisRefresh();
             },
         },
         activeSessionName() {
@@ -1372,24 +1429,97 @@ export default {
             return this.cards.reduce((total, card) => total + (card.quantity ?? 1), 0);
         },
         analysisStatsLoading() {
-            return this.isLoadingCards || this.isLoadingSessions || this.isLoadingSets;
+            return this.isLoadingSessions ||
+                this.isLoadingMetaDecks ||
+                this.isHydratingCards ||
+                Object.values(this.analysisLoadingCardIds).some(Boolean);
         },
     },
     async mounted() {
-        // Trigger an immediate load of the card list + set names.
-        this.loadSetList();
+        this.analysisClient = createAnalysisWorkerClient();
         this.initConfig();
         await this.initLocalSessions();
+        window.setTimeout(() => {
+            this.loadSetList();
+        }, 0);
     },
     beforeUnmount() {
         clearTimeout(this.sessionSaveTimer);
+        clearTimeout(this.analysisQueueTimer);
+        this.analysisClient?.terminate();
     },
     methods: {
         cloneForStorage(value) {
             return JSON.parse(JSON.stringify(value));
         },
+        yieldToUi() {
+            return new Promise(resolve => {
+                window.setTimeout(resolve, 0);
+            });
+        },
+        async getScryfallDataset() {
+            if (!this.datasetPromise) {
+                this.isLoadingDataset = true;
+                this.isLoadingSets = true;
+                this.datasetPromise = ScryfallDatasetAsync()
+                    .then(module => module.default ?? module)
+                    .then(dataset => {
+                        this.sets = dataset.sets;
+                        this.buildTokenPool(dataset);
+                        return dataset;
+                    })
+                    .finally(() => {
+                        this.isLoadingDataset = false;
+                        this.isLoadingSets = false;
+                    });
+            }
+
+            return this.datasetPromise;
+        },
+        buildTokenPool(dataset) {
+            this.tokenPool = Object.values(dataset.cards)
+                .flat()
+                .filter(card => card.isGamePiece && card.urlFront)
+                .map(card => {
+                    return {
+                        name: card.name,
+                        urlBack: card.urlFront,
+                    };
+                })
+                .filter(token => token.urlBack);
+        },
+        cardRuntimeKey(card) {
+            if (!card.__runtimeId) {
+                Object.defineProperty(card, '__runtimeId', {
+                    configurable: true,
+                    enumerable: false,
+                    value: `card-${++this.cardRuntimeId}`,
+                });
+            }
+
+            return card.__runtimeId;
+        },
+        setCardFlag(flagName, card, value) {
+            const key = this.cardRuntimeKey(card);
+            this[flagName] = {
+                ...this[flagName],
+                [key]: value,
+            };
+        },
+        isCardHydrating(card) {
+            return Boolean(this.hydratingCardIds[this.cardRuntimeKey(card)]);
+        },
+        isCardAnalysisLoading(card) {
+            return Boolean(this.analysisLoadingCardIds[this.cardRuntimeKey(card)]);
+        },
+        isCardLoading(card) {
+            return this.isLoadingSessions ||
+                this.isLoadingMetaDecks ||
+                this.isCardHydrating(card) ||
+                this.isCardAnalysisLoading(card);
+        },
         countCards(cards) {
-            return cards.reduce((total, card) => total + (card.quantity ?? 1), 0);
+            return countCards(cards);
         },
         countInteractionSummary(summary) {
             const countCombat = combat => {
@@ -1414,17 +1544,131 @@ export default {
             };
         },
         cardsForAnalysisCategory(summary, categoryKey) {
-            return categoryKey.split('.').reduce((value, part) => {
-                return value?.[part];
-            }, summary) ?? [];
+            return cardsForAnalysisCategory(summary, categoryKey);
         },
         isSynergyCategory(category) {
-            return category.key.startsWith('synergy.');
+            return isSynergyCategory(category);
         },
         visibleAnalysisCategories(card) {
             return this.analysisCategories.filter(category => {
                 return this.analysisColumns.some(column => this.cardAnalysisCell(card, category, column).active);
             });
+        },
+        analysisRowsForCard(card) {
+            return this.analysisRowsByCardId[this.cardRuntimeKey(card)] ?? [];
+        },
+        valueAnalysisForCard(card) {
+            return this.valueAnalysisByCardId[this.cardRuntimeKey(card)] ?? {
+                castOptions: [],
+                activatedOptions: [],
+                zoneOptions: [],
+            };
+        },
+        buildAnalysisRowsForCard(card) {
+            return buildAnalysisRowsForCard(
+                card,
+                this.analysisCategories,
+                this.analysisColumns,
+                this.config.analysisMetric,
+            );
+        },
+        scheduleAnalysisRefresh() {
+            clearTimeout(this.analysisQueueTimer);
+            if (this.config.analysisMode && this.cards.length > 0) {
+                const visibleCards = this.cards.filter(card => this.shouldShowCard(card));
+                this.analysisLoadingCardIds = visibleCards.reduce((flags, card) => {
+                    flags[this.cardRuntimeKey(card)] = true;
+                    return flags;
+                }, {});
+            }
+            this.analysisQueueTimer = window.setTimeout(() => {
+                this.runAnalysisQueue();
+            }, 0);
+        },
+        async waitForAnalysisQueue() {
+            await this.$nextTick();
+            await this.runAnalysisQueue();
+            await this.$nextTick();
+        },
+        async runAnalysisQueue() {
+            const generation = ++this.analysisGeneration;
+            clearTimeout(this.analysisQueueTimer);
+            this.analysisQueueTimer = null;
+
+            if (!this.config.analysisMode || this.cards.length === 0) {
+                this.analysisRowsByCardId = {};
+                this.valueAnalysisByCardId = {};
+                this.analysisLoadingCardIds = {};
+                return;
+            }
+
+            const relatedCards = this.selectedMetaDeckStates.flatMap(session => session.state?.cards ?? []);
+            const visibleCards = this.cards.filter(card => this.shouldShowCard(card));
+            const analysisPayloadBase = {
+                categories: this.cloneForStorage(this.analysisCategories),
+                columns: this.cloneForStorage(this.analysisColumns),
+                metric: this.config.analysisMetric,
+                relatedCards: this.cloneForStorage(relatedCards),
+            };
+            this.analysisRowsByCardId = {};
+            this.valueAnalysisByCardId = {};
+            this.analysisLoadingCardIds = visibleCards.reduce((flags, card) => {
+                flags[this.cardRuntimeKey(card)] = true;
+                return flags;
+            }, {});
+
+            await this.yieldToUi();
+
+            for (const card of visibleCards) {
+                if (generation !== this.analysisGeneration) {
+                    return;
+                }
+
+                const key = this.cardRuntimeKey(card);
+                if (!this.analysisClient) {
+                    this.analysisClient = createAnalysisWorkerClient();
+                }
+
+                let analysisResult;
+                try {
+                    analysisResult = await this.analysisClient.analyze({
+                        ...analysisPayloadBase,
+                        card: this.cloneForStorage(card),
+                    });
+                } catch (error) {
+                    console.warn(`Failed to analyze ${card.name} in the worker. Falling back to direct analysis.`, error);
+                    analysisResult = {
+                        rows: buildAnalysisRowsForCard(
+                            card,
+                            this.analysisCategories,
+                            this.analysisColumns,
+                            this.config.analysisMetric,
+                        ),
+                        value: buildValueAnalysisForCard(card, relatedCards),
+                    };
+                }
+
+                const { rows, value } = analysisResult;
+
+                if (generation !== this.analysisGeneration) {
+                    return;
+                }
+
+                this.analysisRowsByCardId = {
+                    ...this.analysisRowsByCardId,
+                    [key]: rows,
+                };
+                this.valueAnalysisByCardId = {
+                    ...this.valueAnalysisByCardId,
+                    [key]: value,
+                };
+                this.analysisLoadingCardIds = {
+                    ...this.analysisLoadingCardIds,
+                    [key]: false,
+                };
+
+                await this.yieldToUi();
+            }
         },
         formatAnalysisValue(card, quantity, total) {
             const prefix = card.isSideboard ? '+' : '';
@@ -1439,49 +1683,10 @@ export default {
             return `${prefix}${quantity}`;
         },
         cardAnalysisCell(card, category, column) {
-            const targets = category.targetGroup === "cards" ? column.cards ?? [] : column.creatures ?? [];
-            const sourceTargets = this.isSynergyCategory(category) && column.allCards
-                ? column.allCards
-                : targets;
-            const matchedCards = [];
-            let matchedQuantity = 0;
-            const denominator = column.totalCards ?? this.countCards(column.creatures);
-
-            for (const targetCard of sourceTargets) {
-                const summary = summarizeCreatureInteractions([card], targetCard);
-                if (this.cardsForAnalysisCategory(summary, category.key).length > 0) {
-                    const actionCost = synergyActionCost(card, targetCard, category.key);
-                    if (
-                        this.isSynergyCategory(category) &&
-                        column.actionCost !== undefined &&
-                        (actionCost === null || Math.min(Math.floor(actionCost), 9) !== column.actionCost)
-                    ) {
-                        continue;
-                    }
-
-                    const detail = synergyInteractionDetail(card, targetCard, category.key);
-                    const detailText = detail ? ` - ${detail}` : '';
-                    matchedQuantity += targetCard.quantity ?? 1;
-                    matchedCards.push(`${targetCard.quantity ?? 1}x ${targetCard.name}${detailText}`);
-                }
-            }
-
-            if (matchedQuantity === 0) {
-                return {
-                    active: false,
-                    display: '-',
-                    title: '',
-                };
-            }
-
-            return {
-                active: true,
-                display: this.formatAnalysisValue(card, matchedQuantity, denominator),
-                title: matchedCards.join(', '),
-            };
+            return buildAnalysisCell(card, category, column, this.config.analysisMetric);
         },
         valueAnalysis(card) {
-            return analyzeCardValue(card, this.selectedMetaDeckStates.flatMap(session => session.state?.cards ?? []));
+            return buildValueAnalysisForCard(card, this.selectedMetaDeckStates.flatMap(session => session.state?.cards ?? []));
         },
         manaSymbolClass(symbol) {
             if (String(symbol).toUpperCase() === 'T') {
@@ -1574,7 +1779,6 @@ export default {
             }
 
             this.cards = this.cloneForStorage(state?.cards ?? []);
-            await this.hydrateStoredCards(this.cards);
             this.errors = this.cloneForStorage(state?.errors ?? []);
             this.sessionSetSelections = this.cloneForStorage(state?.sessionSetSelections ?? {});
             this.nextTokenBackIndex = state?.nextTokenBackIndex ?? 0;
@@ -1582,6 +1786,9 @@ export default {
             this.selectedPrintOrderSlotIndex = null;
             this.printOrderModalOpen = false;
             this.restorePrintOrderIndexes(state?.printOrderIndexes ?? []);
+            this.hydrateStoredCards(this.cards).catch(error => {
+                console.warn('Failed to hydrate restored cards.', error);
+            });
 
             await this.$nextTick();
             this.restoringSession = false;
@@ -1592,8 +1799,10 @@ export default {
             }
 
             this.isLoadingSessions = true;
+            this.isLoadingSessionList = true;
             try {
                 this.localSessions = await this.localSessionStorage.listSessions();
+                this.isLoadingSessionList = false;
                 if (this.localSessions.length > 0) {
                     await this.loadLocalSession(this.localSessions[0].id);
                     await this.refreshMetaDeckStates();
@@ -1603,6 +1812,7 @@ export default {
                 await this.createLocalSession();
             } finally {
                 this.isLoadingSessions = false;
+                this.isLoadingSessionList = false;
             }
         },
         async createLocalSession() {
@@ -1626,13 +1836,18 @@ export default {
             }
 
             await this.flushPendingSessionSave();
-            const session = await this.localSessionStorage.loadSession(id);
-            this.restoringSession = true;
-            this.activeSessionId = session.id;
-            this.activeSessionName = session.name;
-            this.activeSessionIsMetaDeck = Boolean(session.isMetaDeck);
-            await this.restoreSessionState(session.state);
-            await this.refreshMetaDeckStates();
+            this.isLoadingSessionState = true;
+            try {
+                const session = await this.localSessionStorage.loadSession(id);
+                this.restoringSession = true;
+                this.activeSessionId = session.id;
+                this.activeSessionName = session.name;
+                this.activeSessionIsMetaDeck = Boolean(session.isMetaDeck);
+                await this.restoreSessionState(session.state);
+                await this.refreshMetaDeckStates();
+            } finally {
+                this.isLoadingSessionState = false;
+            }
         },
         async refreshMetaDeckStates() {
             if (!this.localAppEnabled) {
@@ -1640,14 +1855,20 @@ export default {
             }
 
             this.isLoadingSessions = true;
+            this.isLoadingMetaDecks = true;
             try {
                 const metaSessions = this.localSessions.filter(session => session.isMetaDeck);
                 this.metaDeckStates = await Promise.all(
                     metaSessions.map(session => this.localSessionStorage.loadSession(session.id)),
                 );
-                await Promise.all(this.metaDeckStates.map(session => this.hydrateStoredCards(session.state?.cards ?? [])));
+                for (const session of this.metaDeckStates) {
+                    this.hydrateStoredCards(session.state?.cards ?? []).catch(error => {
+                        console.warn(`Failed to hydrate meta deck ${session.name}.`, error);
+                    });
+                }
             } finally {
                 this.isLoadingSessions = false;
+                this.isLoadingMetaDecks = false;
             }
         },
         async flushPendingSessionSave() {
@@ -1980,27 +2201,12 @@ export default {
             return this.pairsToSlots(pairs);
         },
         async loadSetList() {
-          this.isLoadingSets = true;
-          try {
-            const dataset = (await ScryfallDatasetAsync());
-            this.sets = dataset.sets;
-            console.log(`Loaded ${Object.keys(dataset.cards).length} distinct cards from ${Object.keys(dataset.sets).length} sets.`)
-            // Build token pool for token-pairs mode
-            this.tokenPool = Object.values(dataset.cards)
-              .flat()
-              .filter((c) => c.cardFaces && c.cardFaces.length === 1 && c.cardFaces[0].type_line && /token/i.test(c.cardFaces[0].type_line))
-              .map((c) => ({
-                name: c.name,
-                urlBack: c.image_uris && c.image_uris.normal ? c.image_uris.normal : undefined,
-              }))
-              .filter((t) => t.urlBack);
-          } finally {
-            this.isLoadingSets = false;
-          }
+            const dataset = await this.getScryfallDataset();
+            console.log(`Loaded ${Object.keys(dataset.cards).length} distinct cards from ${Object.keys(dataset.sets).length} sets.`);
         },
         datasetSetOption(option) {
             return {
-                name: `${this.sets[option.setCode]} (${option.collectorNumber})`,
+                name: `${this.sets[option.setCode] ?? option.setCode?.toUpperCase() ?? 'Unknown'} (${option.collectorNumber})`,
                 setCode: option.setCode,
                 collectorNumber: option.collectorNumber,
                 urlFront: option.urlFront,
@@ -2030,35 +2236,48 @@ export default {
 
             return merged;
         },
+        hydrateCardFromLookup(card, cardLookup, fallbackOption = null) {
+            const setOptions = cardLookup.map(option => this.datasetSetOption(option));
+            card.setOptions = setOptions;
+
+            if (!card.selectedOption && fallbackOption) {
+                card.selectedOption = fallbackOption(setOptions);
+            }
+
+            if (!card.selectedOption) {
+                card.selectedOption = setOptions[0];
+                return;
+            }
+
+            const matchedOption = setOptions.find(option => {
+                return option.setCode === card.selectedOption.setCode &&
+                    String(option.collectorNumber) === String(card.selectedOption.collectorNumber);
+            }) ?? setOptions[0];
+
+            card.selectedOption = this.mergeDefinedOptionFields(matchedOption, card.selectedOption);
+        },
         async hydrateStoredCards(cards = []) {
             if (cards.length === 0) {
                 return;
             }
 
-            const dataset = await ScryfallDatasetAsync();
+            const dataset = await this.getScryfallDataset();
             this.sets = Object.keys(this.sets).length > 0 ? this.sets : dataset.sets;
 
             for (const card of cards) {
+                this.setCardFlag('hydratingCardIds', card, true);
                 const cardLookup = dataset.cards?.[card.name];
                 if (!cardLookup) {
+                    this.setCardFlag('hydratingCardIds', card, false);
                     continue;
                 }
 
-                const setOptions = cardLookup.map(option => this.datasetSetOption(option));
-                card.setOptions = setOptions;
-
-                if (!card.selectedOption) {
-                    card.selectedOption = setOptions[0];
-                    continue;
-                }
-
-                const matchedOption = setOptions.find(option => {
-                    return option.setCode === card.selectedOption.setCode &&
-                        String(option.collectorNumber) === String(card.selectedOption.collectorNumber);
-                }) ?? setOptions[0];
-
-                card.selectedOption = this.mergeDefinedOptionFields(matchedOption, card.selectedOption);
+                this.hydrateCardFromLookup(card, cardLookup);
+                this.setCardFlag('hydratingCardIds', card, false);
+                await this.yieldToUi();
             }
+
+            this.scheduleAnalysisRefresh();
         },
         initConfig() {
             this.config.includeDigital = bindStorage('includeDigital', (v) => v === "true");
@@ -2165,7 +2384,7 @@ export default {
 
                 if (
                     this.config.cardBacks === "none" ||
-                    card.selectedOption.urlBack === undefined
+                    card.selectedOption?.urlBack === undefined
                 ) {
                     return false;
                 }
@@ -2174,6 +2393,10 @@ export default {
             return true;
         },
         resolveCardImage(card, face = "front") {
+            if (!card.selectedOption?.urlFront) {
+                return `/card_back_${this.config.imageType}.jpg`;
+            }
+
             if (face == "front") {
                 return setImageVersion(
                     card.selectedOption.urlFront,
@@ -2233,8 +2456,112 @@ export default {
         printList() {
             window.print();
         },
+        buildCardShell(line, deckIndex) {
+            const selectedOption = this.sessionSetSelections[line.name]?.[deckIndex] ?? null;
+            return {
+                quantity: line.quantity,
+                name: line.name,
+                setOptions: [],
+                isBasic: basicLands.includes(line.name.toLowerCase()),
+                isSideboard: Boolean(line.isSideboard),
+                requestedSet: line.set,
+                requestedCollectorNumber: line.collectorsNumber,
+                selectedOption,
+                selectedFromSession: Boolean(selectedOption),
+                isHydrating: true,
+                hydrationError: false,
+                deckIndex,
+            };
+        },
+        defaultSelectionForLine(line, setOptions) {
+            if (this.config.matchEditions) {
+                const exactMatch = setOptions.find(option => {
+                    return option.setCode === line.set && option.collectorNumber == line.collectorsNumber;
+                });
+                if (exactMatch) {
+                    return exactMatch;
+                }
+            }
+
+            if (line.set) {
+                const gamePieceMatch = setOptions.find(option => {
+                    return option.isGamePiece &&
+                        option.setCode === line.set &&
+                        (!line.collectorsNumber || option.collectorNumber == line.collectorsNumber);
+                });
+                if (gamePieceMatch) {
+                    return gamePieceMatch;
+                }
+            }
+
+            return setOptions.find(option => {
+                return !option.isDigital && !option.isPromo && !option.isGamePiece;
+            }) ?? setOptions[0];
+        },
+        async hydrateDeckCardsFromDataset(cards, lines, dataset, loadGeneration) {
+            const resolvedCards = [];
+            const unresolvedCards = [];
+
+            for (let cardIndex = 0; cardIndex < cards.length; cardIndex += 1) {
+                if (loadGeneration !== this.cardLoadGeneration) {
+                    return;
+                }
+
+                const card = cards[cardIndex];
+                const line = lines[cardIndex];
+                this.setCardFlag('hydratingCardIds', card, true);
+
+                const cardLookup = dataset.cards[line.name];
+                if (!cardLookup) {
+                    card.hydrationError = true;
+                    unresolvedCards.push(card);
+                    this.errors.push(line.name);
+                    console.warn(
+                        `Failed to identify card on line: ${JSON.stringify(line)}`,
+                    );
+                    this.setCardFlag('hydratingCardIds', card, false);
+                    await this.yieldToUi();
+                    continue;
+                }
+
+                this.hydrateCardFromLookup(card, cardLookup, setOptions => {
+                    return this.defaultSelectionForLine(line, setOptions);
+                });
+                card.isHydrating = false;
+                this.setCardFlag('hydratingCardIds', card, false);
+                resolvedCards.push(card);
+                await this.yieldToUi();
+            }
+
+            if (loadGeneration !== this.cardLoadGeneration) {
+                return;
+            }
+
+            this.applySessionRelatedTokenSelections(resolvedCards);
+
+            if (this.config.cardBacks === 'token-pairs') {
+                for (const card of resolvedCards) {
+                    if (card.selectedOption && card.selectedOption.isGamePiece) {
+                        card.tokenBackUrl = this.getTokenPairBackUrl(card.selectedOption.urlFront, card.name);
+                    }
+                }
+            }
+
+            this.cards = resolvedCards;
+            for (const card of unresolvedCards) {
+                this.setCardFlag('hydratingCardIds', card, false);
+            }
+            this.scheduleAnalysisRefresh();
+        },
         async loadCardList() {
+            const loadGeneration = ++this.cardLoadGeneration;
             this.isLoadingCards = true;
+            this.isLoadingDeckList = true;
+            this.isHydratingCards = false;
+            this.hydratingCardIds = {};
+            this.analysisRowsByCardId = {};
+            this.valueAnalysisByCardId = {};
+            this.analysisLoadingCardIds = {};
             try {
                 this.cards = [];
                 this.errors = [];
@@ -2242,77 +2569,34 @@ export default {
 
                 const { lines, errors } = parseDecklist(this.config.decklist);
                 this.errors = errors;
-                const dataset = await ScryfallDatasetAsync();
+                const lineOccurrences = {};
+                const cardShells = lines.map(line => {
+                    const deckIndex = lineOccurrences[line.name] ?? 0;
+                    lineOccurrences[line.name] = deckIndex + 1;
+                    const shell = this.buildCardShell(line, deckIndex);
+                    this.cardRuntimeKey(shell);
+                    this.setCardFlag('hydratingCardIds', shell, true);
+                    return shell;
+                });
 
-                const _cards = [];
+                this.cards = cardShells;
+                this.isLoadingDeckList = false;
+                await this.$nextTick();
+                await this.yieldToUi();
 
-                for (let line of lines) {
-                    let cardLookup = dataset.cards[line.name];
-
-                    if (!cardLookup) {
-                        this.errors.push(line.name);
-                        console.warn(
-                            `Failed to identify card on line: ${JSON.stringify(line)}`,
-                        );
-                        continue;
-                    }
-
-                    const cardIndex = _cards.filter((v) => { return v.name === line.name }).length;
-
-                    const options = {
-                        quantity: line.quantity,
-                        name: line.name,
-                        setOptions: cardLookup.map(option => this.datasetSetOption(option)),
-                        isBasic: basicLands.includes(line.name.toLowerCase()),
-                        isSideboard: Boolean(line.isSideboard),
-                        requestedSet: line.set,
-                        requestedCollectorNumber: line.collectorsNumber,
-                        selectedOption: this.sessionSetSelections[line.name]?.[cardIndex],
-                        selectedFromSession: Boolean(this.sessionSetSelections[line.name]?.[cardIndex]),
-                    };
-
-                    if (!options.selectedOption) {
-                        // Set a default selection.
-                        // First, if enabled, attempt to find an exact match from the decklist.
-                        if (this.config.matchEditions) {
-                            options.selectedOption = options.setOptions.filter(option => {
-                                return option.setCode === line.set && option.collectorNumber == line.collectorsNumber
-                            })?.[0] ?? undefined;
-                        }
-
-                        if (!options.selectedOption && line.set) {
-                            options.selectedOption = options.setOptions.find(option => {
-                                return option.isGamePiece &&
-                                    option.setCode === line.set &&
-                                    (!line.collectorsNumber || option.collectorNumber == line.collectorsNumber);
-                            });
-                        }
-
-                        // If we failed there, then we can set a default based on characteristics.
-                        if (!options.selectedOption) {
-                            options.selectedOption = options.setOptions.filter(option => {
-                                return !option.isDigital && !option.isPromo && !option.isGamePiece;
-                            })?.[0] ?? options.setOptions[0];
-                        }
-                    }
-
-                    _cards.push(options);
+                if (loadGeneration !== this.cardLoadGeneration) {
+                    return;
                 }
 
-                this.applySessionRelatedTokenSelections(_cards);
-
-                this.cards = _cards;
-
-                // attach tokenBackUrl when token-pairs mode is enabled
-                if (this.config.cardBacks === 'token-pairs') {
-                  for (const c of this.cards) {
-                    if (c.selectedOption && c.selectedOption.isGamePiece) {
-                      c.tokenBackUrl = this.getTokenPairBackUrl(c.selectedOption.urlFront, c.name);
-                    }
-                  }
-                }
+                this.isHydratingCards = cardShells.length > 0;
+                const dataset = await this.getScryfallDataset();
+                await this.hydrateDeckCardsFromDataset(cardShells, lines, dataset, loadGeneration);
             } finally {
-                this.isLoadingCards = false;
+                if (loadGeneration === this.cardLoadGeneration) {
+                    this.isLoadingDeckList = false;
+                    this.isHydratingCards = false;
+                    this.isLoadingCards = false;
+                }
             }
         },
         applySessionRelatedTokenSelections(cards) {
@@ -2381,20 +2665,34 @@ export default {
     position: relative;
 
     &.loading::after {
-        align-items: center;
         background: rgb(255 255 255 / 70%);
         border: 1px solid #dadee4;
         border-radius: 4px;
-        color: #5755d9;
-        content: "Loading...";
-        display: flex;
-        font-size: 0.7rem;
-        font-weight: 600;
+        content: "";
         inset: 0;
-        justify-content: center;
         min-height: 2.2rem;
         position: absolute;
         z-index: 500;
+    }
+
+    &.loading::before {
+        animation: loading-spinner-rotate 0.75s linear infinite;
+        border: 2px solid rgb(87 85 217 / 20%);
+        border-radius: 999px;
+        border-top-color: #5755d9;
+        content: "";
+        height: 1rem;
+        left: calc(50% - 0.5rem);
+        position: absolute;
+        top: calc(50% - 0.5rem);
+        width: 1rem;
+        z-index: 501;
+    }
+}
+
+@keyframes loading-spinner-rotate {
+    to {
+        transform: rotate(360deg);
     }
 }
 
@@ -2477,10 +2775,16 @@ export default {
 }
 
 .analysis-card-stat-loader {
-    display: inline-block;
+    display: inline-flex;
     flex: 0 0 auto;
     height: 0.8rem;
     width: 0.8rem;
+}
+
+.analysis-grid-loading-cell {
+    color: #667085;
+    height: 1.5rem;
+    text-align: center !important;
 }
 
 .analysis-grid-wrap {
@@ -2517,6 +2821,16 @@ export default {
 .value-view {
     display: grid;
     gap: 0.45rem;
+}
+
+.value-analysis-loading {
+    align-items: center;
+    background: #f8f9fa;
+    border: 1px solid #eef0f3;
+    border-radius: 4px;
+    display: flex;
+    min-height: 2.2rem;
+    padding: 0.4rem;
 }
 
 .value-cast {

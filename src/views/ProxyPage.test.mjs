@@ -427,8 +427,57 @@ describe('Core Rendering', async () => {
         component.data.isLoadingSessions = false;
         component.data.config.analysisMode = false;
         component.data.metaDeckStates = [];
-        component.data.config.decklist = '4 Wild Nacatl';
-        await component.ctx.loadCardList();
+        component.data.cards = [];
+        component.data.config.decklist = '';
+    });
+
+    test('Feature: Deck import publishes card shells before dataset hydration completes.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const originalGetScryfallDataset = component.ctx.getScryfallDataset;
+        let resolveDataset;
+
+        component.ctx.getScryfallDataset = () => {
+            return new Promise(resolve => {
+                resolveDataset = resolve;
+            });
+        };
+        component.data.config.decklist = '1 Lightning Bolt';
+
+        const loadPromise = component.ctx.loadCardList();
+        await wrapper.vm.$nextTick();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(component.data.cards).toHaveLength(1);
+        expect(component.data.cards[0].name).toBe('lightning bolt');
+        expect(component.data.cards[0].selectedOption).toBe(null);
+        expect(component.ctx.isCardHydrating(component.data.cards[0])).toBe(true);
+
+        resolveDataset({
+            sets: {
+                lea: 'Limited Edition Alpha',
+            },
+            cards: {
+                'lightning bolt': [
+                    {
+                        setCode: 'lea',
+                        collectorNumber: '161',
+                        urlFront: 'bolt-front',
+                        typeLine: 'Instant',
+                        oracleText: 'Lightning Bolt deals 3 damage to any target.',
+                        manaCost: '{R}',
+                        manaValue: 1,
+                    },
+                ],
+            },
+        });
+        await loadPromise;
+
+        expect(component.data.cards[0].selectedOption.urlFront).toBe('bolt-front');
+        expect(component.ctx.isCardHydrating(component.data.cards[0])).toBe(false);
+
+        component.ctx.getScryfallDataset = originalGetScryfallDataset;
+        component.data.cards = [];
+        component.data.config.decklist = '';
     });
 
     test('Feature: Analysis mode hides empty rows and shows typed synergy rows with trigger costs.', async () => {
@@ -627,6 +676,8 @@ describe('Core Rendering', async () => {
 
         component.data.config.analysisMode = true;
         component.data.config.analysisView = 'value';
+        component.data.config.includeCards = true;
+        component.data.config.includeGamePieces = true;
         component.data.cards = [opt];
         component.data.metaDeckStates = [
             {
@@ -638,6 +689,7 @@ describe('Core Rendering', async () => {
             },
         ];
 
+        await component.ctx.waitForAnalysisQueue();
         await wrapper.vm.$nextTick();
 
         const valueText = wrapper.find('.value-view').text();
@@ -664,8 +716,8 @@ describe('Core Rendering', async () => {
         component.data.config.analysisView = 'interaction';
         component.data.config.analysisMode = false;
         component.data.metaDeckStates = [];
-        component.data.config.decklist = '4 Wild Nacatl';
-        await component.ctx.loadCardList();
+        component.data.cards = [];
+        component.data.config.decklist = '';
     });
 
     test('Feature: Value view renders activated ability rows for permanents.', async () => {
@@ -684,8 +736,11 @@ describe('Core Rendering', async () => {
 
         component.data.config.analysisMode = true;
         component.data.config.analysisView = 'value';
+        component.data.config.includeCards = true;
+        component.data.config.includeGamePieces = true;
         component.data.cards = [greatHall];
 
+        await component.ctx.waitForAnalysisQueue();
         await wrapper.vm.$nextTick();
 
         const activatedRows = wrapper.find('.value-rows-activated');

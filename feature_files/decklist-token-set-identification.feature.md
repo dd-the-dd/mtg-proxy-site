@@ -67,8 +67,11 @@
 - Mana-value synergy columns use the synergy action cost rather than the synergy card's own mana value.
 - Bounce spells that return target permanents to hand create a battlefield-to-hand synergy with permanents, and permanents with enters-the-battlefield text get an additional ETB recast synergy.
 - Synergy action rows use action labels instead of generic feed labels.
-- Loading surfaces appear over session, deck, and dataset-loading areas while local data is being read.
-- Analysis card rows show a small loading indicator beside each card name while card data, set data, or meta-session data is loading.
+- Loading indicators are scoped to the area that is actually waiting; the session menu, deck text, card shells, images, and analysis stats can load independently.
+- Loading UI uses compact circular spinners or image skeletons, not rotating text labels.
+- Deck imports publish card shells from the parsed text before the Scryfall dataset finishes loading, then hydrate each card's printing data independently.
+- Analysis card rows show a small loading indicator beside each card name while that specific card is hydrating or waiting for queued analysis.
+- Analysis grids and value rows are prepared through a per-card queue and cache so template rendering reads prepared rows instead of recomputing every cell repeatedly.
 - The left session/config rail can collapse toward the left; when open it uses a narrow sidebar layout so analysis content keeps most of the page width.
 - Analysis card rows prioritize a near-card-sized image beside a compact interaction grid that avoids horizontal scrolling for normal meta views.
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
