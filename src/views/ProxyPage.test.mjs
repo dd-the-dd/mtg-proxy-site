@@ -678,13 +678,13 @@ describe('Core Rendering', async () => {
         component.data.config.analysisView = 'value';
         component.data.config.includeCards = true;
         component.data.config.includeGamePieces = true;
-        component.data.cards = [opt];
+        component.data.cards = [opt, stormchaserTalent, otter];
         component.data.metaDeckStates = [
             {
                 id: 'value-meta',
                 name: 'Value Meta',
                 state: {
-                    cards: [stormchaserTalent, otter],
+                    cards: [],
                 },
             },
         ];
@@ -713,6 +713,58 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.value-zone-options').text()).toContain('Card recursion');
         expect(wrapper.find('.value-zone-options .ms-5').exists()).toBe(true);
         expect(wrapper.find('.value-rows-bonus').exists()).toBe(false);
+
+        component.data.config.analysisView = 'interaction';
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.config.decklist = '';
+    });
+
+    test('Feature: Value view uses the current deck for synergies instead of meta decks.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const opt = {
+            quantity: 1,
+            name: 'opt',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Instant',
+                oracleText: 'Scry 1. Draw a card.',
+                manaCost: '{U}',
+            },
+            setOptions: [],
+        };
+        const stormchaserTalent = {
+            quantity: 4,
+            name: "stormchaser's talent",
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Enchantment - Class',
+                oracleText: 'Whenever you cast an instant or sorcery spell, create a 1/1 Otter creature token with prowess.',
+                manaCost: '{U}',
+            },
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisView = 'value';
+        component.data.config.includeCards = true;
+        component.data.config.includeGamePieces = true;
+        component.data.cards = [opt];
+        component.data.metaDeckStates = [
+            {
+                id: 'izzet-meta',
+                name: 'Izzet Prowess',
+                state: {
+                    cards: [stormchaserTalent],
+                },
+            },
+        ];
+
+        await component.ctx.waitForAnalysisQueue();
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('.value-rows-permanent').exists()).toBe(false);
+        expect(wrapper.find('.value-view').text()).not.toContain("stormchaser's talent");
 
         component.data.config.analysisView = 'interaction';
         component.data.config.analysisMode = false;

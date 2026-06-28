@@ -666,6 +666,70 @@
                       </div>
                     </div>
                   </div>
+                  <div v-if="option.manaOptions.length" class="value-rows value-rows-mana">
+                    <div
+                      v-for="(mana, manaIndex) in option.manaOptions"
+                      :key="`mana-${manaIndex}`"
+                      class="value-row value-row-mana"
+                    >
+                      <div class="value-row-cell value-row-condition">
+                        <div>{{ mana.condition }}</div>
+                        <div class="value-row-source">
+                          {{ mana.sourceLine }}
+                        </div>
+                      </div>
+                      <div class="value-row-cell value-row-cost">
+                        <i
+                          v-for="(symbol, symbolIndex) in mana.costSymbols"
+                          :key="`mana-cost-${manaIndex}-${symbolIndex}`"
+                          class="ms ms-cost mana-symbol"
+                          :class="manaSymbolClass(symbol)"
+                          :title="symbol"
+                        />
+                      </div>
+                      <div class="value-row-cell value-row-effect">
+                        {{ mana.effect }}
+                      </div>
+                      <div class="value-row-cell value-row-state">
+                        {{ mana.value || '-' }}
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="option.etbOptions.length" class="value-rows value-rows-etb">
+                    <div
+                      v-for="(etb, etbIndex) in option.etbOptions"
+                      :key="`etb-${etbIndex}`"
+                      class="value-row value-row-etb"
+                    >
+                      <div class="value-row-cell value-row-condition">
+                        <div>{{ etb.condition }}</div>
+                        <div class="value-row-source">
+                          {{ etb.sourceLine }}
+                        </div>
+                      </div>
+                      <div class="value-row-cell value-row-cost">
+                        <i
+                          v-if="etb.speed === 'Instant' || etb.speed === 'Flash'"
+                          class="ms value-speed"
+                          :class="speedSymbolClass(etb.speed)"
+                          :title="etb.speed"
+                        />
+                        <i
+                          v-for="(symbol, symbolIndex) in etb.costSymbols"
+                          :key="`etb-cost-${etbIndex}-${symbolIndex}`"
+                          class="ms ms-cost mana-symbol"
+                          :class="manaSymbolClass(symbol)"
+                          :title="symbol"
+                        />
+                      </div>
+                      <div class="value-row-cell value-row-effect">
+                        {{ etb.effect }}
+                      </div>
+                      <div class="value-row-cell value-row-state">
+                        {{ etb.value || '-' }}
+                      </div>
+                    </div>
+                  </div>
                   <div v-if="option.permanentOptions.length" class="value-rows value-rows-permanent">
                     <div
                       v-for="(permanent, permanentIndex) in option.permanentOptions"
@@ -699,6 +763,49 @@
                       <div class="value-row-cell value-row-state">
                         {{ permanent.value || '-' }}
                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="valueAnalysisForCard(card).deathOptions.length"
+                class="value-death-options"
+              >
+                <div class="value-line-header">
+                  Death triggers
+                </div>
+                <div class="value-rows value-rows-death">
+                  <div
+                    v-for="(death, deathIndex) in valueAnalysisForCard(card).deathOptions"
+                    :key="`death-${cardIndex}-${deathIndex}`"
+                    class="value-row value-row-death"
+                  >
+                    <div class="value-row-cell value-row-condition">
+                      <div>{{ death.condition }}</div>
+                      <div class="value-row-source">
+                        {{ death.sourceLine }}
+                      </div>
+                    </div>
+                    <div class="value-row-cell value-row-cost">
+                      <i
+                        v-if="death.speed === 'Instant' || death.speed === 'Flash'"
+                        class="ms value-speed"
+                        :class="speedSymbolClass(death.speed)"
+                        :title="death.speed"
+                      />
+                      <i
+                        v-for="(symbol, symbolIndex) in death.costSymbols"
+                        :key="`death-cost-${cardIndex}-${deathIndex}-${symbolIndex}`"
+                        class="ms ms-cost mana-symbol"
+                        :class="manaSymbolClass(symbol)"
+                        :title="symbol"
+                      />
+                    </div>
+                    <div class="value-row-cell value-row-effect">
+                      {{ death.effect }}
+                    </div>
+                    <div class="value-row-cell value-row-state">
+                      {{ death.value || '-' }}
                     </div>
                   </div>
                 </div>
@@ -1562,6 +1669,7 @@ export default {
                 castOptions: [],
                 activatedOptions: [],
                 zoneOptions: [],
+                deathOptions: [],
             };
         },
         buildAnalysisRowsForCard(card) {
@@ -1602,7 +1710,7 @@ export default {
                 return;
             }
 
-            const relatedCards = this.selectedMetaDeckStates.flatMap(session => session.state?.cards ?? []);
+            const relatedCards = this.cards;
             const visibleCards = this.cards.filter(card => this.shouldShowCard(card));
             const analysisPayloadBase = {
                 categories: this.cloneForStorage(this.analysisCategories),
@@ -1644,7 +1752,7 @@ export default {
                             this.analysisColumns,
                             this.config.analysisMetric,
                         ),
-                        value: buildValueAnalysisForCard(card, relatedCards),
+                        value: buildValueAnalysisForCard(card, this.cards),
                     };
                 }
 
@@ -1686,7 +1794,7 @@ export default {
             return buildAnalysisCell(card, category, column, this.config.analysisMetric);
         },
         valueAnalysis(card) {
-            return buildValueAnalysisForCard(card, this.selectedMetaDeckStates.flatMap(session => session.state?.cards ?? []));
+            return buildValueAnalysisForCard(card, this.cards);
         },
         manaSymbolClass(symbol) {
             if (String(symbol).toUpperCase() === 'T') {
@@ -2837,6 +2945,7 @@ export default {
     display: block;
 }
 
+.value-death-options,
 .value-zone-options,
 .value-activated-options {
     display: grid;
@@ -2887,6 +2996,20 @@ export default {
     max-width: 94%;
 }
 
+.value-row-mana {
+    background: #f0f9ff;
+    border: 1px solid #7dd3fc;
+    color: #075985;
+    max-width: 90%;
+}
+
+.value-row-etb {
+    background: #fefce8;
+    border: 1px solid #fde68a;
+    color: #854d0e;
+    max-width: 92%;
+}
+
 .value-row-permanent {
     background: #f4f3ff;
     border: 1px solid #bdb4fe;
@@ -2898,6 +3021,13 @@ export default {
     background: #fff6ed;
     border: 1px solid #f7b27a;
     color: #9c2a10;
+    max-width: 94%;
+}
+
+.value-row-death {
+    background: #fff1f2;
+    border: 1px solid #fda4af;
+    color: #9f1239;
     max-width: 94%;
 }
 

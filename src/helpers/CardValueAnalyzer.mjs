@@ -36,6 +36,10 @@ function numericCostSymbols(cost) {
     return cost === '' ? [] : [cost];
 }
 
+function coloredManaSymbols(cost) {
+    return manaSymbols(cost).filter(symbol => /^[WUBRG]$/i.test(symbol));
+}
+
 function sentenceCase(value) {
     return value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -113,6 +117,10 @@ function isCastableSpell(card) {
     return !selectedCard.isGamePiece && !selectedCard.isToken && !/\bLand\b/i.test(typeLineOf(card)) && manaCostOf(card) !== '';
 }
 
+function isLandCard(card) {
+    return /\bLand\b/i.test(typeLineOf(card));
+}
+
 function kickerCosts(card) {
     return [...textOf(card).matchAll(/\bKicker(?:\s*[—-])?\s*((?:\{[^}]+\})+)/gi)]
         .map(match => match[1]);
@@ -163,6 +171,39 @@ function normalizedAbilityCost(cost) {
     }
 
     return cost;
+}
+
+function manaSourceAbilities(card) {
+    if (!isLandCard(card)) {
+        return [];
+    }
+
+    return abilityLines(card)
+        .map(line => {
+            const separatorIndex = line.indexOf(':');
+            const cost = separatorIndex === -1 ? '' : cleanAbilityText(line.slice(0, separatorIndex));
+            const effect = cleanAbilityText(separatorIndex === -1 ? line : line.slice(separatorIndex + 1));
+
+            if (!/\badd\b/i.test(effect)) {
+                return null;
+            }
+
+            const symbols = manaSymbols(effect).filter(symbol => /^[WUBRGC]$/i.test(symbol));
+            const anyColor = /\bone mana of any colo[u]?r\b|\bmana of any colo[u]?r\b/i.test(effect);
+
+            if (symbols.length === 0 && !anyColor) {
+                return null;
+            }
+
+            return {
+                cost,
+                costSymbols: manaSymbols(cost),
+                effect,
+                symbols,
+                anyColor,
+            };
+        })
+        .filter(Boolean);
 }
 
 function isActivatedAbilityCost(cost) {
@@ -358,6 +399,14 @@ function hasSynergy(summary, key) {
 }
 
 function synergyKind(key) {
+    if (/etbLifeGain/.test(key)) {
+        return 'etb';
+    }
+
+    if (/creatureDeathValue/.test(key)) {
+        return 'death';
+    }
+
     if (/graveyardPlay|battlefieldToHand|entersBattlefield/.test(key)) {
         return 'zone';
     }
@@ -489,6 +538,48 @@ function withCastOptionCost(entry, option) {
     };
 }
 
+function manaOptionsForCast(option, relatedCards) {
+    const requiredSymbols = coloredManaSymbols(option.cost);
+    if (requiredSymbols.length === 0) {
+        return [];
+    }
+
+    const seen = new Set();
+    const options = [];
+
+    for (const relatedCard of relatedCards) {
+        for (const ability of manaSourceAbilities(relatedCard)) {
+            const matchedSymbols = requiredSymbols.filter(symbol => {
+                return ability.anyColor || ability.symbols.some(produced => produced.toUpperCase() === symbol.toUpperCase());
+            });
+
+            if (matchedSymbols.length === 0) {
+                continue;
+            }
+
+            const key = `${relatedCard.name}:${ability.cost}:${ability.effect}`;
+            if (seen.has(key)) {
+                continue;
+            }
+
+            seen.add(key);
+            options.push({
+                condition: relatedCard.name,
+                cost: ability.cost,
+                costSymbols: ability.costSymbols,
+                effect: ability.effect,
+                quantity: relatedCard.quantity ?? 1,
+                source: relatedCard.name,
+                sourceLine: `x${relatedCard.quantity ?? 1}`,
+                speed: 'Mana',
+                value: `Pays ${matchedSymbols.map(symbol => `{${symbol}}`).join(' ')}`,
+            });
+        }
+    }
+
+    return options;
+}
+
 function synergyValueText(key, card, relatedCard) {
     if (/^synergy\.combat\./.test(key)) {
         return 'Creature improvement';
@@ -583,6 +674,7 @@ export function analyzeCardValue(card, relatedCards = []) {
         return {
             castOptions: [],
             zoneOptions: [],
+            deathOptions: [],
             activatedOptions,
         };
     }
@@ -609,12 +701,16 @@ export function analyzeCardValue(card, relatedCards = []) {
             baseRows: option.baseRows,
             values,
             bonuses: [],
+            etbOptions: [],
             permanentOptions: [],
+            manaOptions: manaOptionsForCast(option, relatedCards),
             zoneChanges: [],
         };
     });
     const zoneOptions = [];
+    const deathOptions = [];
     const seenZoneOptions = new Set();
+    const seenDeathOptions = new Set();
 
     for (const relatedCard of relatedCards) {
         const summary = summarizeCreatureInteractions([card], relatedCard);
@@ -645,13 +741,21 @@ export function analyzeCardValue(card, relatedCards = []) {
                     seenZoneOptions.add(zoneKey);
                     zoneOptions.push(entry);
                 }
+            } else if (kind === 'death') {
+                const deathKey = `${entry.source}:${key}:${entry.detail}`;
+                if (!seenDeathOptions.has(deathKey)) {
+                    seenDeathOptions.add(deathKey);
+                    deathOptions.push(entry);
+                }
             } else {
                 for (const option of castOptions) {
                     if (isThresholdTokenCopyDetail(detail) && option.costValue < (synergyActionCost(card, relatedCard, key) ?? 0)) {
                         continue;
                     }
 
-                    if (kind === 'permanent') {
+                    if (kind === 'etb') {
+                        option.etbOptions.push(withCastOptionCost(entry, option));
+                    } else if (kind === 'permanent') {
                         option.permanentOptions.push(withCastOptionCost(entry, option));
                     } else {
                         option.bonuses.push(withCastOptionCost(entry, option));
@@ -664,6 +768,7 @@ export function analyzeCardValue(card, relatedCards = []) {
     return {
         castOptions,
         zoneOptions,
+        deathOptions,
         activatedOptions,
     };
 }

@@ -73,6 +73,8 @@
 - Analysis card rows show a small loading indicator beside each card name while that specific card is hydrating or waiting for queued analysis.
 - Analysis grids and value rows are prepared through a per-card queue and cache so template rendering reads prepared rows instead of recomputing every cell repeatedly.
 - Value rows nested under a cast option display the full mana cost of that cast option, including colored symbols, while independent zone or activated actions keep their own action cost.
+- Value analysis uses the current deck's cards for internal synergies and mana sources; meta decks only feed the against-meta interaction grid.
+- Value analysis shows land mana abilities that can pay a cast option, keeps ETB passives under the cast in their own row color, and shows death triggers in a separate death-trigger section rather than as cast value.
 - The left session/config rail can collapse toward the left; when open it uses a narrow sidebar layout so analysis content keeps most of the page width.
 - Analysis card rows prioritize a near-card-sized image beside a compact interaction grid that avoids horizontal scrolling for normal meta views.
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.

@@ -50,6 +50,7 @@ describe('CardValueAnalyzer', () => {
         expect(cast.permanentOptions.map(option => option.detail)).not.toContain('S:Combat pump +1/+1 UED cost 1');
         expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Token engine cost 11');
         expect(cast.permanentOptions.map(option => option.detail)).not.toContain('S:Grave to hand cost 5');
+        expect(cast.manaOptions).toEqual([]);
         expect(value.zoneOptions).toContainEqual(expect.objectContaining({
             condition: "stormchaser's talent class 2",
             cost: '5',
@@ -292,8 +293,15 @@ describe('CardValueAnalyzer', () => {
             power: '1',
             toughness: '1',
         }, 4);
+        const swamp = card('swamp', {
+            typeLine: 'Basic Land - Swamp',
+            oracleText: '{T}: Add {B}.',
+            manaCost: '',
+            manaValue: 0,
+        }, 8);
 
-        expect(analyzeCardValue(rat, [lumaret]).castOptions[0].permanentOptions).toContainEqual(expect.objectContaining({
+        const ratValue = analyzeCardValue(rat, [lumaret, swamp]);
+        expect(ratValue.castOptions[0].etbOptions).toContainEqual(expect.objectContaining({
             condition: 'bogwater lumaret',
             cost: '{B}',
             costSymbols: ['B'],
@@ -303,6 +311,13 @@ describe('CardValueAnalyzer', () => {
             sourceLine: 'x2',
             speed: 'Sorcery',
             value: 'Life gain',
+        }));
+        expect(ratValue.castOptions[0].manaOptions).toContainEqual(expect.objectContaining({
+            condition: 'swamp',
+            costSymbols: ['T'],
+            effect: 'Add {B}',
+            sourceLine: 'x8',
+            value: 'Pays {B}',
         }));
     });
 
@@ -332,16 +347,52 @@ describe('CardValueAnalyzer', () => {
             toughness: '1',
         });
 
-        const options = analyzeCardValue(rat, [bloodArtist, pitilessPlunderer]).castOptions[0].permanentOptions;
+        const value = analyzeCardValue(rat, [bloodArtist, pitilessPlunderer]);
+        const options = value.deathOptions;
+        expect(value.castOptions[0].permanentOptions).toEqual([]);
         expect(options).toContainEqual(expect.objectContaining({
             condition: 'blood artist',
             effect: 'Death drain +1',
+            cost: '1',
             value: 'Life drain',
         }));
         expect(options).toContainEqual(expect.objectContaining({
             condition: 'pitiless plunderer',
             effect: 'Death treasure',
+            cost: '1',
             value: 'Treasure generation',
         }));
+    });
+
+    test('Feature: Value analysis shows colored land sources that can pay a cast option.', () => {
+        const opt = card('opt', {
+            typeLine: 'Instant',
+            oracleText: 'Scry 1. Draw a card.',
+            manaCost: '{U}',
+            manaValue: 1,
+        });
+        const island = card('island', {
+            typeLine: 'Basic Land - Island',
+            oracleText: '{T}: Add {U}.',
+            manaCost: '',
+            manaValue: 0,
+        }, 6);
+        const mountain = card('mountain', {
+            typeLine: 'Basic Land - Mountain',
+            oracleText: '{T}: Add {R}.',
+            manaCost: '',
+            manaValue: 0,
+        }, 4);
+
+        const manaOptions = analyzeCardValue(opt, [island, mountain]).castOptions[0].manaOptions;
+
+        expect(manaOptions).toContainEqual(expect.objectContaining({
+            condition: 'island',
+            costSymbols: ['T'],
+            effect: 'Add {U}',
+            sourceLine: 'x6',
+            value: 'Pays {U}',
+        }));
+        expect(manaOptions.map(option => option.condition)).not.toContain('mountain');
     });
 });
