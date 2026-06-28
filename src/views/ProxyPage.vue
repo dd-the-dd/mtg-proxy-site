@@ -811,6 +811,49 @@
                 </div>
               </div>
               <div
+                v-if="valueAnalysisForCard(card).creatureOptions.length"
+                class="value-creature-options"
+              >
+                <div class="value-line-header">
+                  Creature modifiers
+                </div>
+                <div class="value-rows value-rows-creature">
+                  <div
+                    v-for="(creatureOption, creatureOptionIndex) in valueAnalysisForCard(card).creatureOptions"
+                    :key="`creature-option-${cardIndex}-${creatureOptionIndex}`"
+                    class="value-row value-row-creature"
+                  >
+                    <div class="value-row-cell value-row-condition">
+                      <div>{{ creatureOption.condition }}</div>
+                      <div class="value-row-source">
+                        {{ creatureOption.sourceLine }}
+                      </div>
+                    </div>
+                    <div class="value-row-cell value-row-cost">
+                      <i
+                        v-if="creatureOption.speed === 'Instant' || creatureOption.speed === 'Flash'"
+                        class="ms value-speed"
+                        :class="speedSymbolClass(creatureOption.speed)"
+                        :title="creatureOption.speed"
+                      />
+                      <i
+                        v-for="(symbol, symbolIndex) in creatureOption.costSymbols"
+                        :key="`creature-option-cost-${cardIndex}-${creatureOptionIndex}-${symbolIndex}`"
+                        class="ms ms-cost mana-symbol"
+                        :class="manaSymbolClass(symbol)"
+                        :title="symbol"
+                      />
+                    </div>
+                    <div class="value-row-cell value-row-effect">
+                      {{ creatureOption.effect }}
+                    </div>
+                    <div class="value-row-cell value-row-state">
+                      {{ creatureOption.value || '-' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
                 v-if="valueAnalysisForCard(card).activatedOptions.length"
                 class="value-activated-options"
               >
@@ -1670,6 +1713,7 @@ export default {
                 activatedOptions: [],
                 zoneOptions: [],
                 deathOptions: [],
+                creatureOptions: [],
             };
         },
         buildAnalysisRowsForCard(card) {
@@ -2946,6 +2990,7 @@ export default {
 }
 
 .value-death-options,
+.value-creature-options,
 .value-zone-options,
 .value-activated-options {
     display: grid;
@@ -3028,6 +3073,13 @@ export default {
     background: #fff1f2;
     border: 1px solid #fda4af;
     color: #9f1239;
+    max-width: 94%;
+}
+
+.value-row-creature {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    color: #166534;
     max-width: 94%;
 }
 

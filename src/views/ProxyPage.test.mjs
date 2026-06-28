@@ -773,6 +773,57 @@ describe('Core Rendering', async () => {
         component.data.config.decklist = '';
     });
 
+    test('Feature: Value view renders creature modifier options from the current deck.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const elemental = {
+            quantity: 1,
+            name: 'elemental token',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Creature - Elemental',
+                oracleText: '',
+                manaCost: '{1}{R}',
+                power: '2',
+                toughness: '2',
+            },
+            setOptions: [],
+        };
+        const waterbending = {
+            quantity: 1,
+            name: 'waterbending technique',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Instant',
+                oracleText: 'Choose one — Target creature has base power and toughness 1/1 until end of turn and gains hexproof until end of turn; or target creature has base power and toughness 3/4 until end of turn and gains flying and vigilance until end of turn.',
+                manaCost: '{U}',
+            },
+            setOptions: [],
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisView = 'value';
+        component.data.config.includeCards = true;
+        component.data.config.includeGamePieces = true;
+        component.data.cards = [elemental, waterbending];
+        component.data.metaDeckStates = [];
+
+        await component.ctx.waitForAnalysisQueue();
+        await wrapper.vm.$nextTick();
+
+        const modifierRows = wrapper.find('.value-creature-options');
+        expect(modifierRows.text()).toContain('Creature modifiers');
+        expect(modifierRows.text()).toContain('Become 1/1 with hexproof');
+        expect(modifierRows.text()).toContain('Become 3/4 with flying and vigilance');
+        expect(wrapper.find('.value-row-creature .ms-u').exists()).toBe(true);
+        expect(wrapper.find('.value-row-creature .ms-instant').exists()).toBe(true);
+
+        component.data.config.analysisView = 'interaction';
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.config.decklist = '';
+    });
+
     test('Feature: Value view renders activated ability rows for permanents.', async () => {
         const component = wrapper.getCurrentComponent();
         const greatHall = {

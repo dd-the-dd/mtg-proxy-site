@@ -121,6 +121,10 @@ function isLandCard(card) {
     return /\bLand\b/i.test(typeLineOf(card));
 }
 
+function isCreatureCard(card) {
+    return /\bCreature\b/i.test(typeLineOf(card));
+}
+
 function kickerCosts(card) {
     return [...textOf(card).matchAll(/\bKicker(?:\s*[—-])?\s*((?:\{[^}]+\})+)/gi)]
         .map(match => match[1]);
@@ -580,6 +584,52 @@ function manaOptionsForCast(option, relatedCards) {
     return options;
 }
 
+function creatureShapeEffects(source) {
+    const text = textOf(source);
+    if (!/\btarget creature\b/i.test(text) || !castSpeed(source)) {
+        return [];
+    }
+
+    const effects = [];
+    if (/\bbase power and toughness 1\/1\b/i.test(text) && /\bhexproof\b/i.test(text)) {
+        effects.push({
+            effect: 'Become 1/1 with hexproof',
+            value: 'Creature protection',
+        });
+    }
+
+    if (/\bbase power and toughness 3\/4\b/i.test(text) && /\bflying\b/i.test(text) && /\bvigilance\b/i.test(text)) {
+        effects.push({
+            effect: 'Become 3/4 with flying and vigilance',
+            value: 'Creature improvement',
+        });
+    }
+
+    return effects;
+}
+
+function creatureModifierOptionsForCard(card, relatedCards) {
+    if (!isCreatureCard(card)) {
+        return [];
+    }
+
+    return relatedCards.flatMap(source => {
+        return creatureShapeEffects(source).map(({ effect, value }) => {
+            return {
+                condition: source.name,
+                cost: manaCostOf(source),
+                costSymbols: manaSymbols(manaCostOf(source)),
+                effect,
+                quantity: source.quantity ?? 1,
+                source: source.name,
+                sourceLine: `x${source.quantity ?? 1}`,
+                speed: castSpeed(source),
+                value,
+            };
+        });
+    });
+}
+
 function synergyValueText(key, card, relatedCard) {
     if (/^synergy\.combat\./.test(key)) {
         return 'Creature improvement';
@@ -669,12 +719,14 @@ function castOptionsForCard(card, drawn, handValue) {
 
 export function analyzeCardValue(card, relatedCards = []) {
     const activatedOptions = activatedOptionsForCard(card);
+    const creatureOptions = creatureModifierOptionsForCard(card, relatedCards);
 
     if (!isCastableSpell(card)) {
         return {
             castOptions: [],
             zoneOptions: [],
             deathOptions: [],
+            creatureOptions,
             activatedOptions,
         };
     }
@@ -769,6 +821,7 @@ export function analyzeCardValue(card, relatedCards = []) {
         castOptions,
         zoneOptions,
         deathOptions,
+        creatureOptions,
         activatedOptions,
     };
 }

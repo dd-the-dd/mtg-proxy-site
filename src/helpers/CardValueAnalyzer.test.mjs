@@ -426,4 +426,49 @@ describe('CardValueAnalyzer', () => {
         }));
         expect(zoneOptions.map(option => option.source)).not.toContain('forest');
     });
+
+    test('Feature: Value analysis gives every creature instant creature-shape options from modal spells.', () => {
+        const elemental = card('elemental token', {
+            typeLine: 'Creature - Elemental',
+            oracleText: '',
+            manaCost: '{1}{R}',
+            manaValue: 2,
+            power: '2',
+            toughness: '2',
+        });
+        const waterbending = card('waterbending technique', {
+            typeLine: 'Instant',
+            oracleText: 'Choose one — Target creature has base power and toughness 1/1 until end of turn and gains hexproof until end of turn; or target creature has base power and toughness 3/4 until end of turn and gains flying and vigilance until end of turn.',
+            manaCost: '{U}',
+            manaValue: 1,
+        }, 2);
+        const arcaneSignet = card('arcane signet', {
+            typeLine: 'Artifact',
+            oracleText: '{T}: Add one mana of any color in your commander\'s color identity.',
+            manaCost: '{2}',
+            manaValue: 2,
+        });
+
+        const creatureOptions = analyzeCardValue(elemental, [waterbending]).creatureOptions;
+        const nonCreatureOptions = analyzeCardValue(arcaneSignet, [waterbending]).creatureOptions;
+
+        expect(creatureOptions).toContainEqual(expect.objectContaining({
+            condition: 'waterbending technique',
+            cost: '{U}',
+            costSymbols: ['U'],
+            effect: 'Become 1/1 with hexproof',
+            sourceLine: 'x2',
+            speed: 'Instant',
+            value: 'Creature protection',
+        }));
+        expect(creatureOptions).toContainEqual(expect.objectContaining({
+            condition: 'waterbending technique',
+            cost: '{U}',
+            costSymbols: ['U'],
+            effect: 'Become 3/4 with flying and vigilance',
+            speed: 'Instant',
+            value: 'Creature improvement',
+        }));
+        expect(nonCreatureOptions).toEqual([]);
+    });
 });

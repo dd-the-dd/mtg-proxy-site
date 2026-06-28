@@ -76,6 +76,7 @@
 - Value analysis uses the current deck's cards for internal synergies and mana sources; meta decks only feed the against-meta interaction grid.
 - Value analysis shows land mana abilities that can pay a cast option, keeps ETB passives under the cast in their own row color, and shows death triggers in a separate death-trigger section rather than as cast value.
 - Basic bounce effects such as `Return target permanent to its owner's hand` create battlefield-to-hand zone movement for non-land permanents only.
+- Modal instant creature-shape spells that make target creatures `1/1` with hexproof or `3/4` with flying and vigilance appear as creature modifier options for every creature in the current deck.
 - The left session/config rail can collapse toward the left; when open it uses a narrow sidebar layout so analysis content keeps most of the page width.
 - Analysis card rows prioritize a near-card-sized image beside a compact interaction grid that avoids horizontal scrolling for normal meta views.
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
