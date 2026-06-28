@@ -479,6 +479,16 @@ function isThresholdTokenCopyDetail(detail) {
     return /Copy token cost 5/.test(detail);
 }
 
+function withCastOptionCost(entry, option) {
+    return {
+        ...entry,
+        actionCost: entry.cost,
+        actionCostSymbols: entry.costSymbols,
+        cost: option.cost,
+        costSymbols: option.costSymbols ?? option.symbols,
+    };
+}
+
 function synergyValueText(key, card, relatedCard) {
     if (/^synergy\.combat\./.test(key)) {
         return 'Creature improvement';
@@ -642,9 +652,9 @@ export function analyzeCardValue(card, relatedCards = []) {
                     }
 
                     if (kind === 'permanent') {
-                        option.permanentOptions.push(entry);
+                        option.permanentOptions.push(withCastOptionCost(entry, option));
                     } else {
-                        option.bonuses.push(entry);
+                        option.bonuses.push(withCastOptionCost(entry, option));
                     }
                 }
             }

@@ -102,6 +102,8 @@ describe('CardValueAnalyzer', () => {
         const permanentOptions = optValue.castOptions[0].permanentOptions;
         expect(permanentOptions).toContainEqual(expect.objectContaining({
             condition: 'otter',
+            cost: '{U}',
+            costSymbols: ['U'],
             effect: 'Combat pump +1/+1 UED',
             source: 'otter',
             value: 'Creature improvement',
@@ -164,11 +166,18 @@ describe('CardValueAnalyzer', () => {
             value: 'Direct damage; Card -1',
         });
         expect(base.permanentOptions.map(option => option.effect)).toContain('Combat pump +2/+0 UED');
+        expect(base.permanentOptions).toContainEqual(expect.objectContaining({
+            effect: 'Combat pump +2/+0 UED',
+            cost: '{R}',
+            costSymbols: ['R'],
+        }));
         expect(base.permanentOptions.map(option => option.effect)).not.toContain('Copy token');
         expect(kicked.permanentOptions).toContainEqual(expect.objectContaining({
             condition: 'colorstorm stallion threshold',
             effect: 'Copy token',
-            costSymbols: ['5'],
+            cost: '{R}{4}',
+            costSymbols: ['R', '4'],
+            actionCost: '5',
             value: 'Creature token generation',
         }));
     });
@@ -286,7 +295,9 @@ describe('CardValueAnalyzer', () => {
 
         expect(analyzeCardValue(rat, [lumaret]).castOptions[0].permanentOptions).toContainEqual(expect.objectContaining({
             condition: 'bogwater lumaret',
-            cost: '1',
+            cost: '{B}',
+            costSymbols: ['B'],
+            actionCost: '1',
             effect: 'ETB life gain +1',
             quantity: 2,
             sourceLine: 'x2',
