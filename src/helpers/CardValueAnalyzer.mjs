@@ -532,6 +532,29 @@ function isThresholdTokenCopyDetail(detail) {
     return /Copy token cost 5/.test(detail);
 }
 
+function isBattlefieldToHandSpell(card) {
+    return /return target permanent to (?:its|their|his|her|that permanent's) owner's hand/i.test(textOf(card));
+}
+
+function opponentBattlefieldToHandOption(card) {
+    if (!isBattlefieldToHandSpell(card)) {
+        return null;
+    }
+
+    return {
+        condition: 'Opponent permanent',
+        cost: manaCostOf(card),
+        costSymbols: manaSymbols(manaCostOf(card)),
+        detail: `${castSpeed(card) === 'Instant' ? 'I' : 'S'}:Battlefield to hand cost ${manaCostValue(manaCostOf(card))}`,
+        effect: 'Battlefield to hand',
+        quantity: 1,
+        source: card.name,
+        sourceLine: 'x1',
+        speed: castSpeed(card),
+        value: 'Battlefield reset',
+    };
+}
+
 function classLevelSetupCost(source, targetLevel) {
     const levelCosts = [...textOf(source).matchAll(/((?:\{[^}]+\})+):\s*Level\s+(\d+)/gi)]
         .map(match => {
@@ -591,6 +614,15 @@ function withSetupCost(entry, card, relatedCard, key) {
         actionCostSymbols: entry.costSymbols,
         cost: setupCost,
         costSymbols: manaSymbols(setupCost),
+    };
+}
+
+function ownBattlefieldToHandOption(entry, card, relatedCard, key) {
+    return {
+        ...withSetupCost(entry, card, relatedCard, key),
+        condition: relatedCard.name,
+        effect: 'Battlefield to hand + draw',
+        value: 'Battlefield reset; Card draw',
     };
 }
 
@@ -816,6 +848,10 @@ export function analyzeCardValue(card, relatedCards = []) {
     const deathOptions = [];
     const seenZoneOptions = new Set();
     const seenDeathOptions = new Set();
+    const opponentBounce = opponentBattlefieldToHandOption(card);
+    if (opponentBounce) {
+        zoneOptions.push(opponentBounce);
+    }
 
     for (const relatedCard of relatedCards) {
         const summary = summarizeCreatureInteractions([card], relatedCard);
@@ -844,7 +880,9 @@ export function analyzeCardValue(card, relatedCards = []) {
                 const zoneKey = `${entry.source}:${key}:${entry.detail}`;
                 if (!seenZoneOptions.has(zoneKey)) {
                     seenZoneOptions.add(zoneKey);
-                    zoneOptions.push(withSetupCost(entry, card, relatedCard, key));
+                    zoneOptions.push(/^synergy\.battlefieldToHand\.sources$/.test(key)
+                        ? ownBattlefieldToHandOption(entry, card, relatedCard, key)
+                        : withSetupCost(entry, card, relatedCard, key));
                 }
             } else if (kind === 'death') {
                 const deathKey = `${entry.source}:${key}:${entry.detail}`;

@@ -836,6 +836,55 @@ describe('Core Rendering', async () => {
         component.data.config.decklist = '';
     });
 
+    test('Feature: Value view separates opponent bounce from own permanent bounce draw.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const boomerang = {
+            quantity: 1,
+            name: 'boomerang',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Instant',
+                oracleText: "Return target permanent to its owner's hand.",
+                manaCost: '{U}{U}',
+            },
+            setOptions: [],
+        };
+        const arcaneSignet = {
+            quantity: 1,
+            name: 'arcane signet',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Artifact',
+                oracleText: "{T}: Add one mana of any color in your commander's color identity.",
+                manaCost: '{2}',
+            },
+            setOptions: [],
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisView = 'value';
+        component.data.config.includeCards = true;
+        component.data.config.includeGamePieces = true;
+        component.data.cards = [boomerang, arcaneSignet];
+        component.data.metaDeckStates = [];
+
+        await component.ctx.waitForAnalysisQueue();
+        await wrapper.vm.$nextTick();
+
+        const zoneText = wrapper.find('.value-zone-options').text();
+        expect(zoneText).toContain('Opponent permanent');
+        expect(zoneText).toContain('Battlefield to hand');
+        expect(zoneText).toContain('arcane signet');
+        expect(zoneText).toContain('Battlefield to hand + draw');
+        expect(zoneText).toContain('Card draw');
+
+        component.data.config.analysisView = 'interaction';
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.config.decklist = '';
+    });
+
     test('Feature: Value view renders creature modifier options from the current deck.', async () => {
         const component = wrapper.getCurrentComponent();
         const elemental = {

@@ -432,12 +432,20 @@ describe('CardValueAnalyzer', () => {
         const zoneOptions = analyzeCardValue(boomerang, [arcaneSignet, forest]).zoneOptions;
 
         expect(zoneOptions).toContainEqual(expect.objectContaining({
-            condition: 'Action 2',
+            condition: 'Opponent permanent',
             cost: '{U}{U}',
             costSymbols: ['U', 'U'],
             effect: 'Battlefield to hand',
-            source: 'arcane signet',
+            source: 'boomerang',
             value: 'Battlefield reset',
+        }));
+        expect(zoneOptions).toContainEqual(expect.objectContaining({
+            condition: 'arcane signet',
+            cost: '{U}{U}',
+            costSymbols: ['U', 'U'],
+            effect: 'Battlefield to hand + draw',
+            source: 'arcane signet',
+            value: 'Battlefield reset; Card draw',
         }));
         expect(zoneOptions.map(option => option.source)).not.toContain('forest');
     });
