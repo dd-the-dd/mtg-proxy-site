@@ -666,35 +666,6 @@
                       </div>
                     </div>
                   </div>
-                  <div v-if="option.manaOptions.length" class="value-rows value-rows-mana">
-                    <div
-                      v-for="(mana, manaIndex) in option.manaOptions"
-                      :key="`mana-${manaIndex}`"
-                      class="value-row value-row-mana"
-                    >
-                      <div class="value-row-cell value-row-condition">
-                        <div>{{ mana.condition }}</div>
-                        <div class="value-row-source">
-                          {{ mana.sourceLine }}
-                        </div>
-                      </div>
-                      <div class="value-row-cell value-row-cost">
-                        <i
-                          v-for="(symbol, symbolIndex) in mana.costSymbols"
-                          :key="`mana-cost-${manaIndex}-${symbolIndex}`"
-                          class="ms ms-cost mana-symbol"
-                          :class="manaSymbolClass(symbol)"
-                          :title="symbol"
-                        />
-                      </div>
-                      <div class="value-row-cell value-row-effect">
-                        {{ mana.effect }}
-                      </div>
-                      <div class="value-row-cell value-row-state">
-                        {{ mana.value || '-' }}
-                      </div>
-                    </div>
-                  </div>
                   <div v-if="option.etbOptions.length" class="value-rows value-rows-etb">
                     <div
                       v-for="(etb, etbIndex) in option.etbOptions"
@@ -924,6 +895,32 @@
                     <div class="value-row-cell value-row-state">
                       {{ zone.value || '-' }}
                     </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="manaSummaryForCard(card).length"
+                class="value-mana-options"
+              >
+                <div class="value-line-header">
+                  Mana sources
+                </div>
+                <div class="value-mana-chip-list">
+                  <div
+                    v-for="(mana, manaIndex) in manaSummaryForCard(card)"
+                    :key="`mana-summary-${cardIndex}-${manaIndex}`"
+                    class="value-mana-chip"
+                  >
+                    <span class="value-mana-source">{{ mana.condition }}</span>
+                    <span class="value-mana-quantity">x{{ mana.quantity }}</span>
+                    <span class="value-mana-arrow">-></span>
+                    <i
+                      v-for="(symbol, symbolIndex) in mana.producedSymbols"
+                      :key="`mana-summary-symbol-${cardIndex}-${manaIndex}-${symbolIndex}`"
+                      class="ms ms-cost mana-symbol"
+                      :class="manaSymbolClass(symbol)"
+                      :title="symbol"
+                    />
                   </div>
                 </div>
               </div>
@@ -1839,6 +1836,24 @@ export default {
         },
         valueAnalysis(card) {
             return buildValueAnalysisForCard(card, this.cards);
+        },
+        manaSummaryForCard(card) {
+            const seen = new Map();
+            for (const option of this.valueAnalysisForCard(card).castOptions) {
+                for (const mana of option.manaOptions ?? []) {
+                    const producedSymbols = mana.producedSymbols ?? [];
+                    const key = `${mana.condition}:${producedSymbols.join('/')}`;
+                    if (!seen.has(key)) {
+                        seen.set(key, {
+                            condition: mana.condition,
+                            producedSymbols,
+                            quantity: mana.quantity ?? 1,
+                        });
+                    }
+                }
+            }
+
+            return [...seen.values()];
         },
         manaSymbolClass(symbol) {
             if (String(symbol).toUpperCase() === 'T') {
@@ -2991,6 +3006,7 @@ export default {
 
 .value-death-options,
 .value-creature-options,
+.value-mana-options,
 .value-zone-options,
 .value-activated-options {
     display: grid;
@@ -3039,13 +3055,6 @@ export default {
     border: 1px solid #75e0a7;
     color: #067647;
     max-width: 94%;
-}
-
-.value-row-mana {
-    background: #f0f9ff;
-    border: 1px solid #7dd3fc;
-    color: #075985;
-    max-width: 90%;
 }
 
 .value-row-etb {
@@ -3137,6 +3146,41 @@ export default {
 .value-speed {
     color: currentColor;
     font-size: 0.78rem;
+    opacity: 0.74;
+}
+
+.value-mana-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.24rem;
+    max-width: 100%;
+}
+
+.value-mana-chip {
+    align-items: center;
+    background: #f0f9ff;
+    border: 1px solid #7dd3fc;
+    border-radius: 999px;
+    color: #075985;
+    display: inline-flex;
+    font-size: 0.58rem;
+    font-weight: 700;
+    gap: 0.16rem;
+    line-height: 1;
+    max-width: 100%;
+    min-height: 1.25rem;
+    padding: 0.16rem 0.34rem;
+}
+
+.value-mana-source {
+    max-width: 5.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.value-mana-quantity,
+.value-mana-arrow {
     opacity: 0.74;
 }
 

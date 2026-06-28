@@ -711,7 +711,9 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.value-zone-options').text()).toContain("stormchaser's talent class 2");
         expect(wrapper.find('.value-zone-options').text()).toContain('Grave to hand');
         expect(wrapper.find('.value-zone-options').text()).toContain('Card recursion');
-        expect(wrapper.find('.value-zone-options .ms-5').exists()).toBe(true);
+        expect(wrapper.find('.value-zone-options .ms-u').exists()).toBe(true);
+        expect(wrapper.find('.value-zone-options .ms-3').exists()).toBe(true);
+        expect(wrapper.find('.value-zone-options .ms-5').exists()).toBe(false);
         expect(wrapper.find('.value-rows-bonus').exists()).toBe(false);
 
         component.data.config.analysisView = 'interaction';
@@ -765,6 +767,67 @@ describe('Core Rendering', async () => {
 
         expect(wrapper.find('.value-rows-permanent').exists()).toBe(false);
         expect(wrapper.find('.value-view').text()).not.toContain("stormchaser's talent");
+
+        component.data.config.analysisView = 'interaction';
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.config.decklist = '';
+    });
+
+    test('Feature: Value view renders mana sources as compact chips at the bottom.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const opt = {
+            quantity: 1,
+            name: 'opt',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Instant',
+                oracleText: 'Scry 1. Draw a card.',
+                manaCost: '{U}',
+            },
+            setOptions: [],
+        };
+        const island = {
+            quantity: 5,
+            name: 'island',
+            selectedOption: {
+                manaValue: 0,
+                typeLine: 'Basic Land - Island',
+                oracleText: '{T}: Add {U}.',
+                manaCost: '',
+            },
+            setOptions: [],
+        };
+        const mountain = {
+            quantity: 3,
+            name: 'mountain',
+            selectedOption: {
+                manaValue: 0,
+                typeLine: 'Basic Land - Mountain',
+                oracleText: '{T}: Add {R}.',
+                manaCost: '',
+            },
+            setOptions: [],
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisView = 'value';
+        component.data.config.includeCards = true;
+        component.data.config.includeGamePieces = true;
+        component.data.cards = [opt, island, mountain];
+        component.data.metaDeckStates = [];
+
+        await component.ctx.waitForAnalysisQueue();
+        await wrapper.vm.$nextTick();
+
+        const manaSources = wrapper.find('.value-mana-options');
+        expect(manaSources.text()).toContain('Mana sources');
+        expect(manaSources.text()).toContain('island');
+        expect(manaSources.text()).toContain('x5');
+        expect(manaSources.text()).not.toContain('mountain');
+        expect(wrapper.find('.value-mana-chip .ms-u').exists()).toBe(true);
+        expect(wrapper.find('.value-rows-mana').exists()).toBe(false);
 
         component.data.config.analysisView = 'interaction';
         component.data.config.analysisMode = false;

@@ -532,13 +532,65 @@ function isThresholdTokenCopyDetail(detail) {
     return /Copy token cost 5/.test(detail);
 }
 
-function withCastOptionCost(entry, option) {
+function classLevelSetupCost(source, targetLevel) {
+    const levelCosts = [...textOf(source).matchAll(/((?:\{[^}]+\})+):\s*Level\s+(\d+)/gi)]
+        .map(match => {
+            return {
+                cost: match[1],
+                level: parseInt(match[2], 10),
+            };
+        })
+        .sort((a, b) => a.level - b.level);
+
+    if (!/\bClass\b/i.test(typeLineOf(source)) || levelCosts.length === 0) {
+        return manaCostOf(source);
+    }
+
+    return addManaCosts(
+        manaCostOf(source),
+        ...levelCosts
+            .filter(levelCost => levelCost.level <= targetLevel)
+            .map(levelCost => levelCost.cost),
+    );
+}
+
+function synergySourceAndFeeder(card, relatedCard, key) {
+    return /\.feeders$/.test(key)
+        ? { source: relatedCard, feeder: card }
+        : { source: card, feeder: relatedCard };
+}
+
+function synergySetupCost(card, relatedCard, key) {
+    const { source, feeder } = synergySourceAndFeeder(card, relatedCard, key);
+
+    if (/^synergy\.graveyardPlay\./.test(key)) {
+        return classLevelSetupCost(source, 2);
+    }
+
+    if (/^synergy\.creatureTokens\./.test(key) && /\bClass\b/i.test(typeLineOf(source))) {
+        return classLevelSetupCost(source, 3);
+    }
+
+    if (/^synergy\.entersBattlefield\./.test(key)) {
+        return addManaCosts(manaCostOf(source), manaCostOf(feeder));
+    }
+
+    if (/^synergy\.combat\./.test(key) && selected(source).isToken) {
+        return '';
+    }
+
+    return manaCostOf(source);
+}
+
+function withSetupCost(entry, card, relatedCard, key) {
+    const setupCost = synergySetupCost(card, relatedCard, key);
+
     return {
         ...entry,
         actionCost: entry.cost,
         actionCostSymbols: entry.costSymbols,
-        cost: option.cost,
-        costSymbols: option.costSymbols ?? option.symbols,
+        cost: setupCost,
+        costSymbols: manaSymbols(setupCost),
     };
 }
 
@@ -573,6 +625,7 @@ function manaOptionsForCast(option, relatedCards) {
                 costSymbols: ability.costSymbols,
                 effect: ability.effect,
                 quantity: relatedCard.quantity ?? 1,
+                producedSymbols: ability.anyColor ? coloredManaSymbols(option.cost) : matchedSymbols,
                 source: relatedCard.name,
                 sourceLine: `x${relatedCard.quantity ?? 1}`,
                 speed: 'Mana',
@@ -791,13 +844,13 @@ export function analyzeCardValue(card, relatedCards = []) {
                 const zoneKey = `${entry.source}:${key}:${entry.detail}`;
                 if (!seenZoneOptions.has(zoneKey)) {
                     seenZoneOptions.add(zoneKey);
-                    zoneOptions.push(entry);
+                    zoneOptions.push(withSetupCost(entry, card, relatedCard, key));
                 }
             } else if (kind === 'death') {
                 const deathKey = `${entry.source}:${key}:${entry.detail}`;
                 if (!seenDeathOptions.has(deathKey)) {
                     seenDeathOptions.add(deathKey);
-                    deathOptions.push(entry);
+                    deathOptions.push(withSetupCost(entry, card, relatedCard, key));
                 }
             } else {
                 for (const option of castOptions) {
@@ -806,11 +859,11 @@ export function analyzeCardValue(card, relatedCards = []) {
                     }
 
                     if (kind === 'etb') {
-                        option.etbOptions.push(withCastOptionCost(entry, option));
+                        option.etbOptions.push(withSetupCost(entry, card, relatedCard, key));
                     } else if (kind === 'permanent') {
-                        option.permanentOptions.push(withCastOptionCost(entry, option));
+                        option.permanentOptions.push(withSetupCost(entry, card, relatedCard, key));
                     } else {
-                        option.bonuses.push(withCastOptionCost(entry, option));
+                        option.bonuses.push(withSetupCost(entry, card, relatedCard, key));
                     }
                 }
             }

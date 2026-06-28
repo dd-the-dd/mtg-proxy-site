@@ -49,11 +49,20 @@ describe('CardValueAnalyzer', () => {
         expect(cast.values).not.toContainEqual({ label: 'State', value: 'Card 0' });
         expect(cast.permanentOptions.map(option => option.detail)).not.toContain('S:Combat pump +1/+1 UED cost 1');
         expect(cast.permanentOptions.map(option => option.detail)).toContain('S:Token engine cost 11');
+        expect(cast.permanentOptions).toContainEqual(expect.objectContaining({
+            condition: "stormchaser's talent class 3",
+            cost: '{U}{3}{U}{5}{U}',
+            costSymbols: ['U', '3', 'U', '5', 'U'],
+            actionCost: '11',
+            effect: 'Token engine',
+        }));
         expect(cast.permanentOptions.map(option => option.detail)).not.toContain('S:Grave to hand cost 5');
         expect(cast.manaOptions).toEqual([]);
         expect(value.zoneOptions).toContainEqual(expect.objectContaining({
             condition: "stormchaser's talent class 2",
-            cost: '5',
+            cost: '{U}{3}{U}',
+            costSymbols: ['U', '3', 'U'],
+            actionCost: '5',
             effect: 'Grave to hand',
             quantity: 4,
             value: 'Card recursion',
@@ -103,8 +112,8 @@ describe('CardValueAnalyzer', () => {
         const permanentOptions = optValue.castOptions[0].permanentOptions;
         expect(permanentOptions).toContainEqual(expect.objectContaining({
             condition: 'otter',
-            cost: '{U}',
-            costSymbols: ['U'],
+            cost: '',
+            costSymbols: [],
             effect: 'Combat pump +1/+1 UED',
             source: 'otter',
             value: 'Creature improvement',
@@ -169,15 +178,15 @@ describe('CardValueAnalyzer', () => {
         expect(base.permanentOptions.map(option => option.effect)).toContain('Combat pump +2/+0 UED');
         expect(base.permanentOptions).toContainEqual(expect.objectContaining({
             effect: 'Combat pump +2/+0 UED',
-            cost: '{R}',
-            costSymbols: ['R'],
+            cost: '{1}{R}',
+            costSymbols: ['1', 'R'],
         }));
         expect(base.permanentOptions.map(option => option.effect)).not.toContain('Copy token');
         expect(kicked.permanentOptions).toContainEqual(expect.objectContaining({
             condition: 'colorstorm stallion threshold',
             effect: 'Copy token',
-            cost: '{R}{4}',
-            costSymbols: ['R', '4'],
+            cost: '{1}{U}{R}',
+            costSymbols: ['1', 'U', 'R'],
             actionCost: '5',
             value: 'Creature token generation',
         }));
@@ -303,8 +312,8 @@ describe('CardValueAnalyzer', () => {
         const ratValue = analyzeCardValue(rat, [lumaret, swamp]);
         expect(ratValue.castOptions[0].etbOptions).toContainEqual(expect.objectContaining({
             condition: 'bogwater lumaret',
-            cost: '{B}',
-            costSymbols: ['B'],
+            cost: '{B}{G}',
+            costSymbols: ['B', 'G'],
             actionCost: '1',
             effect: 'ETB life gain +1',
             quantity: 2,
@@ -353,13 +362,17 @@ describe('CardValueAnalyzer', () => {
         expect(options).toContainEqual(expect.objectContaining({
             condition: 'blood artist',
             effect: 'Death drain +1',
-            cost: '1',
+            cost: '{1}{B}',
+            costSymbols: ['1', 'B'],
+            actionCost: '1',
             value: 'Life drain',
         }));
         expect(options).toContainEqual(expect.objectContaining({
             condition: 'pitiless plunderer',
             effect: 'Death treasure',
-            cost: '1',
+            cost: '{3}{B}',
+            costSymbols: ['3', 'B'],
+            actionCost: '1',
             value: 'Treasure generation',
         }));
     });
@@ -420,6 +433,8 @@ describe('CardValueAnalyzer', () => {
 
         expect(zoneOptions).toContainEqual(expect.objectContaining({
             condition: 'Action 2',
+            cost: '{U}{U}',
+            costSymbols: ['U', 'U'],
             effect: 'Battlefield to hand',
             source: 'arcane signet',
             value: 'Battlefield reset',
