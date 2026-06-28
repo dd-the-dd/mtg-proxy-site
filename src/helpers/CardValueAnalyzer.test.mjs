@@ -395,4 +395,35 @@ describe('CardValueAnalyzer', () => {
         }));
         expect(manaOptions.map(option => option.condition)).not.toContain('mountain');
     });
+
+    test('Feature: Value analysis shows bounce zone movement for non-land permanents only.', () => {
+        const boomerang = card('boomerang', {
+            typeLine: 'Instant',
+            oracleText: "Return target permanent to its owner's hand.",
+            manaCost: '{U}{U}',
+            manaValue: 2,
+        });
+        const arcaneSignet = card('arcane signet', {
+            typeLine: 'Artifact',
+            oracleText: '{T}: Add one mana of any color in your commander\'s color identity.',
+            manaCost: '{2}',
+            manaValue: 2,
+        });
+        const forest = card('forest', {
+            typeLine: 'Basic Land - Forest',
+            oracleText: '{T}: Add {G}.',
+            manaCost: '',
+            manaValue: 0,
+        });
+
+        const zoneOptions = analyzeCardValue(boomerang, [arcaneSignet, forest]).zoneOptions;
+
+        expect(zoneOptions).toContainEqual(expect.objectContaining({
+            condition: 'Action 2',
+            effect: 'Battlefield to hand draw',
+            source: 'arcane signet',
+            value: 'Battlefield reset',
+        }));
+        expect(zoneOptions.map(option => option.source)).not.toContain('forest');
+    });
 });

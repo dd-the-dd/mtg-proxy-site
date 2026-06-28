@@ -235,6 +235,35 @@ describe('DeckInteractionAnalyzer', () => {
         expect(synergyInteractionDetail(boomerang, stormchaserTalent, 'synergy.entersBattlefield.sources')).toBe('I:ETB recast cost 3');
     });
 
+    test('Feature: Basic bounce creates zone movement for non-land permanents only.', () => {
+        const boomerang = card('boomerang', {
+            typeLine: 'Instant',
+            oracleText: "Return target permanent to its owner's hand.",
+            manaCost: '{U}{U}',
+        });
+        const arcaneSignet = card('arcane signet', {
+            typeLine: 'Artifact',
+            oracleText: '{T}: Add one mana of any color in your commander\'s color identity.',
+            manaCost: '{2}',
+        });
+        const bear = card('bear cub', {
+            typeLine: 'Creature - Bear',
+            oracleText: '',
+            manaCost: '{1}{G}',
+            power: '2',
+            toughness: '2',
+        });
+        const forest = card('forest', {
+            typeLine: 'Basic Land - Forest',
+            oracleText: '{T}: Add {G}.',
+            manaCost: '',
+        });
+
+        expect(summarizeCreatureInteractions([boomerang], arcaneSignet).synergy.battlefieldToHand.sources.map(item => item.name)).toEqual(['boomerang']);
+        expect(summarizeCreatureInteractions([boomerang], bear).synergy.battlefieldToHand.sources.map(item => item.name)).toEqual(['boomerang']);
+        expect(summarizeCreatureInteractions([boomerang], forest).synergy.battlefieldToHand.sources).toEqual([]);
+    });
+
     test('Feature: ETB lifegain passives identify creatures as feeders.', () => {
         const lumaret = card('bogwater lumaret', {
             typeLine: 'Creature - Frog',

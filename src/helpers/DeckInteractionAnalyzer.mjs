@@ -89,6 +89,10 @@ function isPermanentCard(card) {
     return /\b(?:Artifact|Battle|Creature|Enchantment|Land|Planeswalker)\b/i.test(typeLine);
 }
 
+function isNonLandPermanentCard(card) {
+    return isPermanentCard(card) && !/\bLand\b/i.test(typeLineOf(card));
+}
+
 export function creatureStats(card) {
     return {
         power: statValue(selected(card).power),
@@ -470,19 +474,19 @@ function addSynergyMatches(summary, card, relatedCard) {
         pushOnce(summary.synergy.creatureTokens.feeders, card);
     }
 
-    if (isBattlefieldToHandSynergySource(card) && isPermanentCard(relatedCard)) {
+    if (isBattlefieldToHandSynergySource(card) && isNonLandPermanentCard(relatedCard)) {
         pushOnce(summary.synergy.battlefieldToHand.sources, card);
     }
 
-    if (isBattlefieldToHandSynergySource(relatedCard) && isPermanentCard(card)) {
+    if (isBattlefieldToHandSynergySource(relatedCard) && isNonLandPermanentCard(card)) {
         pushOnce(summary.synergy.battlefieldToHand.feeders, card);
     }
 
-    if (isBattlefieldToHandSynergySource(card) && isPermanentCard(relatedCard) && isEntersBattlefieldSynergyTarget(relatedCard)) {
+    if (isBattlefieldToHandSynergySource(card) && isNonLandPermanentCard(relatedCard) && isEntersBattlefieldSynergyTarget(relatedCard)) {
         pushOnce(summary.synergy.entersBattlefield.sources, card);
     }
 
-    if (isBattlefieldToHandSynergySource(relatedCard) && isPermanentCard(card) && isEntersBattlefieldSynergyTarget(card)) {
+    if (isBattlefieldToHandSynergySource(relatedCard) && isNonLandPermanentCard(card) && isEntersBattlefieldSynergyTarget(card)) {
         pushOnce(summary.synergy.entersBattlefield.feeders, card);
     }
 
