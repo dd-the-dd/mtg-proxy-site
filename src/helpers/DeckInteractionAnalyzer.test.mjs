@@ -231,7 +231,7 @@ describe('DeckInteractionAnalyzer', () => {
 
         expect(summary.synergy.battlefieldToHand.sources.map(item => item.name)).toEqual(['boomerang']);
         expect(summary.synergy.entersBattlefield.sources.map(item => item.name)).toEqual(['boomerang']);
-        expect(synergyInteractionDetail(boomerang, stormchaserTalent, 'synergy.battlefieldToHand.sources')).toBe('I:Battlefield to hand draw cost 2');
+        expect(synergyInteractionDetail(boomerang, stormchaserTalent, 'synergy.battlefieldToHand.sources')).toBe('I:Battlefield to hand cost 2');
         expect(synergyInteractionDetail(boomerang, stormchaserTalent, 'synergy.entersBattlefield.sources')).toBe('I:ETB recast cost 3');
     });
 

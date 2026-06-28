@@ -863,7 +863,7 @@ describe('Core Rendering', async () => {
 
         expect(visibleLabels).toContain('Synergy hand');
         expect(visibleLabels).toContain('Synergy ETB');
-        expect(handCell.title).toContain("2x stormchaser's talent - I:Battlefield to hand draw cost 2");
+        expect(handCell.title).toContain("2x stormchaser's talent - I:Battlefield to hand cost 2");
         expect(etbCell.title).toContain("2x stormchaser's talent - I:ETB recast cost 3");
 
         component.data.config.analysisMode = false;

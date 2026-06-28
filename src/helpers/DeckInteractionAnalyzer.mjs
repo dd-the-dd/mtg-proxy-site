@@ -567,7 +567,7 @@ export function synergyInteractionDetail(card, relatedCard, categoryKey) {
 
     if (/^synergy\.battlefieldToHand\./.test(categoryKey)) {
         const speed = spellSpeed(source) === 'instant' ? 'I' : 'S';
-        return `${speed}:Battlefield to hand draw cost ${manaCostValue(manaCostOf(source))}`;
+        return `${speed}:Battlefield to hand cost ${manaCostValue(manaCostOf(source))}`;
     }
 
     if (/^synergy\.entersBattlefield\./.test(categoryKey)) {

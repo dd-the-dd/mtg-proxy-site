@@ -420,7 +420,7 @@ describe('CardValueAnalyzer', () => {
 
         expect(zoneOptions).toContainEqual(expect.objectContaining({
             condition: 'Action 2',
-            effect: 'Battlefield to hand draw',
+            effect: 'Battlefield to hand',
             source: 'arcane signet',
             value: 'Battlefield reset',
         }));
