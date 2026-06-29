@@ -187,6 +187,34 @@ describe('DeckInteractionAnalyzer', () => {
         expect(summary.combat.defending.bothDie).toEqual([]);
     });
 
+    test('Feature: Creature-conversion lands can fight and receive their printed combat pump synergy.', () => {
+        const greatHall = card('great hall of the biblioplex', {
+            typeLine: 'Land',
+            oracleText: '{T}: Add {C}.\n{5}: If this land isn\'t a creature, it becomes a 2/4 Wizard creature with "Whenever you cast an instant or sorcery spell, this creature gets +1/+0 until end of turn."',
+            manaCost: '',
+            manaValue: 0,
+        });
+        const opt = card('opt', {
+            typeLine: 'Instant',
+            oracleText: 'Scry 1. Draw a card.',
+            manaCost: '{U}',
+        });
+        const smallCreature = card('small attacker', {
+            typeLine: 'Creature - Goblin',
+            oracleText: '',
+            power: '2',
+            toughness: '2',
+        });
+
+        const combatSummary = summarizeCreatureInteractions([greatHall], smallCreature);
+        const synergySummary = summarizeCreatureInteractions([opt], greatHall);
+
+        expect(combatSummary.combat.attacking.attackerSurvives.map(item => item.name)).toEqual(['great hall of the biblioplex']);
+        expect(combatSummary.combat.defending.defenderSurvives.map(item => item.name)).toEqual(['great hall of the biblioplex']);
+        expect(synergySummary.synergy.combat.feeders.map(item => item.name)).toEqual(['opt']);
+        expect(synergyInteractionDetail(opt, greatHall, 'synergy.combat.feeders')).toBe('I:Combat pump +1/+0 UED cost 1');
+    });
+
     test('Feature: Stormchaser-style cards separate synergy sources from synergy feeders.', () => {
         const stormchaserTalent = card("stormchaser's talent", {
             typeLine: 'Enchantment - Class',

@@ -54,6 +54,7 @@
 - Analysis percentage cells divide matching meta-card count by the selected meta deck card count, not by the current column total.
 - Meta removal analysis separates kill actions from nonlethal damage actions, and targeted removal or damage is blocked when the target creature has a simple targeting shield such as hexproof, shroud, or color protection from the source spell.
 - Creature combat analysis accounts for flying/reach blocking restrictions, first strike, double strike, deathtouch, and simple unblockable text before classifying whether the attacker survives, defender survives, both die, both survive, or damage reaches the player.
+- Permanents with activated abilities that turn them into creatures, such as Great Hall of the Biblioplex, are analyzed with their converted power, toughness, creature text, and printed combat synergies.
 - Cards that create creature tokens expose token creation as value, but do not inherit the generated token's combat stats or combat synergies; generated tokens carry their own combat and synergy characteristics when analyzed as separate game pieces.
 - Analysis separates synergy source rows from synergy feeder rows. Combat, graveyard-play, and creature-token synergies are shown separately, include trigger-card mana costs in cell details, and empty rows are hidden per analyzed card.
 - Combat synergy parsing uses source-card pump text, so Izzet cards such as Slickshot Show-Off show `+2/+0` while prowess-style cards show `+1/+1`.

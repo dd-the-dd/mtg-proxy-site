@@ -425,6 +425,31 @@ function combatRepresentatives(card) {
         return [card];
     }
 
+    const conversionMatch = /\bbecomes? (?:a |an )?(\d+)\/(\d+) ([^."]*?\bcreature\b)(?: with ([^."]+))?/i.exec(textOf(card));
+    if (conversionMatch) {
+        const selectedCard = selected(card);
+        const typeText = conversionMatch[3]
+            .replace(/\bcreature\b/i, '')
+            .trim();
+        const typeLine = typeText === ''
+            ? 'Creature'
+            : `Creature - ${typeText.replace(/\s+/g, ' ')}`;
+        const abilityText = conversionMatch[4] ?? textOf(card);
+
+        return [
+            {
+                ...card,
+                selectedOption: {
+                    ...selectedCard,
+                    typeLine,
+                    oracleText: abilityText,
+                    power: conversionMatch[1],
+                    toughness: conversionMatch[2],
+                },
+            },
+        ];
+    }
+
     return [];
 }
 
