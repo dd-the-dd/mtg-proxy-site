@@ -122,6 +122,145 @@ function isInstantOrSorcery(card) {
     return /\b(?:Instant|Sorcery)\b/i.test(selected(card).typeLine ?? '');
 }
 
+function typeLineOf(card) {
+    return selected(card).typeLine ?? '';
+}
+
+function oracleTextOf(card) {
+    return selected(card).oracleText ?? '';
+}
+
+function isPermanentCard(card) {
+    return /\b(?:Artifact|Battle|Creature|Enchantment|Land|Planeswalker)\b/i.test(typeLineOf(card));
+}
+
+function isLandCard(card) {
+    return /\bLand\b/i.test(typeLineOf(card));
+}
+
+function isArtifactCard(card) {
+    return /\bArtifact\b/i.test(typeLineOf(card));
+}
+
+function isEnchantmentCard(card) {
+    return /\bEnchantment\b/i.test(typeLineOf(card));
+}
+
+function isPlaneswalkerCard(card) {
+    return /\bPlaneswalker\b/i.test(typeLineOf(card));
+}
+
+function isBattleCard(card) {
+    return /\bBattle\b/i.test(typeLineOf(card));
+}
+
+function targetClauseMentions(effectText, permanentType) {
+    return new RegExp(`\\btarget\\b[^.\\n;]*\\b${permanentType}\\b`, 'i').test(effectText);
+}
+
+function damageAmountFromText(text) {
+    const explicit = /\bDamage (X|\d+)/i.exec(text);
+    if (explicit) {
+        return /^X$/i.test(explicit[1]) ? null : parseInt(explicit[1], 10);
+    }
+
+    const dealt = /\bdeals? (X|\d+) damage\b/i.exec(text);
+    if (dealt) {
+        return /^X$/i.test(dealt[1]) ? null : parseInt(dealt[1], 10);
+    }
+
+    return 0;
+}
+
+function canTargetBySimpleShield(sourceCard, effectText, targetCard) {
+    if (!/\btarget\b/i.test(effectText)) {
+        return true;
+    }
+
+    const targetText = oracleTextOf(targetCard);
+    if (/\bshroud\b/i.test(targetText) || /\bhexproof\b/i.test(targetText)) {
+        return false;
+    }
+
+    const sourceColors = sourceColorNames(sourceCard);
+    return !sourceColors.some(color => {
+        return new RegExp(`\\bprotection from ${color}\\b`, 'i').test(targetText);
+    });
+}
+
+function targetScopeMatches(effectText, targetCard) {
+    if (!isPermanentCard(targetCard)) {
+        return false;
+    }
+
+    if (/\btarget nonland permanent\b/i.test(effectText)) {
+        return !isLandCard(targetCard);
+    }
+
+    if (/\btarget (?:spell or )?permanent\b/i.test(effectText)) {
+        return true;
+    }
+
+    const typedTargetMatches =
+        (targetClauseMentions(effectText, 'artifact') && isArtifactCard(targetCard)) ||
+        (targetClauseMentions(effectText, 'enchantment') && isEnchantmentCard(targetCard)) ||
+        (targetClauseMentions(effectText, 'creature') && isCreatureCard(targetCard)) ||
+        (targetClauseMentions(effectText, 'planeswalker') && isPlaneswalkerCard(targetCard)) ||
+        (targetClauseMentions(effectText, 'battle') && isBattleCard(targetCard));
+    if (typedTargetMatches) {
+        return true;
+    }
+
+    if (/\bany target\b/i.test(effectText)) {
+        return isCreatureCard(targetCard) || isPlaneswalkerCard(targetCard) || isBattleCard(targetCard);
+    }
+
+    if (/\beach creature\b/i.test(effectText)) {
+        return isCreatureCard(targetCard);
+    }
+
+    if (/\btarget opponent exiles a creature they control\b/i.test(effectText)) {
+        return isCreatureCard(targetCard);
+    }
+
+    return false;
+}
+
+function removesMatchedPermanent(effectText) {
+    return /\bexile target\b/i.test(effectText) ||
+        /\bdestroy target\b/i.test(effectText) ||
+        /\breturn target (?:spell or )?permanent to\b/i.test(effectText) ||
+        /\btarget opponent exiles a creature they control\b/i.test(effectText);
+}
+
+function valueRemovalInteraction(sourceCard, option, targetCard) {
+    const effectText = option.effectText ?? selected(sourceCard).oracleText ?? '';
+    if (!targetScopeMatches(effectText, targetCard) || !canTargetBySimpleShield(sourceCard, effectText, targetCard)) {
+        return null;
+    }
+
+    const damage = damageAmountFromText(effectText);
+    const toughness = statValue(selected(targetCard).toughness);
+    const dealsDamage = damage === null || damage > 0;
+    const damagesTarget = dealsDamage &&
+        (isCreatureCard(targetCard) || isPlaneswalkerCard(targetCard) || isBattleCard(targetCard));
+    const removesTarget = removesMatchedPermanent(effectText) ||
+        (typeof damage === 'number' && damage > 0 && toughness !== null && damage >= toughness);
+
+    if (!removesTarget && !damagesTarget) {
+        return null;
+    }
+
+    return {
+        damage: damage ?? 0,
+        damaged: damagesTarget,
+        outcome: removesTarget
+            ? damagesTarget ? 'kill' : 'remove'
+            : 'damage',
+        removed: removesTarget,
+    };
+}
+
 function toughnessTriggerResponses(sourceCard, targetCard, deckCards) {
     const damage = damageAmount(sourceCard);
     const toughness = statValue(selected(targetCard).toughness);
@@ -272,74 +411,78 @@ export function buildMetaDeckRemovalSummary(card, column) {
     };
 }
 
-function removalOutcomeForTarget(card, targetCard) {
-    const summary = summarizeCreatureInteractions([card], targetCard);
-    if (summary.instantRemoval.length > 0 || summary.sorceryRemoval.length > 0) {
-        return 'kill';
-    }
+function valueRemovalDetail(sourceCard, targetCard, interaction, deckCards) {
+    const colors = sourceColorNames(sourceCard).join('/');
+    const damageText = interaction.damaged && interaction.damage > 0 ? ` ${interaction.damage}` : '';
+    const actionText = interaction.outcome === 'damage'
+        ? `damage ${colors}${damageText}`
+        : interaction.outcome === 'kill'
+            ? `kill ${colors}${damageText}`
+            : `remove ${colors}`;
+    const responses = isCreatureCard(targetCard)
+        ? possibleResponses(sourceCard, targetCard, deckCards)
+        : [];
+    const responseText = responses.length > 0
+        ? `; responses: ${responses.map(card => `${card.quantity ?? 1}x ${card.name}`).join(', ')}`
+        : '';
 
-    if (summary.removalActions.instant.damage.length > 0 || summary.removalActions.sorcery.damage.length > 0) {
-        return 'damage';
-    }
-
-    if (summary.removalActions.instant.targetable.length > 0 || summary.removalActions.sorcery.targetable.length > 0) {
-        return 'target';
-    }
-
-    return '';
+    return `${actionText}; ${manaTradeText(sourceCard, targetCard)}; ${cardTradeText(sourceCard, targetCard, interaction.outcome)}${responseText}`;
 }
 
-function removalCategoryForOutcome(card, outcome) {
-    const speed = spellSpeed(card) ?? 'sorcery';
-    if (outcome === 'kill') {
-        return speed === 'instant' ? 'instantRemoval' : 'sorceryRemoval';
-    }
-
-    return `removalActions.${speed}.${outcome === 'target' ? 'targetable' : outcome}`;
-}
-
-function buildMetaRemovalTargets(card, column) {
-    return (column.creatures ?? [])
+function buildMetaRemovalTargets(card, option, column) {
+    return (column.cards ?? [])
         .map(targetCard => {
-            const outcome = removalOutcomeForTarget(card, targetCard);
-            if (!outcome) {
+            const interaction = valueRemovalInteraction(card, option, targetCard);
+            if (!interaction) {
                 return null;
             }
 
-            const responses = possibleResponses(card, targetCard, column.cards ?? []);
+            const responses = isCreatureCard(targetCard)
+                ? possibleResponses(card, targetCard, column.cards ?? [])
+                : [];
             return {
                 name: targetCard.name,
                 quantity: targetCard.quantity ?? 1,
-                outcome,
-                detail: removalInteractionDetail(card, targetCard, removalCategoryForOutcome(card, outcome), column.cards ?? []),
+                damaged: interaction.damaged,
+                outcome: interaction.outcome,
+                removed: interaction.removed,
+                detail: valueRemovalDetail(card, targetCard, interaction, column.cards ?? []),
                 protection: responses.map(response => `${response.quantity ?? 1}x ${response.name}`).join(', '),
             };
         })
         .filter(Boolean);
 }
 
-function buildMetaRemovalOptions(card, columns = []) {
-    if (damageAmount(card) <= 0) {
-        return [];
-    }
-
+function buildMetaRemovalOptions(card, option, columns = []) {
     return columns
         .filter(column => column.type === 'metaDeck')
         .map(column => {
-            const summary = buildMetaDeckRemovalSummary(card, column);
-            const targets = buildMetaRemovalTargets(card, column);
+            const totalQuantity = column.totalCards ?? countCards(column.cards ?? []);
+            const targets = buildMetaRemovalTargets(card, option, column);
             if (targets.length === 0) {
                 return null;
             }
 
+            const removedQuantity = targets
+                .filter(target => target.removed)
+                .reduce((total, target) => total + target.quantity, 0);
+            const damagedQuantity = targets
+                .filter(target => target.damaged)
+                .reduce((total, target) => total + target.quantity, 0);
+            const percent = quantity => {
+                return totalQuantity > 0
+                    ? `${(quantity / totalQuantity * 100).toFixed(1)}%`
+                    : '0.0%';
+            };
+
             return {
                 deckId: column.key,
                 deckName: column.label,
-                removedPercent: summary.killPercent,
-                affectedPercent: summary.interactionPercent,
-                removedQuantity: summary.killedQuantity,
-                affectedQuantity: summary.interactedQuantity,
-                totalQuantity: summary.totalQuantity,
+                removedPercent: percent(removedQuantity),
+                damagePercent: percent(damagedQuantity),
+                damagedQuantity,
+                removedQuantity,
+                totalQuantity,
                 effect: 'Battlefield removal',
                 value: 'Removal coverage',
                 targets,
@@ -368,14 +511,13 @@ export function buildAnalysisRowsForCard(card, categories, columns, metric) {
 
 export function buildValueAnalysisForCard(card, relatedCards, columns = []) {
     const value = analyzeCardValue(card, relatedCards);
-    const metaRemovalOptions = buildMetaRemovalOptions(card, columns);
 
     return {
         ...value,
         castOptions: value.castOptions.map(option => {
             return {
                 ...option,
-                metaRemovalOptions,
+                metaRemovalOptions: buildMetaRemovalOptions(card, option, columns),
             };
         }),
     };

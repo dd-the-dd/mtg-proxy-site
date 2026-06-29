@@ -69,7 +69,7 @@ describe('AnalysisModel', () => {
         });
     });
 
-    test('Feature: Value analysis exposes per-meta-deck removal coverage for damage spells.', () => {
+    test('Feature: Value analysis exposes per-meta-deck removal and damage coverage for target permanent spells.', () => {
         const abrade = card('abrade', {
             manaCost: '{1}{R}',
             manaValue: 2,
@@ -96,38 +96,166 @@ describe('AnalysisModel', () => {
             power: '4',
             toughness: '4',
         }, 5);
+        const artifact = card('tablet', {
+            manaValue: 3,
+            typeLine: 'Artifact',
+            oracleText: '',
+        }, 2);
         const column = {
             key: 'meta',
             label: 'Meta',
             type: 'metaDeck',
-            cards: [smallCreature, largeCreature, shoreUp],
+            cards: [smallCreature, largeCreature, artifact, shoreUp],
             creatures: [smallCreature, largeCreature],
-            totalCards: 10,
+            totalCards: 12,
         };
 
         const value = buildValueAnalysisForCard(abrade, [], [column]);
-        const cast = value.castOptions[0];
+        const damageMode = value.castOptions.find(option => option.baseRows[0].effect === 'Damage 3');
+        const artifactMode = value.castOptions.find(option => option.baseRows[0].effect === 'Destroy artifact');
 
-        expect(cast.metaRemovalOptions).toContainEqual(expect.objectContaining({
+        expect(damageMode.metaRemovalOptions).toContainEqual(expect.objectContaining({
             deckId: 'meta',
             deckName: 'Meta',
-            removedPercent: '30.0%',
-            affectedPercent: '80.0%',
+            removedPercent: '25.0%',
+            damagePercent: '66.7%',
             effect: 'Battlefield removal',
             value: 'Removal coverage',
         }));
-        expect(cast.metaRemovalOptions[0].targets).toContainEqual(expect.objectContaining({
+        expect(damageMode.metaRemovalOptions[0].targets).toContainEqual(expect.objectContaining({
             name: 'small creature',
             quantity: 3,
             outcome: 'kill',
             protection: '2x shore up',
         }));
-        expect(cast.metaRemovalOptions[0].targets).toContainEqual(expect.objectContaining({
+        expect(damageMode.metaRemovalOptions[0].targets).toContainEqual(expect.objectContaining({
             name: 'large creature',
             quantity: 5,
             outcome: 'damage',
             protection: '2x shore up',
         }));
+        expect(artifactMode.metaRemovalOptions).toContainEqual(expect.objectContaining({
+            removedPercent: '16.7%',
+            damagePercent: '0.0%',
+        }));
+        expect(artifactMode.metaRemovalOptions[0].targets).toContainEqual(expect.objectContaining({
+            name: 'tablet',
+            quantity: 2,
+            outcome: 'remove',
+        }));
+    });
+
+    test('Feature: Value analysis exposes opponent permanent target coverage even without damage.', () => {
+        const inevitableDefeat = card('inevitable defeat', {
+            manaCost: '{1}{R}{W}{B}',
+            manaValue: 4,
+            typeLine: 'Instant',
+            oracleText: "This spell can't be countered.\nExile target nonland permanent. Its controller loses 3 life and you gain 3 life.",
+        });
+        const creature = card('small creature', {
+            manaValue: 2,
+            typeLine: 'Creature - Mouse',
+            oracleText: '',
+            power: '1',
+            toughness: '3',
+        }, 3);
+        const artifact = card('tablet', {
+            manaValue: 3,
+            typeLine: 'Artifact',
+            oracleText: '',
+        }, 2);
+        const land = card('island', {
+            manaValue: 0,
+            typeLine: 'Basic Land - Island',
+            oracleText: '{T}: Add {U}.',
+        }, 4);
+        const column = {
+            key: 'meta',
+            label: 'Meta',
+            type: 'metaDeck',
+            cards: [creature, artifact, land],
+            creatures: [creature],
+            totalCards: 9,
+        };
+
+        const value = buildValueAnalysisForCard(inevitableDefeat, [], [column]);
+        const coverage = value.castOptions[0].metaRemovalOptions[0];
+
+        expect(coverage).toMatchObject({
+            deckId: 'meta',
+            removedPercent: '55.6%',
+            damagePercent: '0.0%',
+            removedQuantity: 5,
+            damagedQuantity: 0,
+            totalQuantity: 9,
+        });
+        expect(coverage.targets).toContainEqual(expect.objectContaining({
+            name: 'small creature',
+            quantity: 3,
+            outcome: 'remove',
+        }));
+        expect(coverage.targets).toContainEqual(expect.objectContaining({
+            name: 'tablet',
+            quantity: 2,
+            outcome: 'remove',
+        }));
+        expect(coverage.targets.map(target => target.name)).not.toContain('island');
+    });
+
+    test('Feature: Value analysis exposes typed opponent permanent target coverage.', () => {
+        const breaker = card('breaker', {
+            manaCost: '{1}{G}',
+            manaValue: 2,
+            typeLine: 'Instant',
+            oracleText: 'Destroy target artifact or enchantment.',
+        });
+        const artifact = card('tablet', {
+            manaValue: 3,
+            typeLine: 'Artifact',
+            oracleText: '',
+        }, 2);
+        const enchantment = card('class', {
+            manaValue: 1,
+            typeLine: 'Enchantment - Class',
+            oracleText: '',
+        }, 3);
+        const creature = card('creature', {
+            manaValue: 2,
+            typeLine: 'Creature - Mouse',
+            oracleText: '',
+            power: '1',
+            toughness: '1',
+        }, 4);
+        const column = {
+            key: 'meta',
+            label: 'Meta',
+            type: 'metaDeck',
+            cards: [artifact, enchantment, creature],
+            creatures: [creature],
+            totalCards: 9,
+        };
+
+        const value = buildValueAnalysisForCard(breaker, [], [column]);
+        const coverage = value.castOptions[0].metaRemovalOptions[0];
+
+        expect(coverage).toMatchObject({
+            removedPercent: '55.6%',
+            damagePercent: '0.0%',
+            removedQuantity: 5,
+            damagedQuantity: 0,
+            totalQuantity: 9,
+        });
+        expect(coverage.targets).toContainEqual(expect.objectContaining({
+            name: 'tablet',
+            quantity: 2,
+            outcome: 'remove',
+        }));
+        expect(coverage.targets).toContainEqual(expect.objectContaining({
+            name: 'class',
+            quantity: 3,
+            outcome: 'remove',
+        }));
+        expect(coverage.targets.map(target => target.name)).not.toContain('creature');
     });
 
     test('Feature: Removal protection responses include instant-speed toughness triggers on the target.', () => {

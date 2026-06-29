@@ -1438,6 +1438,7 @@ export function analyzeCardValue(card, relatedCards = []) {
             symbols: option.costSymbols,
             frontFace: option.frontFace === true,
             spellFace: option.spellFace === true,
+            effectText: option.effectText ?? textOf(card),
             baseRows: option.baseRows,
             values: option.values,
             bonuses: [],

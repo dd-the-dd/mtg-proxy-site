@@ -682,7 +682,7 @@
                       >
                         <span class="value-meta-removal-deck">{{ metaRemoval.deckName }}</span>
                         <span>Removed {{ metaRemoval.removedPercent }}</span>
-                        <span>Affected {{ metaRemoval.affectedPercent }}</span>
+                        <span>Damage {{ metaRemoval.damagePercent }}</span>
                       </button>
                       <div
                         v-if="isValueRemovalDeckExpanded(card, optionIndex, metaRemoval.deckId)"

@@ -438,6 +438,15 @@ describe('Core Rendering', async () => {
                 toughness: '4',
             },
         };
+        const artifact = {
+            quantity: 2,
+            name: 'tablet',
+            selectedOption: {
+                manaValue: 3,
+                typeLine: 'Artifact',
+                oracleText: '',
+            },
+        };
 
         component.data.config.analysisMode = true;
         component.data.config.analysisView = 'value';
@@ -450,7 +459,7 @@ describe('Core Rendering', async () => {
                 id: 'abrade-meta',
                 name: 'Abrade Meta',
                 state: {
-                    cards: [smallCreature, largeCreature, shoreUp],
+                    cards: [smallCreature, largeCreature, artifact, shoreUp],
                 },
             },
         ];
@@ -458,18 +467,32 @@ describe('Core Rendering', async () => {
         await component.ctx.waitForAnalysisQueue();
         await wrapper.vm.$nextTick();
 
-        expect(wrapper.find('.value-meta-removal-options').text()).toContain('Abrade Meta');
-        expect(wrapper.find('.value-meta-removal-options').text()).toContain('Removed 30.0%');
-        expect(wrapper.find('.value-meta-removal-options').text()).toContain('Affected 80.0%');
+        const coverageText = wrapper.findAll('.value-meta-removal-options')
+            .map(node => node.text())
+            .join(' ');
+        expect(coverageText).toContain('Abrade Meta');
+        expect(coverageText).toContain('Removed 25.0%');
+        expect(coverageText).toContain('Damage 66.7%');
+        expect(coverageText).toContain('Removed 16.7%');
+        expect(coverageText).toContain('Damage 0.0%');
         expect(wrapper.find('.value-meta-removal-targets').exists()).toBe(false);
 
-        await wrapper.find('.value-meta-removal-toggle').trigger('click');
+        const toggles = wrapper.findAll('.value-meta-removal-toggle');
+        expect(toggles).toHaveLength(2);
+        await toggles[0].trigger('click');
 
         expect(wrapper.find('.value-meta-removal-targets').text()).toContain('3x small creature');
         expect(wrapper.find('.value-meta-removal-targets').text()).toContain('kill');
         expect(wrapper.find('.value-meta-removal-targets').text()).toContain('2x shore up');
         expect(wrapper.find('.value-meta-removal-targets').text()).toContain('5x large creature');
         expect(wrapper.find('.value-meta-removal-targets').text()).toContain('damage');
+
+        await toggles[1].trigger('click');
+        const targetText = wrapper.findAll('.value-meta-removal-targets')
+            .map(node => node.text())
+            .join(' ');
+        expect(targetText).toContain('2x tablet');
+        expect(targetText).toContain('remove');
 
         component.data.config.analysisView = 'interaction';
         component.data.config.analysisMode = false;
