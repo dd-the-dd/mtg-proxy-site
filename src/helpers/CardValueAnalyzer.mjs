@@ -28,6 +28,17 @@ function manaCostOf(card) {
         : '';
 }
 
+function manaCostParts(card) {
+    return manaCostOf(card)
+        .split(/\s*\/\/\s*/)
+        .map(part => part.trim())
+        .filter(Boolean);
+}
+
+function primaryManaCostOf(card) {
+    return manaCostParts(card)[0] ?? manaCostOf(card);
+}
+
 function manaSymbols(cost) {
     return [...cost.matchAll(/\{([^}]+)\}/g)].map(match => match[1]);
 }
@@ -46,6 +57,10 @@ function sentenceCase(value) {
 
 function addManaCosts(...costs) {
     return costs.filter(Boolean).join('');
+}
+
+function removeReminderText(value) {
+    return value.replace(/\([^)]*\)/g, '').trim();
 }
 
 function manaCostValue(cost) {
@@ -75,16 +90,31 @@ function numberWordValue(value) {
     return /^\d+$/.test(value) ? parseInt(value, 10) : words[value.toLowerCase()];
 }
 
-function drawCount(card) {
-    const matches = textOf(card).match(/\bdraw (?:a card|one card|\d+ cards?)\b/gi) ?? [];
+function drawCountFromText(text) {
+    const matches = text.match(/\bdraw (?:a|one|two|three|four|five|six|seven|eight|nine|ten|\d+) cards?\b/gi) ?? [];
     return matches.reduce((total, match) => {
-        const number = /\d+/.exec(match)?.[0];
-        return total + (number ? parseInt(number, 10) : 1);
+        const number = /(?:draw )(\d+|one|two|three|four|five|six|seven|eight|nine|ten)/i.exec(match)?.[1];
+        return total + (number ? numberWordValue(number) : 1);
     }, 0);
 }
 
-function qualityValues(card) {
-    const text = textOf(card);
+function cardSelectionCountFromText(text, option = {}) {
+    if (option.kicked) {
+        const kickedSelect = /\bif this spell was kicked, put (\d+|one|two|three|four|five|six|seven|eight|nine|ten) of those cards into your hand instead/i.exec(text);
+        if (kickedSelect) {
+            return numberWordValue(kickedSelect[1]);
+        }
+    }
+
+    const select = /\bput (\d+|one|two|three|four|five|six|seven|eight|nine|ten) of (?:those cards|them) into your hand/i.exec(text);
+    return select ? numberWordValue(select[1]) : 0;
+}
+
+function tutorToHandCountFromText(text) {
+    return /\bsearch your library for (?:a|an) [^.]+ card\b[^.]*\bput it into your hand\b/i.test(text) ? 1 : 0;
+}
+
+function qualityValuesFromText(text, option = {}) {
     const values = [];
     const scry = /\bscry (\d+)/i.exec(text);
     if (scry) {
@@ -96,9 +126,14 @@ function qualityValues(card) {
         values.push(`Surveil ${surveil[1]}`);
     }
 
-    const look = /\blook at the top (\d+|one|two|three|four|five|six|seven|eight|nine|ten) cards?/i.exec(text);
+    const look = /\blook at the top (X|\d+|one|two|three|four|five|six|seven|eight|nine|ten) cards?/i.exec(text);
     if (look) {
-        values.push(`Look ${numberWordValue(look[1])}`);
+        values.push(`Look ${/^x$/i.test(look[1]) ? 'X' : numberWordValue(look[1])}`);
+    }
+
+    const selectedCards = cardSelectionCountFromText(text, option);
+    if (selectedCards > 0) {
+        values.push(`Select ${selectedCards}`);
     }
 
     return values;
@@ -160,6 +195,24 @@ function abilityLines(card) {
         .split('\n')
         .map(line => line.trim())
         .filter(Boolean);
+}
+
+function splitFaceTextParts(card) {
+    const costParts = manaCostParts(card);
+    const typeParts = typeLineOf(card).split(/\s*\/\/\s*/).map(part => part.trim());
+    if (costParts.length < 2 || typeParts.length < 2 || !/\b(?:Instant|Sorcery)\b/i.test(typeParts[1])) {
+        return null;
+    }
+
+    const lines = abilityLines(card);
+    if (lines.length < 2) {
+        return null;
+    }
+
+    return {
+        front: lines.slice(0, -1).join('\n'),
+        spell: lines.at(-1),
+    };
 }
 
 function cleanAbilityText(value) {
@@ -237,7 +290,12 @@ function activatedAbilityParts(line) {
     return { cost, effect };
 }
 
-function activatedCondition(cost) {
+function activatedCondition(cost, effect = '') {
+    const activationGate = /\bactivate only if ([^.]+)/i.exec(effect);
+    if (activationGate) {
+        return sentenceCase(activationGate[1].trim());
+    }
+
     const counters = /remove (\d+|one|two|three|four|five|six|seven|eight|nine|ten) ([^.:\n]+? counters?) from/i.exec(cost);
     if (counters) {
         return `${numberWordValue(counters[1])} ${counters[2].toLowerCase()}`;
@@ -252,9 +310,21 @@ function activatedEffectText(effect) {
         return `Add ${mana[1]}`;
     }
 
-    const become = /\bbecomes? (?:a |an )?([^."“”]+? creature)(?: with\b| until\b|\.|$)/i.exec(effect);
+    if (/\bexile the top card of your library\b/i.test(effect) && /\byou may play that card\b/i.test(effect)) {
+        return 'Impulse draw';
+    }
+
+    if (/\bnext spell you cast\b.*\bcan't be countered\b/i.test(effect)) {
+        return 'Protect next spell from counters';
+    }
+
+    const become = /\bbecomes? (?:a |an )?([^."\u201c\u201d]+? creature)(?: with\b| until\b|\.|$)/i.exec(effect);
     if (become) {
         return `Become ${sentenceCase(become[1].trim())}`;
+    }
+
+    if (/\bcreate (?:a |one )?Treasure token/i.test(effect)) {
+        return 'Create Treasure';
     }
 
     const createToken = /\bcreate (?:a |an )?(\d+\/\d+) [^.]*?\b([A-Za-z]+) creature token(?: with ([^.]+))?/i.exec(effect);
@@ -316,8 +386,20 @@ function activatedValueText(effect) {
         values.push('Mana production');
     }
 
+    if (/\bexile the top card of your library\b/i.test(effect) && /\byou may play that card\b/i.test(effect)) {
+        values.push('Card access');
+    }
+
+    if (/\bnext spell you cast\b.*\bcan't be countered\b/i.test(effect)) {
+        values.push('Stack protection');
+    }
+
     if (/\bbecomes?\b.*\bcreature\b/i.test(effect)) {
         values.push('Creature conversion');
+    }
+
+    if (/\bcreate (?:a |one )?Treasure token/i.test(effect)) {
+        values.push('Treasure generation');
     }
 
     if (/\bcreate\b.*\bcreature token\b/i.test(effect)) {
@@ -375,7 +457,7 @@ function activatedOptionsForCard(card) {
         .filter(Boolean)
         .map(({ cost, effect }) => {
             return {
-                condition: activatedCondition(cost),
+                condition: activatedCondition(cost, effect),
                 cost,
                 costSymbols: manaSymbols(cost),
                 effect: activatedEffectText(effect),
@@ -463,33 +545,326 @@ function stateValue(handDelta) {
     return `Card ${handDelta > 0 ? `+${handDelta}` : handDelta}`;
 }
 
-function damageValue(card, kicked = false) {
-    const text = textOf(card);
+function cleanChoicePrefix(value) {
+    return value
+        .replace(/^\s*(?:\*|\u2022|â€¢)\s*/, '')
+        .replace(/\s*(?:\u2014|â€”|-)\s*$/u, '')
+        .trim();
+}
+
+function cleanChoiceEffect(value) {
+    return value
+        .replace(/^\s*(?:\u2014|â€”|-)\s*/u, '')
+        .trim();
+}
+
+function choiceEffectLabel(effect) {
+    if (/\bcopy target (?:instant spell, sorcery spell, activated ability, or triggered ability|instant|sorcery|spell|ability)/i.test(effect)) {
+        return 'Copy spell or ability';
+    }
+
+    if (/\bchange the target\b/i.test(effect)) {
+        return 'Change target';
+    }
+
+    if (/\bdestroy target artifact\b/i.test(effect)) {
+        return 'Destroy artifact';
+    }
+
+    if (/\bdeals? \d+ damage\b/i.test(effect)) {
+        return 'Damage target';
+    }
+
+    const firstSentence = effect.split('.')[0]?.trim() ?? effect;
+    return sentenceCase(firstSentence);
+}
+
+function parseCostedChoiceLines(card, lineTest) {
+    return abilityLines(card)
+        .map(line => {
+            if (!lineTest(line)) {
+                return null;
+            }
+
+            const cost = /((?:\{[^}]+\})+)/.exec(line);
+            if (!cost) {
+                return null;
+            }
+
+            const label = cleanChoicePrefix(line.slice(0, cost.index));
+            const effect = cleanChoiceEffect(line.slice(cost.index + cost[1].length));
+            if (label === '' || effect === '') {
+                return null;
+            }
+
+            return {
+                label,
+                extraCost: cost[1],
+                effectText: effect,
+            };
+        })
+        .filter(Boolean);
+}
+
+function tieredChoiceOptions(card, baseCost) {
+    if (!/\btiered\b/i.test(textOf(card))) {
+        return [];
+    }
+
+    return parseCostedChoiceLines(card, line => /(?:\{[^}]+\})+/.test(line) && /\bdeals?\b/i.test(line))
+        .map(choice => {
+            const cost = addManaCosts(baseCost, choice.extraCost);
+            return {
+                label: choice.label,
+                cost,
+                costValue: manaCostValue(cost),
+                costSymbols: manaSymbols(cost),
+                effectText: choice.effectText,
+            };
+        });
+}
+
+function modalChoiceOptions(card, baseCost) {
+    if (!/\bchoose one\b/i.test(textOf(card)) || /\btiered\b|\bspree\b/i.test(textOf(card))) {
+        return [];
+    }
+
+    return abilityLines(card)
+        .filter(line => /^\s*(?:\*|\u2022|â€¢)/u.test(line))
+        .map(line => {
+            const effectText = cleanChoicePrefix(line);
+            return {
+                label: choiceEffectLabel(effectText),
+                cost: baseCost,
+                costValue: manaCostValue(baseCost),
+                costSymbols: manaSymbols(baseCost),
+                effectText,
+            };
+        })
+        .filter(option => option.effectText !== '');
+}
+
+function nonEmptyChoiceSubsets(choices) {
+    const subsets = [];
+    const max = 1 << choices.length;
+    for (let mask = 1; mask < max; mask += 1) {
+        subsets.push(choices.filter((choice, index) => (mask & (1 << index)) !== 0));
+    }
+
+    return subsets;
+}
+
+function spreeChoiceOptions(card, baseCost) {
+    if (!/\bspree\b/i.test(textOf(card))) {
+        return [];
+    }
+
+    const choices = parseCostedChoiceLines(card, line => /^\s*\+/.test(line))
+        .map(choice => {
+            return {
+                ...choice,
+                label: choiceEffectLabel(choice.effectText),
+            };
+        });
+
+    return nonEmptyChoiceSubsets(choices).map(subset => {
+        const cost = addManaCosts(baseCost, ...subset.map(choice => choice.extraCost));
+        return {
+            label: subset.map(choice => choice.label).join(' + '),
+            cost,
+            costValue: manaCostValue(cost),
+            costSymbols: manaSymbols(cost),
+            effectText: subset.map(choice => choice.effectText).join(' '),
+        };
+    });
+}
+
+function splitFaceSpellOption(card) {
+    const costParts = manaCostParts(card);
+    const typeParts = typeLineOf(card).split(/\s*\/\/\s*/).map(part => part.trim());
+    if (costParts.length < 2 || typeParts.length < 2 || !/\b(?:Instant|Sorcery)\b/i.test(typeParts[1])) {
+        return null;
+    }
+
+    const spellText = splitFaceTextParts(card)?.spell ?? '';
+    if (spellText === '') {
+        return null;
+    }
+
+    return {
+        label: 'Spell face',
+        cost: costParts[1],
+        costValue: manaCostValue(costParts[1]),
+        costSymbols: manaSymbols(costParts[1]),
+        effectText: spellText,
+        spellFace: true,
+        speed: /\bInstant\b/i.test(typeParts[1]) ? 'Instant' : 'Sorcery',
+    };
+}
+
+function damageValueFromText(text, kicked = false) {
     const kickedDamage = /if this spell was kicked, it deals (\d+) damage instead/i.exec(text);
     if (kicked && kickedDamage) {
         return `Damage ${kickedDamage[1]}`;
     }
 
-    const baseDamage = /deals? (\d+) damage to (?:any target|target (?:creature|creature or planeswalker|player or planeswalker|opponent|player))/i.exec(text);
-    return baseDamage ? `Damage ${baseDamage[1]}` : '';
-}
-
-function castEffectText(card, drawn, option = {}) {
-    if (option.plotted) {
-        return 'Exile for later cast';
+    const sweepDamage = /deals? (X|\d+) damage to each creature/i.exec(text);
+    if (sweepDamage) {
+        return `Damage ${sweepDamage[1].toUpperCase()} to each creature`;
     }
 
-    const effects = [...creatureTokenEffects(card), ...qualityValues(card)];
+    const baseDamage = /deals? (X|\d+) damage to (?:any target|up to one target (?:creature|creature or planeswalker)|target (?:creature|artifact creature|creature or planeswalker|player or planeswalker|opponent|player))/i.exec(text);
+    return baseDamage ? `Damage ${baseDamage[1].toUpperCase()}` : '';
+}
+
+function counterEffectText(text) {
+    const manaValueOrGreater = /\bcounter target spell with mana value (\d+) or greater\b/i.exec(text);
+    if (manaValueOrGreater) {
+        return `Counter spell MV ${manaValueOrGreater[1]}+`;
+    }
+
+    const manaValue = /\bcounter target spell with mana value (\d+)\b/i.exec(text);
+    if (manaValue) {
+        return `Counter spell MV ${manaValue[1]}`;
+    }
+
+    const color = /\bcounter target ([^.]+?) spell\b/i.exec(text);
+    if (color) {
+        return `Counter ${color[1]} spell`;
+    }
+
+    return /\bcounter target spell\b/i.test(text) ? 'Counter spell' : '';
+}
+
+function spellEffectTexts(card, option = {}) {
+    const text = removeReminderText(option.effectText ?? textOf(card));
+    const effects = [...creatureTokenEffects({ selectedOption: { oracleText: text } }), ...qualityValuesFromText(text, option)];
+    const drawn = drawCountFromText(text);
+
     if (drawn > 0) {
         effects.push(`Draw ${drawn}`);
     }
 
-    const damage = damageValue(card, option.kicked);
+    const damage = damageValueFromText(text, option.kicked);
     if (damage) {
         effects.push(damage);
     }
 
-    return effects.join(', ');
+    const counter = counterEffectText(text);
+    if (counter) {
+        effects.push(counter);
+    }
+
+    if (/\bexile target nonland permanent\b/i.test(text)) {
+        effects.push('Exile nonland permanent');
+    }
+
+    if (/\bdestroy target artifact\b/i.test(text)) {
+        effects.push('Destroy artifact');
+    }
+
+    if (/\bits controller loses (\d+) life and you gain \1 life\b/i.test(text)) {
+        const drain = /\bits controller loses (\d+) life and you gain \1 life\b/i.exec(text);
+        effects.push(`Drain ${drain[1]}`);
+    } else {
+        const lifeGain = /\byou gain (\d+) life\b/i.exec(text);
+        if (lifeGain) {
+            effects.push(`Life gain ${lifeGain[1]}`);
+        }
+    }
+
+    if (/\bcopy target (?:instant spell, sorcery spell, activated ability, or triggered ability|instant|sorcery|spell|ability)/i.test(text)) {
+        effects.push('Copy spell or ability');
+    }
+
+    if (/\bchange the target\b/i.test(text)) {
+        effects.push('Change target');
+    }
+
+    if (/\bsearch your library for an instant or sorcery card\b/i.test(text)) {
+        effects.push('Tutor instant/sorcery');
+    }
+
+    if (/\btarget opponent exiles a creature they control and their graveyard\b/i.test(text)) {
+        effects.push('Opponent exiles creature and graveyard');
+    }
+
+    if (/\btarget opponent exiles the top X cards\b/i.test(text)) {
+        effects.push('Steal X opponent cards');
+    }
+
+    if (/\breturn target spell or permanent to\b/i.test(text)) {
+        effects.push('Return spell or permanent to hand');
+    } else if (/\breturn target permanent to\b/i.test(text)) {
+        effects.push('Return permanent to hand');
+    }
+
+    if (/\btarget instant or sorcery card in your graveyard gains flashback\b/i.test(text)) {
+        effects.push('Grant flashback to instant/sorcery');
+    }
+
+    return [...new Set(effects)];
+}
+
+function spellValueTexts(card, handValue, option = {}) {
+    const text = removeReminderText(option.effectText ?? textOf(card));
+    const values = [];
+
+    if (creatureTokenEffects({ selectedOption: { oracleText: text } }).length > 0) {
+        values.push('Creature token generation');
+    }
+
+    if (qualityValuesFromText(text, option).length > 0) {
+        values.push('Card quality improvement');
+    }
+
+    if (drawCountFromText(text) > 0 && qualityValuesFromText(text, option).length === 0) {
+        values.push('Card draw');
+    }
+
+    if (damageValueFromText(text, option.kicked)) {
+        values.push(/each creature/i.test(text) ? 'Battlefield damage' : 'Direct damage');
+    }
+
+    if (counterEffectText(text) || /\bcopy target\b|\bchange the target\b/i.test(text)) {
+        values.push('Stack interaction');
+    }
+
+    if (/\bexile target nonland permanent\b|\bdestroy target artifact\b|\btarget opponent exiles a creature they control\b|\breturn target spell or permanent to\b|\breturn target permanent to\b/i.test(text)) {
+        values.push('Battlefield removal');
+    }
+
+    if (/\bloses \d+ life and you gain \d+ life\b/i.test(text)) {
+        values.push('Life drain');
+    } else if (/\byou gain \d+ life\b/i.test(text)) {
+        values.push('Life gain');
+    }
+
+    if (/\bsearch your library for an instant or sorcery card\b/i.test(text)) {
+        values.push('Tutor');
+    }
+
+    if (/\btarget opponent exiles the top X cards\b/i.test(text)) {
+        values.push('Card theft');
+    }
+
+    if (/\btarget instant or sorcery card in your graveyard gains flashback\b/i.test(text)) {
+        values.push('Graveyard cast access');
+    }
+
+    if (handValue !== '') {
+        values.push(handValue);
+    }
+
+    return [...new Set(values)].join('; ');
+}
+
+function castEffectText(card, option = {}) {
+    if (option.plotted) {
+        return 'Exile for later cast';
+    }
+
+    return spellEffectTexts(card, option).join(', ');
 }
 
 function castValueText(card, handValue, option = {}) {
@@ -497,19 +872,7 @@ function castValueText(card, handValue, option = {}) {
         return ['Delayed cast option', handValue].filter(Boolean).join('; ');
     }
 
-    if (creatureTokenEffects(card).length > 0) {
-        return ['Creature token generation', handValue].filter(Boolean).join('; ');
-    }
-
-    if (qualityValues(card).length > 0) {
-        return 'Card quality improvement';
-    }
-
-    if (damageValue(card, option.kicked)) {
-        return ['Direct damage', handValue].filter(Boolean).join('; ');
-    }
-
-    return handValue;
+    return spellValueTexts(card, handValue, option);
 }
 
 function detailSpeed(detail) {
@@ -583,6 +946,14 @@ function synergySourceAndFeeder(card, relatedCard, key) {
         : { source: card, feeder: relatedCard };
 }
 
+function creatureConversionCost(card) {
+    const conversion = abilityLines(card)
+        .map(activatedAbilityParts)
+        .find(parts => parts && /\bbecomes?\b.*\bcreature\b/i.test(parts.effect));
+
+    return conversion?.cost ?? null;
+}
+
 function synergySetupCost(card, relatedCard, key) {
     const { source, feeder } = synergySourceAndFeeder(card, relatedCard, key);
 
@@ -595,14 +966,18 @@ function synergySetupCost(card, relatedCard, key) {
     }
 
     if (/^synergy\.entersBattlefield\./.test(key)) {
-        return addManaCosts(manaCostOf(source), manaCostOf(feeder));
+        return addManaCosts(primaryManaCostOf(source), primaryManaCostOf(feeder));
     }
 
     if (/^synergy\.combat\./.test(key) && selected(source).isToken) {
         return '';
     }
 
-    return manaCostOf(source);
+    if (/^synergy\.combat\./.test(key) && !isCreatureCard(source)) {
+        return creatureConversionCost(source) ?? primaryManaCostOf(source);
+    }
+
+    return primaryManaCostOf(source);
 }
 
 function withSetupCost(entry, card, relatedCard, key) {
@@ -662,6 +1037,58 @@ function manaOptionsForCast(option, relatedCards) {
                 sourceLine: `x${relatedCard.quantity ?? 1}`,
                 speed: 'Mana',
                 value: `Pays ${matchedSymbols.map(symbol => `{${symbol}}`).join(' ')}`,
+            });
+        }
+    }
+
+    return options;
+}
+
+function isInstantOrSorceryOption(card, option = {}) {
+    if (option.frontFace) {
+        return false;
+    }
+
+    if (option.speed) {
+        return /^(?:Instant|Sorcery)$/i.test(option.speed);
+    }
+
+    return /\b(?:Instant|Sorcery)\b/i.test(typeLineOf(card));
+}
+
+function instantSorceryCastUnlockOptions(card, option, relatedCards) {
+    if (!isInstantOrSorceryOption(card, option)) {
+        return [];
+    }
+
+    const options = [];
+    const seen = new Set();
+    for (const relatedCard of relatedCards) {
+        for (const parts of abilityLines(relatedCard).map(activatedAbilityParts).filter(Boolean)) {
+            if (!/\bactivate only if (?:you've|you have) cast an instant or sorcery spell this turn\b/i.test(parts.effect)) {
+                continue;
+            }
+
+            const key = `${relatedCard.name}:${parts.cost}:${parts.effect}`;
+            if (seen.has(key)) {
+                continue;
+            }
+
+            seen.add(key);
+            const effect = activatedEffectText(parts.effect);
+            options.push({
+                condition: relatedCard.name,
+                cost: primaryManaCostOf(relatedCard),
+                costSymbols: manaSymbols(primaryManaCostOf(relatedCard)),
+                actionCost: manaCostValue(parts.cost).toString(),
+                actionCostSymbols: manaSymbols(parts.cost),
+                detail: `${option.speed === 'Instant' || castSpeed(card) === 'Instant' ? 'I' : 'S'}:Enable ${effect} cost ${manaCostValue(option.cost)}`,
+                effect: `Enable ${effect}`,
+                quantity: relatedCard.quantity ?? 1,
+                source: relatedCard.name,
+                sourceLine: `x${relatedCard.quantity ?? 1}`,
+                speed: option.speed ?? castSpeed(card),
+                value: activatedValueText(parts.effect),
             });
         }
     }
@@ -755,15 +1182,43 @@ function synergyValueText(key, card, relatedCard) {
     return '';
 }
 
-function castOptionsForCard(card, drawn, handValue) {
-    const baseCost = manaCostOf(card);
+function handDeltaForOption(card, option = {}) {
+    const text = removeReminderText(option.effectText ?? textOf(card));
+    return -1 + drawCountFromText(text) + cardSelectionCountFromText(text, option) + tutorToHandCountFromText(text);
+}
+
+function valuesForOption(card, option, handValue) {
+    const text = removeReminderText(option.effectText ?? textOf(card));
+    const values = [];
+    if (handValue !== '') {
+        values.push({ label: 'State', value: handValue });
+    }
+
+    for (const quality of qualityValuesFromText(text, option)) {
+        values.push({ label: 'Effect', value: quality });
+    }
+
+    return values;
+}
+
+function castOptionsForCard(card) {
+    const baseCost = primaryManaCostOf(card);
+    const splitParts = splitFaceTextParts(card);
     const baseOption = {
         label: 'Cast',
         cost: baseCost,
         costValue: manaCostValue(baseCost),
         costSymbols: manaSymbols(baseCost),
+        effectText: splitParts?.front,
+        frontFace: splitParts !== null,
         kicked: false,
     };
+
+    const explicitOptions = [
+        ...tieredChoiceOptions(card, baseCost),
+        ...spreeChoiceOptions(card, baseCost),
+        ...modalChoiceOptions(card, baseCost),
+    ];
 
     const kickedOptions = kickerCosts(card).map(kickerCost => {
         const cost = addManaCosts(baseCost, kickerCost);
@@ -785,8 +1240,15 @@ function castOptionsForCard(card, drawn, handValue) {
             plotted: true,
         };
     });
+    const spellFace = splitFaceSpellOption(card);
 
-    return [baseOption, ...kickedOptions, ...plotOptions].map(option => {
+    return [
+        ...(explicitOptions.length > 0 ? explicitOptions : [baseOption]),
+        ...kickedOptions,
+        ...plotOptions,
+        ...(spellFace ? [spellFace] : []),
+    ].map(option => {
+        const handValue = stateValue(handDeltaForOption(card, option));
         return {
             ...option,
             baseRows: [
@@ -794,13 +1256,22 @@ function castOptionsForCard(card, drawn, handValue) {
                     condition: option.label,
                     cost: option.cost,
                     costSymbols: option.costSymbols,
-                    effect: castEffectText(card, drawn, option),
-                    speed: castSpeed(card),
+                    effect: castEffectText(card, option),
+                    speed: option.speed ?? castSpeed(card),
                     value: castValueText(card, handValue, option),
                 },
             ],
+            values: valuesForOption(card, option, handValue),
         };
     });
+}
+
+function optionCanCarrySynergy(option, key) {
+    if (!option.frontFace) {
+        return true;
+    }
+
+    return !/^synergy\.(?:combat|graveyardPlay|creatureTokens)\.feeders$/.test(key);
 }
 
 export function analyzeCardValue(card, relatedCards = []) {
@@ -817,30 +1288,20 @@ export function analyzeCardValue(card, relatedCards = []) {
         };
     }
 
-    const drawn = drawCount(card);
-    const handDelta = -1 + drawn;
-    const values = [];
-    const handValue = stateValue(handDelta);
-    if (handValue !== '') {
-        values.push({ label: 'State', value: handValue });
-    }
-
-    for (const quality of qualityValues(card)) {
-        values.push({ label: 'Effect', value: quality });
-    }
-
-    const castOptions = castOptionsForCard(card, drawn, handValue).map(option => {
+    const castOptions = castOptionsForCard(card).map(option => {
         return {
             label: option.label,
             cost: option.cost,
             costValue: option.costValue,
-            speed: castSpeed(card),
+            speed: option.speed ?? castSpeed(card),
             symbols: option.costSymbols,
+            frontFace: option.frontFace === true,
+            spellFace: option.spellFace === true,
             baseRows: option.baseRows,
-            values,
+            values: option.values,
             bonuses: [],
             etbOptions: [],
-            permanentOptions: [],
+            permanentOptions: instantSorceryCastUnlockOptions(card, option, relatedCards),
             manaOptions: manaOptionsForCast(option, relatedCards),
             zoneChanges: [],
         };
@@ -893,6 +1354,10 @@ export function analyzeCardValue(card, relatedCards = []) {
                 }
             } else {
                 for (const option of castOptions) {
+                    if (!optionCanCarrySynergy(option, key)) {
+                        continue;
+                    }
+
                     if (isThresholdTokenCopyDetail(detail) && option.costValue < (synergyActionCost(card, relatedCard, key) ?? 0)) {
                         continue;
                     }

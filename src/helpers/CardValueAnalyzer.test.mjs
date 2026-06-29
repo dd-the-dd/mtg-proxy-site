@@ -207,7 +207,7 @@ describe('CardValueAnalyzer', () => {
         });
 
         expect(analyzeCardValue(sleightOfHand).castOptions[0].baseRows[0]).toMatchObject({
-            effect: 'Look 2',
+            effect: 'Look 2, Select 1',
             value: 'Card quality improvement',
         });
 
@@ -521,5 +521,210 @@ describe('CardValueAnalyzer', () => {
             value: 'Creature improvement',
         }));
         expect(nonCreatureOptions).toEqual([]);
+    });
+
+    test('Feature: Value analysis parses 4c control modal, tiered, spree, and counter spell options.', () => {
+        const thunderMagic = card('thunder magic', {
+            typeLine: 'Instant',
+            oracleText: 'Tiered (Choose one additional cost.)\n* Thunder - {0} - Thunder Magic deals 2 damage to target creature.\n* Thundara - {3} - Thunder Magic deals 4 damage to target creature.\n* Thundaga - {5}{R} - Thunder Magic deals 8 damage to target creature.',
+            manaCost: '{R}',
+            manaValue: 1,
+        });
+        const returnTheFavor = card('return the favor', {
+            typeLine: 'Instant',
+            oracleText: 'Spree (Choose one or more additional costs.)\n+ {1} - Copy target instant spell, sorcery spell, activated ability, or triggered ability. You may choose new targets for the copy.\n+ {1} - Change the target of target spell or ability with a single target.',
+            manaCost: '{R}{R}',
+            manaValue: 2,
+        });
+        const disdainfulStroke = card('disdainful stroke', {
+            typeLine: 'Instant',
+            oracleText: 'Counter target spell with mana value 4 or greater.',
+            manaCost: '{1}{U}',
+            manaValue: 2,
+        });
+        const inevitableDefeat = card('inevitable defeat', {
+            typeLine: 'Instant',
+            oracleText: "This spell can't be countered.\nExile target nonland permanent. Its controller loses 3 life and you gain 3 life.",
+            manaCost: '{1}{R}{W}{B}',
+            manaValue: 4,
+        });
+        const abrade = card('abrade', {
+            typeLine: 'Instant',
+            oracleText: 'Choose one -\n* Abrade deals 3 damage to target creature.\n* Destroy target artifact.',
+            manaCost: '{1}{R}',
+            manaValue: 2,
+        });
+
+        const thunderOptions = analyzeCardValue(thunderMagic).castOptions;
+        expect(thunderOptions.map(option => option.label)).toEqual(['Thunder', 'Thundara', 'Thundaga']);
+        expect(thunderOptions[1].baseRows[0]).toMatchObject({
+            condition: 'Thundara',
+            cost: '{R}{3}',
+            costSymbols: ['R', '3'],
+            effect: 'Damage 4',
+            value: 'Direct damage; Card -1',
+        });
+
+        const spreeOptions = analyzeCardValue(returnTheFavor).castOptions;
+        expect(spreeOptions.map(option => option.label)).toEqual([
+            'Copy spell or ability',
+            'Change target',
+            'Copy spell or ability + Change target',
+        ]);
+        expect(spreeOptions[0].baseRows[0]).toMatchObject({
+            cost: '{R}{R}{1}',
+            effect: 'Copy spell or ability',
+            value: 'Stack interaction; Card -1',
+        });
+        expect(spreeOptions[2].baseRows[0]).toMatchObject({
+            cost: '{R}{R}{1}{1}',
+            effect: 'Copy spell or ability, Change target',
+            value: 'Stack interaction; Card -1',
+        });
+
+        expect(analyzeCardValue(disdainfulStroke).castOptions[0].baseRows[0]).toMatchObject({
+            effect: 'Counter spell MV 4+',
+            value: 'Stack interaction; Card -1',
+        });
+        expect(analyzeCardValue(inevitableDefeat).castOptions[0].baseRows[0]).toMatchObject({
+            effect: 'Exile nonland permanent, Drain 3',
+            value: 'Battlefield removal; Life drain; Card -1',
+        });
+        expect(analyzeCardValue(abrade).castOptions.map(option => option.baseRows[0].effect)).toEqual([
+            'Damage 3',
+            'Destroy artifact',
+        ]);
+    });
+
+    test('Feature: Value analysis parses 4c control card selection and split prepared spell faces.', () => {
+        const consult = card('consult the star charts', {
+            typeLine: 'Instant',
+            oracleText: 'Kicker {1}{U} (You may pay an additional {1}{U} as you cast this spell.)\nLook at the top X cards of your library, where X is the number of lands you control. Put one of those cards into your hand. If this spell was kicked, put two of those cards into your hand instead. Put the rest on the bottom of your library in a random order.',
+            manaCost: '{1}{U}',
+            manaValue: 2,
+        });
+        const sanar = card('sanar, unfinished genius', {
+            typeLine: 'Legendary Creature - Goblin Sorcerer // Sorcery',
+            oracleText: "Sanar enters prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)\n{T}: Create a Treasure token. Activate only if you've cast an instant or sorcery spell this turn.\nSearch your library for an instant or sorcery card, reveal it, put it into your hand, then shuffle.",
+            manaCost: '{U}{R} // {3}{U}{R}',
+            manaValue: 2,
+            power: '0',
+            toughness: '4',
+        });
+        const greatHall = card('great hall of the biblioplex', {
+            typeLine: 'Land',
+            oracleText: '{T}: Add {C}.\n{5}: If this land isn\'t a creature, it becomes a 2/4 Wizard creature with "Whenever you cast an instant or sorcery spell, this creature gets +1/+0 until end of turn."',
+            manaCost: '',
+            manaValue: 0,
+        });
+
+        const consultOptions = analyzeCardValue(consult).castOptions;
+        expect(consultOptions[0].baseRows[0]).toMatchObject({
+            condition: 'Cast',
+            cost: '{1}{U}',
+            effect: 'Look X, Select 1',
+            value: 'Card quality improvement',
+        });
+        expect(consultOptions[1].baseRows[0]).toMatchObject({
+            condition: 'Kicked',
+            cost: '{1}{U}{1}{U}',
+            effect: 'Look X, Select 2',
+            value: 'Card quality improvement; Card +1',
+        });
+
+        const sanarValue = analyzeCardValue(sanar);
+        expect(sanarValue.castOptions.map(option => option.label)).toContain('Spell face');
+        expect(sanarValue.castOptions[0].baseRows[0]).toMatchObject({
+            condition: 'Cast',
+            cost: '{U}{R}',
+            costSymbols: ['U', 'R'],
+        });
+        expect(sanarValue.castOptions.find(option => option.label === 'Spell face').baseRows[0]).toMatchObject({
+            condition: 'Spell face',
+            cost: '{3}{U}{R}',
+            effect: 'Tutor instant/sorcery',
+            speed: 'Sorcery',
+            value: 'Tutor',
+        });
+        expect(sanarValue.activatedOptions).toContainEqual(expect.objectContaining({
+            condition: "You've cast an instant or sorcery spell this turn",
+            effect: 'Create Treasure',
+            value: 'Treasure generation',
+        }));
+
+        const sanarWithHall = analyzeCardValue(sanar, [greatHall]);
+        expect(sanarWithHall.castOptions.find(option => option.label === 'Cast').permanentOptions).toEqual([]);
+        expect(sanarWithHall.castOptions.find(option => option.label === 'Spell face').permanentOptions).toContainEqual(expect.objectContaining({
+            condition: 'great hall of the biblioplex',
+            effect: 'Combat pump +1/+0 UED',
+            cost: '{5}',
+        }));
+    });
+
+    test('Feature: Value analysis maps 4c control deck impacts from spells onto permanents in the same deck.', () => {
+        const abrade = card('abrade', {
+            typeLine: 'Instant',
+            oracleText: 'Choose one -\n* Abrade deals 3 damage to target creature.\n* Destroy target artifact.',
+            manaCost: '{1}{R}',
+            manaValue: 2,
+        });
+        const greatHall = card('great hall of the biblioplex', {
+            typeLine: 'Land',
+            oracleText: '{T}: Add {C}.\n{5}: If this land isn\'t a creature, it becomes a 2/4 Wizard creature with "Whenever you cast an instant or sorcery spell, this creature gets +1/+0 until end of turn."',
+            manaCost: '',
+            manaValue: 0,
+        }, 4);
+        const sanar = card('sanar, unfinished genius', {
+            typeLine: 'Legendary Creature - Goblin Sorcerer // Sorcery',
+            oracleText: "Sanar enters prepared.\n{T}: Create a Treasure token. Activate only if you've cast an instant or sorcery spell this turn.\nSearch your library for an instant or sorcery card, reveal it, put it into your hand, then shuffle.",
+            manaCost: '{U}{R} // {3}{U}{R}',
+            manaValue: 2,
+            power: '0',
+            toughness: '4',
+        }, 3);
+        const coriMountain = card('cori mountain monastery', {
+            typeLine: 'Land',
+            oracleText: "This land enters tapped unless you control a Plains or an Island.\n{T}: Add {R}.\n{3}{R}, {T}: Exile the top card of your library. Until the end of your next turn, you may play that card.",
+            manaCost: '',
+            manaValue: 0,
+        });
+        const mistriseVillage = card('mistrise village', {
+            typeLine: 'Land',
+            oracleText: "This land enters tapped unless you control a Mountain or a Forest.\n{T}: Add {U}.\n{U}, {T}: The next spell you cast this turn can't be countered.",
+            manaCost: '',
+            manaValue: 0,
+        });
+
+        const abradeValue = analyzeCardValue(abrade, [greatHall, sanar]);
+        const damageOption = abradeValue.castOptions.find(option => option.baseRows[0].effect === 'Damage 3');
+
+        expect(damageOption.permanentOptions).toContainEqual(expect.objectContaining({
+            condition: 'great hall of the biblioplex',
+            cost: '{5}',
+            costSymbols: ['5'],
+            effect: 'Combat pump +1/+0 UED',
+            quantity: 4,
+            value: 'Creature improvement',
+        }));
+        expect(damageOption.permanentOptions).toContainEqual(expect.objectContaining({
+            condition: 'sanar, unfinished genius',
+            cost: '{U}{R}',
+            costSymbols: ['U', 'R'],
+            actionCostSymbols: ['T'],
+            effect: 'Enable Create Treasure',
+            quantity: 3,
+            value: 'Treasure generation',
+        }));
+
+        expect(analyzeCardValue(coriMountain).activatedOptions).toContainEqual(expect.objectContaining({
+            cost: '{3}{R}, {T}',
+            effect: 'Impulse draw',
+            value: 'Card access',
+        }));
+        expect(analyzeCardValue(mistriseVillage).activatedOptions).toContainEqual(expect.objectContaining({
+            cost: '{U}, {T}',
+            effect: 'Protect next spell from counters',
+            value: 'Stack protection',
+        }));
     });
 });
