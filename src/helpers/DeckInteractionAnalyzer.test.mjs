@@ -32,6 +32,38 @@ describe('DeckInteractionAnalyzer', () => {
         expect(summary.sorceryRemoval).toEqual([]);
     });
 
+    test('Feature: Creature interaction analysis counts toughness-reduction removal against a target creature.', () => {
+        const viciousOffering = card('vicious offering', {
+            typeLine: 'Instant',
+            oracleText: 'Kicker--Sacrifice a creature. Target creature gets -2/-2 until end of turn. If this spell was kicked, that creature gets -5/-5 until end of turn instead.',
+            manaCost: '{1}{B}',
+            manaValue: 2,
+        });
+        const stingingShot = card('stinging shot', {
+            typeLine: 'Instant',
+            oracleText: 'Put three -1/-1 counters on target creature with flying.',
+            manaCost: '{G}',
+            manaValue: 1,
+        });
+        const largeCreature = card('large creature', {
+            typeLine: 'Creature - Beast',
+            oracleText: '',
+            manaValue: 4,
+            power: '4',
+            toughness: '4',
+        });
+        const smallFlyer = card('small flyer', {
+            typeLine: 'Creature - Bird',
+            oracleText: 'Flying',
+            manaValue: 2,
+            power: '2',
+            toughness: '3',
+        });
+
+        expect(summarizeCreatureInteractions([viciousOffering], largeCreature).instantRemoval).toEqual([viciousOffering]);
+        expect(summarizeCreatureInteractions([stingingShot], smallFlyer).instantRemoval).toEqual([stingingShot]);
+    });
+
     test('Feature: Meta removal actions separate target-blocked, damage, and kill outcomes.', () => {
         const shock = card('shock', {
             typeLine: 'Instant',

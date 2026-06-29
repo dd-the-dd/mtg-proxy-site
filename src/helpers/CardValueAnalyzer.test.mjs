@@ -700,6 +700,66 @@ describe('CardValueAnalyzer', () => {
         ]);
     });
 
+    test('Feature: Value analysis parses SekKuar sacrifice-cost removal options.', () => {
+        const eatenAlive = card('eaten alive', {
+            typeLine: 'Sorcery',
+            oracleText: 'As an additional cost to cast this spell, sacrifice a creature or pay {3}{B}.\nExile target creature or planeswalker.',
+            manaCost: '{B}',
+            manaValue: 1,
+        });
+        const viciousOffering = card('vicious offering', {
+            typeLine: 'Instant',
+            oracleText: 'Kicker—Sacrifice a creature. (You may sacrifice a creature in addition to any other costs as you cast this spell.)\nTarget creature gets -2/-2 until end of turn. If this spell was kicked, that creature gets -5/-5 until end of turn instead.',
+            manaCost: '{1}{B}',
+            manaValue: 2,
+        });
+        const fakeYourOwnDeath = card('fake your own death', {
+            typeLine: 'Instant',
+            oracleText: 'Until end of turn, target creature gets +2/+0 and gains "When this creature dies, return it to the battlefield tapped under its owner\'s control and you create a Treasure token." (It\'s an artifact with "{T}, Sacrifice this token: Add one mana of any color.")',
+            manaCost: '{1}{B}',
+            manaValue: 2,
+        });
+        const treasure = card('treasure', {
+            typeLine: 'Token Artifact - Treasure',
+            oracleText: '{T}, Sacrifice this token: Add one mana of any color.',
+            manaCost: '',
+            manaValue: 0,
+        });
+
+        const eatenOptions = analyzeCardValue(eatenAlive).castOptions;
+        expect(eatenOptions.map(option => option.label)).toEqual(['Sacrifice creature', 'Pay {3}{B}']);
+        expect(eatenOptions[0].baseRows[0]).toMatchObject({
+            condition: 'Sacrifice creature',
+            cost: '{B}',
+            effect: 'Exile creature or planeswalker',
+            value: 'Battlefield removal; Sacrifice outlet; Card -1',
+        });
+        expect(eatenOptions[1].baseRows[0]).toMatchObject({
+            condition: 'Pay {3}{B}',
+            cost: '{B}{3}{B}',
+            effect: 'Exile creature or planeswalker',
+            value: 'Battlefield removal; Card -1',
+        });
+
+        const offeringOptions = analyzeCardValue(viciousOffering).castOptions;
+        expect(offeringOptions.map(option => option.label)).toEqual(['Cast', 'Kicked sacrifice creature']);
+        expect(offeringOptions[0].baseRows[0]).toMatchObject({
+            cost: '{1}{B}',
+            effect: 'Debuff -2/-2',
+            value: 'Battlefield removal; Card -1',
+        });
+        expect(offeringOptions[1].baseRows[0]).toMatchObject({
+            condition: 'Kicked sacrifice creature',
+            cost: '{1}{B}',
+            effect: 'Debuff -5/-5',
+            value: 'Battlefield removal; Sacrifice outlet; Card -1',
+        });
+
+        const manaSources = analyzeCardValue(eatenAlive, [fakeYourOwnDeath, treasure]).castOptions[0].manaOptions;
+        expect(manaSources.map(option => option.condition)).toContain('treasure');
+        expect(manaSources.map(option => option.condition)).not.toContain('fake your own death');
+    });
+
     test('Feature: Value analysis parses 4c control card selection and split prepared spell faces.', () => {
         const consult = card('consult the star charts', {
             typeLine: 'Instant',

@@ -156,6 +156,38 @@ export function damageAmount(card) {
     return match ? parseInt(match[1], 10) : 0;
 }
 
+function numberWordValue(value) {
+    const words = {
+        one: 1,
+        two: 2,
+        three: 3,
+        four: 4,
+        five: 5,
+        six: 6,
+        seven: 7,
+        eight: 8,
+        nine: 9,
+        ten: 10,
+    };
+
+    return /^\d+$/.test(value) ? parseInt(value, 10) : words[value.toLowerCase()];
+}
+
+function toughnessReductionAmount(card) {
+    const oracleText = textOf(card);
+    const reductions = [];
+    for (const match of oracleText.matchAll(/\b(?:target|that) creature gets -(\d+)\/-(\d+) until end of turn\b/gi)) {
+        reductions.push(parseInt(match[2], 10));
+    }
+
+    const counters = /\bput (\d+|one|two|three|four|five|six|seven|eight|nine|ten) -1\/-1 counters? on target creature\b/i.exec(oracleText);
+    if (counters) {
+        reductions.push(numberWordValue(counters[1]));
+    }
+
+    return reductions.length > 0 ? Math.max(...reductions) : 0;
+}
+
 function sourceColors(card) {
     const selectedCard = selected(card);
     if (Array.isArray(selectedCard.colors) && selectedCard.colors.length > 0) {
@@ -248,6 +280,14 @@ function removalActionAgainstCreature(card, creature) {
     const characteristics = creatureCharacteristics(creature);
 
     if (exilesCreature || (destroysCreature && !characteristics.keywords.has('indestructible'))) {
+        return {
+            speed,
+            outcome: 'kill',
+        };
+    }
+
+    const toughnessReduction = toughnessReductionAmount(card);
+    if (characteristics.toughness !== null && !characteristics.keywords.has('indestructible') && toughnessReduction >= characteristics.toughness) {
         return {
             speed,
             outcome: 'kill',

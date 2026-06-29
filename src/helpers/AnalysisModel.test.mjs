@@ -258,6 +258,82 @@ describe('AnalysisModel', () => {
         expect(coverage.targets.map(target => target.name)).not.toContain('creature');
     });
 
+    test('Feature: Value analysis exposes SekKuar sacrifice-cost removal coverage per cast option.', () => {
+        const eatenAlive = card('eaten alive', {
+            manaCost: '{B}',
+            manaValue: 1,
+            typeLine: 'Sorcery',
+            oracleText: 'As an additional cost to cast this spell, sacrifice a creature or pay {3}{B}.\nExile target creature or planeswalker.',
+        });
+        const viciousOffering = card('vicious offering', {
+            manaCost: '{1}{B}',
+            manaValue: 2,
+            typeLine: 'Instant',
+            oracleText: 'Kicker--Sacrifice a creature. (You may sacrifice a creature in addition to any other costs as you cast this spell.)\nTarget creature gets -2/-2 until end of turn. If this spell was kicked, that creature gets -5/-5 until end of turn instead.',
+        });
+        const smallCreature = card('small creature', {
+            manaValue: 2,
+            typeLine: 'Creature - Mouse',
+            oracleText: '',
+            power: '1',
+            toughness: '2',
+        }, 2);
+        const largeCreature = card('large creature', {
+            manaValue: 4,
+            typeLine: 'Creature - Beast',
+            oracleText: '',
+            power: '4',
+            toughness: '4',
+        }, 3);
+        const planeswalker = card('vraska', {
+            manaValue: 5,
+            typeLine: 'Legendary Planeswalker - Vraska',
+            oracleText: '',
+        }, 1);
+        const artifact = card('tablet', {
+            manaValue: 3,
+            typeLine: 'Artifact',
+            oracleText: '',
+        }, 4);
+        const column = {
+            key: 'meta',
+            label: 'Meta',
+            type: 'metaDeck',
+            cards: [smallCreature, largeCreature, planeswalker, artifact],
+            creatures: [smallCreature, largeCreature],
+            totalCards: 10,
+        };
+
+        const eatenValue = buildValueAnalysisForCard(eatenAlive, [], [column]);
+        expect(eatenValue.castOptions.map(option => option.label)).toEqual(['Sacrifice creature', 'Pay {3}{B}']);
+        for (const option of eatenValue.castOptions) {
+            expect(option.metaRemovalOptions[0]).toMatchObject({
+                removedPercent: '60.0%',
+                damagePercent: '0.0%',
+                removedQuantity: 6,
+                damagedQuantity: 0,
+                totalQuantity: 10,
+            });
+            expect(option.metaRemovalOptions[0].targets.map(target => target.name)).toEqual([
+                'small creature',
+                'large creature',
+                'vraska',
+            ]);
+        }
+
+        const offeringValue = buildValueAnalysisForCard(viciousOffering, [], [column]);
+        const baseMode = offeringValue.castOptions.find(option => option.baseRows[0].effect === 'Debuff -2/-2');
+        const kickedMode = offeringValue.castOptions.find(option => option.baseRows[0].effect === 'Debuff -5/-5');
+        expect(baseMode.metaRemovalOptions[0]).toMatchObject({
+            removedPercent: '20.0%',
+            removedQuantity: 2,
+        });
+        expect(kickedMode.metaRemovalOptions[0]).toMatchObject({
+            removedPercent: '50.0%',
+            removedQuantity: 5,
+        });
+    });
+
     test('Feature: Removal protection responses include instant-speed toughness triggers on the target.', () => {
         const abrade = card('abrade', {
             manaCost: '{1}{R}',

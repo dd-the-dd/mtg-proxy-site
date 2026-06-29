@@ -280,6 +280,23 @@ function kickerCosts(card) {
         .map(match => match[1]);
 }
 
+function kickerAdditionalCosts(card) {
+    return abilityLines(card)
+        .map(line => {
+            const sacrifice = /\bKicker\s*(?:[-\u2013\u2014]+)?\s*Sacrifice a creature\b/i.exec(line);
+            if (sacrifice) {
+                return {
+                    label: 'Kicked sacrifice creature',
+                    extraCost: '',
+                    sacrificeCost: true,
+                };
+            }
+
+            return null;
+        })
+        .filter(Boolean);
+}
+
 function plotCosts(card) {
     return [...textOf(card).matchAll(/\bPlot\s*((?:\{[^}]+\})+)/gi)]
         .map(match => match[1]);
@@ -394,7 +411,7 @@ function manaSourceAbilities(card) {
     }
 
     return abilityLines(card)
-        .map(line => manaSourceAbility(manaCostOf(card), cleanAbilityText(line), castSpeed(card)))
+        .map(line => manaSourceAbility(manaCostOf(card), cleanAbilityText(removeReminderText(line)), castSpeed(card)))
         .filter(Boolean);
 }
 
@@ -741,6 +758,48 @@ function parseCostedChoiceLines(card, lineTest) {
         .filter(Boolean);
 }
 
+function spellTextWithoutAdditionalCostLines(card) {
+    return abilityLines(card)
+        .filter(line => !/\bas an additional cost to cast this spell\b/i.test(line))
+        .join('\n');
+}
+
+function additionalCostAlternativeOptions(card, baseCost) {
+    const line = abilityLines(card).find(abilityLine => {
+        return /\bas an additional cost to cast this spell\b/i.test(abilityLine) &&
+            /\bsacrifice a creature\b/i.test(abilityLine) &&
+            /\bpay ((?:\{[^}]+\})+)/i.test(abilityLine);
+    });
+    if (!line) {
+        return [];
+    }
+
+    const payCost = /\bpay ((?:\{[^}]+\})+)/i.exec(line)?.[1];
+    if (!payCost) {
+        return [];
+    }
+
+    const paidCost = addManaCosts(baseCost, payCost);
+    const effectText = spellTextWithoutAdditionalCostLines(card);
+    return [
+        {
+            label: 'Sacrifice creature',
+            cost: baseCost,
+            costValue: manaCostValue(baseCost),
+            costSymbols: manaSymbols(baseCost),
+            effectText,
+            sacrificeCost: true,
+        },
+        {
+            label: `Pay ${payCost}`,
+            cost: paidCost,
+            costValue: manaCostValue(paidCost),
+            costSymbols: manaSymbols(paidCost),
+            effectText,
+        },
+    ];
+}
+
 function tieredChoiceOptions(card, baseCost) {
     if (!/\btiered\b/i.test(textOf(card))) {
         return [];
@@ -852,6 +911,45 @@ function damageValueFromText(text, kicked = false) {
     return baseDamage ? `Damage ${baseDamage[1].toUpperCase()}` : '';
 }
 
+function debuffValueFromText(text, kicked = false) {
+    const kickedDebuff = /\bif this spell was kicked, that creature gets -(X|\d+)\/-(X|\d+) until end of turn instead\b/i.exec(text);
+    if (kicked && kickedDebuff) {
+        return `Debuff -${kickedDebuff[1].toUpperCase()}/-${kickedDebuff[2].toUpperCase()}`;
+    }
+
+    const baseDebuff = /\btarget creature gets -(X|\d+)\/-(X|\d+) until end of turn\b/i.exec(text);
+    if (baseDebuff) {
+        return `Debuff -${baseDebuff[1].toUpperCase()}/-${baseDebuff[2].toUpperCase()}`;
+    }
+
+    const counters = /\bput (\d+|one|two|three|four|five|six|seven|eight|nine|ten) -1\/-1 counters? on target creature\b/i.exec(text);
+    return counters ? `Debuff -${numberWordValue(counters[1])}/-${numberWordValue(counters[1])}` : '';
+}
+
+function cleanTargetDescription(value) {
+    return value
+        .replace(/\s+with mana value (\d+) or less\b/i, ' MV $1 or less')
+        .replace(/\s+of their choice\b/i, '')
+        .trim()
+        .toLowerCase()
+        .replace(/\bmv\b/g, 'MV');
+}
+
+function targetRemovalEffectTexts(text) {
+    const effects = [];
+    const exile = /\bexile target ((?:nonland )?permanent(?: with mana value \d+ or less)?|creature or planeswalker|creature|artifact|enchantment|planeswalker|battle)\b/i.exec(text);
+    if (exile) {
+        effects.push(`Exile ${cleanTargetDescription(exile[1])}`);
+    }
+
+    const destroy = /\bdestroy target ((?:nonland )?permanent(?: with mana value \d+ or less)?|artifact or enchantment|artifact or creature|creature or planeswalker|artifact|enchantment|tapped creature|creature|planeswalker|battle)\b/i.exec(text);
+    if (destroy) {
+        effects.push(`Destroy ${cleanTargetDescription(destroy[1])}`);
+    }
+
+    return effects;
+}
+
 function counterEffectText(text) {
     const manaValueOrGreater = /\bcounter target spell with mana value (\d+) or greater\b/i.exec(text);
     if (manaValueOrGreater) {
@@ -885,18 +983,17 @@ function spellEffectTexts(card, option = {}) {
         effects.push(damage);
     }
 
+    const debuff = debuffValueFromText(text, option.kicked);
+    if (debuff) {
+        effects.push(debuff);
+    }
+
     const counter = counterEffectText(text);
     if (counter) {
         effects.push(counter);
     }
 
-    if (/\bexile target nonland permanent\b/i.test(text)) {
-        effects.push('Exile nonland permanent');
-    }
-
-    if (/\bdestroy target artifact\b/i.test(text)) {
-        effects.push('Destroy artifact');
-    }
+    effects.push(...targetRemovalEffectTexts(text));
 
     if (/\bits controller loses (\d+) life and you gain \1 life\b/i.test(text)) {
         const drain = /\bits controller loses (\d+) life and you gain \1 life\b/i.exec(text);
@@ -965,7 +1062,9 @@ function spellValueTexts(card, handValue, option = {}) {
         values.push('Stack interaction');
     }
 
-    if (/\bexile target nonland permanent\b|\bdestroy target artifact\b|\btarget opponent exiles a creature they control\b|\breturn target spell or permanent to\b|\breturn target permanent to\b/i.test(text)) {
+    if (targetRemovalEffectTexts(text).length > 0 ||
+        debuffValueFromText(text, option.kicked) ||
+        /\btarget opponent exiles a creature they control\b|\breturn target spell or permanent to\b|\breturn target permanent to\b/i.test(text)) {
         values.push('Battlefield removal');
     }
 
@@ -985,6 +1084,10 @@ function spellValueTexts(card, handValue, option = {}) {
 
     if (/\btarget instant or sorcery card in your graveyard gains flashback\b/i.test(text)) {
         values.push('Graveyard cast access');
+    }
+
+    if (option.sacrificeCost) {
+        values.push('Sacrifice outlet');
     }
 
     if (handValue !== '') {
@@ -1356,19 +1459,30 @@ function castOptionsForCard(card) {
     };
 
     const explicitOptions = [
+        ...additionalCostAlternativeOptions(card, baseCost),
         ...tieredChoiceOptions(card, baseCost),
         ...spreeChoiceOptions(card, baseCost),
         ...modalChoiceOptions(card, baseCost),
     ];
 
-    const kickedOptions = kickerCosts(card).map(kickerCost => {
-        const cost = addManaCosts(baseCost, kickerCost);
+    const kickedOptions = [
+        ...kickerCosts(card).map(kickerCost => {
+            return {
+                label: 'Kicked',
+                extraCost: kickerCost,
+                sacrificeCost: false,
+            };
+        }),
+        ...kickerAdditionalCosts(card),
+    ].map(kickerOption => {
+        const cost = addManaCosts(baseCost, kickerOption.extraCost);
         return {
-            label: 'Kicked',
+            label: kickerOption.label,
             cost,
             costValue: manaCostValue(cost),
             costSymbols: manaSymbols(cost),
             kicked: true,
+            sacrificeCost: kickerOption.sacrificeCost === true,
         };
     });
     const plotOptions = plotCosts(card).map(plotCost => {
@@ -1438,6 +1552,8 @@ export function analyzeCardValue(card, relatedCards = []) {
             symbols: option.costSymbols,
             frontFace: option.frontFace === true,
             spellFace: option.spellFace === true,
+            kicked: option.kicked === true,
+            sacrificeCost: option.sacrificeCost === true,
             effectText: option.effectText ?? textOf(card),
             baseRows: option.baseRows,
             values: option.values,

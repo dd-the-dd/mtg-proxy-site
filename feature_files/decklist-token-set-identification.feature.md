@@ -85,6 +85,7 @@
 - Mana source symbols distinguish alternatives from combined mana: `Add {U} or {R}` renders with a slash between choices, while `Add {R}{R}` renders adjacent symbols without a slash.
 - Permanent mana sources such as artifacts can appear in value analysis, and restricted mana such as `Spend this mana only to cast instant and sorcery spells` appears only on matching cast options while preserving all produced mana symbols.
 - Value analysis parses 4c control spell patterns into concrete cast options, including modal choices, tiered additional costs, spree single and combined choices, conditional counters, battlefield removal, drain, card selection with X, and split prepared spell faces.
+- Value analysis parses Sek'Kuar-style removal patterns into concrete cast options, including sacrifice-or-pay additional costs, sacrifice kicker costs, exile target creature or planeswalker, and target creature toughness-reduction removal.
 - Value analysis maps same-deck spell impacts onto permanents that care about those spells, including creature-land combat pumps that require a conversion setup cost and activated abilities unlocked by casting an instant or sorcery.
 - Activated land and permanent abilities expose non-mana value such as impulse draw, stack protection, Treasure generation, and the condition required to activate them.
 - Basic bounce effects such as `Return target permanent to its owner's hand` show two value uses: target an opponent permanent for battlefield-to-hand tempo, or target one of your non-land permanents for battlefield-to-hand plus draw.

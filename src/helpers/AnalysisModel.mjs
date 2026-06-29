@@ -172,6 +172,42 @@ function damageAmountFromText(text) {
     return 0;
 }
 
+function toughnessReductionFromText(text, option = {}) {
+    const explicit = /\bDebuff -(X|\d+)\/-(X|\d+)/i.exec(text);
+    if (explicit) {
+        return /^X$/i.test(explicit[2]) ? null : parseInt(explicit[2], 10);
+    }
+
+    const kicked = /\bif this spell was kicked, that creature gets -(X|\d+)\/-(X|\d+) until end of turn instead\b/i.exec(text);
+    if (option.kicked && kicked) {
+        return /^X$/i.test(kicked[2]) ? null : parseInt(kicked[2], 10);
+    }
+
+    const base = /\btarget creature gets -(X|\d+)\/-(X|\d+) until end of turn\b/i.exec(text);
+    if (base) {
+        return /^X$/i.test(base[2]) ? null : parseInt(base[2], 10);
+    }
+
+    const counters = /\bput (\d+|one|two|three|four|five|six|seven|eight|nine|ten) -1\/-1 counters? on target creature\b/i.exec(text);
+    if (!counters) {
+        return 0;
+    }
+
+    const words = {
+        one: 1,
+        two: 2,
+        three: 3,
+        four: 4,
+        five: 5,
+        six: 6,
+        seven: 7,
+        eight: 8,
+        nine: 9,
+        ten: 10,
+    };
+    return /^\d+$/.test(counters[1]) ? parseInt(counters[1], 10) : words[counters[1].toLowerCase()];
+}
+
 function canTargetBySimpleShield(sourceCard, effectText, targetCard) {
     if (!/\btarget\b/i.test(effectText)) {
         return true;
@@ -240,23 +276,27 @@ function valueRemovalInteraction(sourceCard, option, targetCard) {
     }
 
     const damage = damageAmountFromText(effectText);
+    const toughnessReduction = toughnessReductionFromText(effectText, option);
     const toughness = statValue(selected(targetCard).toughness);
     const dealsDamage = damage === null || damage > 0;
     const damagesTarget = dealsDamage &&
         (isCreatureCard(targetCard) || isPlaneswalkerCard(targetCard) || isBattleCard(targetCard));
+    const reducesToughness = typeof toughnessReduction === 'number' && toughnessReduction > 0;
     const removesTarget = removesMatchedPermanent(effectText) ||
-        (typeof damage === 'number' && damage > 0 && toughness !== null && damage >= toughness);
+        (typeof damage === 'number' && damage > 0 && toughness !== null && damage >= toughness) ||
+        (typeof toughnessReduction === 'number' && toughnessReduction > 0 && toughness !== null && toughnessReduction >= toughness);
 
-    if (!removesTarget && !damagesTarget) {
+    if (!removesTarget && !damagesTarget && !reducesToughness) {
         return null;
     }
 
     return {
+        debuff: typeof toughnessReduction === 'number' ? toughnessReduction : 0,
         damage: damage ?? 0,
         damaged: damagesTarget,
         outcome: removesTarget
             ? damagesTarget ? 'kill' : 'remove'
-            : 'damage',
+            : damagesTarget ? 'damage' : 'debuff',
         removed: removesTarget,
     };
 }
@@ -414,11 +454,14 @@ export function buildMetaDeckRemovalSummary(card, column) {
 function valueRemovalDetail(sourceCard, targetCard, interaction, deckCards) {
     const colors = sourceColorNames(sourceCard).join('/');
     const damageText = interaction.damaged && interaction.damage > 0 ? ` ${interaction.damage}` : '';
+    const debuffText = interaction.debuff > 0 ? ` -${interaction.debuff}/-${interaction.debuff}` : '';
     const actionText = interaction.outcome === 'damage'
         ? `damage ${colors}${damageText}`
         : interaction.outcome === 'kill'
             ? `kill ${colors}${damageText}`
-            : `remove ${colors}`;
+            : interaction.outcome === 'debuff'
+                ? `debuff ${colors}${debuffText}`
+                : `remove ${colors}${debuffText}`;
     const responses = isCreatureCard(targetCard)
         ? possibleResponses(sourceCard, targetCard, deckCards)
         : [];
