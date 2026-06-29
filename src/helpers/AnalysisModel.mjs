@@ -107,8 +107,41 @@ function cardTradeText(sourceCard, targetCard, outcome) {
     return 'cards even';
 }
 
+function statValue(value) {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function instantSorceryToughnessPump(card) {
+    const oracleText = selected(card).oracleText ?? '';
+    const pump = /whenever you cast an instant or sorcery spell, this creature gets \+\d+\/\+?(\d+) until end of turn/i.exec(oracleText);
+    return pump ? parseInt(pump[1], 10) : 0;
+}
+
+function isInstantOrSorcery(card) {
+    return /\b(?:Instant|Sorcery)\b/i.test(selected(card).typeLine ?? '');
+}
+
+function toughnessTriggerResponses(sourceCard, targetCard, deckCards) {
+    const damage = damageAmount(sourceCard);
+    const toughness = statValue(selected(targetCard).toughness);
+    const toughnessPump = instantSorceryToughnessPump(targetCard);
+    if (damage <= 0 || toughness === null || toughnessPump <= 0 || damage < toughness || damage >= toughness + toughnessPump) {
+        return [];
+    }
+
+    return deckCards
+        .filter(card => card !== sourceCard && card !== targetCard && isInstantOrSorcery(card))
+        .map(card => {
+            return {
+                name: `${card.name} -> ${targetCard.name} +0/+${toughnessPump}`,
+                quantity: card.quantity ?? 1,
+            };
+        });
+}
+
 function possibleResponses(sourceCard, targetCard, deckCards) {
-    return deckCards.filter(card => {
+    const directResponses = deckCards.filter(card => {
         if (card === sourceCard || card === targetCard || spellSpeed(card) !== 'instant') {
             return false;
         }
@@ -119,6 +152,8 @@ function possibleResponses(sourceCard, targetCard, deckCards) {
             /\btarget creature\b[^.]*\bgains? protection\b/i.test(oracleText) ||
             /\bprevent\b[^.]*\bdamage\b/i.test(oracleText);
     });
+
+    return [...directResponses, ...toughnessTriggerResponses(sourceCard, targetCard, deckCards)];
 }
 
 function removalInteractionDetail(sourceCard, targetCard, categoryKey, deckCards) {

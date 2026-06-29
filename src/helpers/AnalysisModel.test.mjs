@@ -129,4 +129,43 @@ describe('AnalysisModel', () => {
             protection: '2x shore up',
         }));
     });
+
+    test('Feature: Removal protection responses include instant-speed toughness triggers on the target.', () => {
+        const abrade = card('abrade', {
+            manaCost: '{1}{R}',
+            manaValue: 2,
+            typeLine: 'Instant',
+            oracleText: 'Choose one —\n• Abrade deals 3 damage to target creature.\n• Destroy target artifact.',
+        });
+        const opt = card('opt', {
+            manaCost: '{U}',
+            manaValue: 1,
+            typeLine: 'Instant',
+            oracleText: 'Scry 1. Draw a card.',
+        }, 4);
+        const colorstorm = card('colorstorm stallion', {
+            manaValue: 3,
+            typeLine: 'Creature - Horse',
+            oracleText: 'Ward {1}, haste\nOpus — Whenever you cast an instant or sorcery spell, this creature gets +1/+1 until end of turn.',
+            power: '3',
+            toughness: '3',
+        }, 2);
+        const column = {
+            key: 'meta',
+            label: 'Meta',
+            type: 'metaDeck',
+            cards: [colorstorm, opt],
+            creatures: [colorstorm],
+            totalCards: 6,
+        };
+
+        const value = buildValueAnalysisForCard(abrade, [], [column]);
+        const target = value.castOptions[0].metaRemovalOptions[0].targets[0];
+
+        expect(target).toMatchObject({
+            name: 'colorstorm stallion',
+            outcome: 'kill',
+            protection: '4x opt -> colorstorm stallion +0/+1',
+        });
+    });
 });
