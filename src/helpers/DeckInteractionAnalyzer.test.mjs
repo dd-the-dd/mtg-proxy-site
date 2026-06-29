@@ -314,6 +314,71 @@ describe('DeckInteractionAnalyzer', () => {
         expect(summarizeCreatureInteractions([rat], bloodArtist).synergy.creatureDeathValue.feeders.map(item => item.name)).toEqual(['persistent specimen']);
         expect(summarizeCreatureInteractions([rat], pitilessPlunderer).synergy.creatureDeathValue.feeders.map(item => item.name)).toEqual(['persistent specimen']);
         expect(synergyInteractionDetail(rat, bloodArtist, 'synergy.creatureDeathValue.feeders')).toBe('S:Death drain +1 cost 1');
-        expect(synergyInteractionDetail(rat, pitilessPlunderer, 'synergy.creatureDeathValue.feeders')).toBe('S:Death treasure cost 1');
+        expect(synergyInteractionDetail(rat, pitilessPlunderer, 'synergy.creatureDeathValue.feeders')).toBe('S:Death token Treasure cost 1');
+    });
+
+    test('Feature: Conditional creature death passives only match creatures that satisfy their stats.', () => {
+        const arnyn = card('arnyn, deathbloom botanist', {
+            typeLine: 'Legendary Creature - Vampire Druid',
+            oracleText: 'Deathtouch\nWhenever a creature you control with power or toughness 1 or less dies, target opponent loses 2 life and you gain 2 life.',
+            manaCost: '{1}{B}{G}',
+            power: '2',
+            toughness: '2',
+        });
+        const rat = card('persistent specimen', {
+            typeLine: 'Creature - Skeleton',
+            oracleText: '',
+            manaCost: '{B}',
+            power: '1',
+            toughness: '1',
+        });
+        const bear = card('grizzly bears', {
+            typeLine: 'Creature - Bear',
+            oracleText: '',
+            manaCost: '{1}{G}',
+            power: '2',
+            toughness: '2',
+        });
+        const wall = card('shield sphere', {
+            typeLine: 'Artifact Creature - Wall',
+            oracleText: 'Defender',
+            manaCost: '{0}',
+            power: '0',
+            toughness: '6',
+        });
+
+        expect(summarizeCreatureInteractions([rat], arnyn).synergy.creatureDeathValue.feeders.map(item => item.name)).toEqual(['persistent specimen']);
+        expect(summarizeCreatureInteractions([wall], arnyn).synergy.creatureDeathValue.feeders.map(item => item.name)).toEqual(['shield sphere']);
+        expect(summarizeCreatureInteractions([bear], arnyn).synergy.creatureDeathValue.feeders).toEqual([]);
+        expect(synergyInteractionDetail(rat, arnyn, 'synergy.creatureDeathValue.feeders')).toBe('S:Death drain +2 cost 1');
+    });
+
+    test('Feature: Creature death token passives name their generated token and skip token feeders when required.', () => {
+        const sekkuar = card("sek'kuar, deathkeeper", {
+            typeLine: 'Legendary Creature - Orc Shaman',
+            oracleText: 'Whenever another nontoken creature you control dies, create a 3/1 black and red Graveborn creature token with haste.',
+            manaCost: '{2}{B}{R}{G}',
+            power: '4',
+            toughness: '3',
+        });
+        const rat = card('persistent specimen', {
+            typeLine: 'Creature - Skeleton',
+            oracleText: '',
+            manaCost: '{B}',
+            power: '1',
+            toughness: '1',
+        });
+        const graveborn = card('graveborn token', {
+            typeLine: 'Token Creature - Graveborn',
+            oracleText: 'Haste',
+            isToken: true,
+            manaCost: '',
+            power: '3',
+            toughness: '1',
+        });
+
+        expect(summarizeCreatureInteractions([rat], sekkuar).synergy.creatureDeathValue.feeders.map(item => item.name)).toEqual(['persistent specimen']);
+        expect(summarizeCreatureInteractions([graveborn], sekkuar).synergy.creatureDeathValue.feeders).toEqual([]);
+        expect(synergyInteractionDetail(rat, sekkuar, 'synergy.creatureDeathValue.feeders')).toBe('S:Death token 3/1 Graveborn with haste cost 1');
     });
 });

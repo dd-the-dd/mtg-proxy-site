@@ -407,8 +407,76 @@ function feedsCreatureEnter(card) {
 
 function isCreatureDeathValueSource(card) {
     const oracleText = textOf(card);
-    return /whenever (?:this creature or another creature|another creature(?: you control)?|a creature|one or more creatures)[^.]*\bdies\b/i.test(oracleText) ||
+    return /whenever (?:this creature or another (?:nontoken )?creature|another (?:nontoken )?creature(?: you control)?|a creature|one or more creatures)[^.]*\bdies\b/i.test(oracleText) ||
         /for each creature that died this turn/i.test(oracleText);
+}
+
+function isTokenCard(card) {
+    return selected(card).isToken === true;
+}
+
+function deathSourceAppliesToCreature(source, creature) {
+    const oracleText = textOf(source);
+    const { power, toughness } = creatureStats(creature);
+
+    if (/\bnontoken creature\b/i.test(oracleText) && isTokenCard(creature)) {
+        return false;
+    }
+
+    if (/creature[^.]*\bpower or toughness (?:is |was )?1 or less[^.]*\bdies\b/i.test(oracleText)) {
+        return (power !== null && power <= 1) || (toughness !== null && toughness <= 1);
+    }
+
+    if (/creature[^.]*\bpower (?:is |was )?1 or less[^.]*\bdies\b/i.test(oracleText)) {
+        return power !== null && power <= 1;
+    }
+
+    if (/creature[^.]*\btoughness (?:is |was )?1 or less[^.]*\bdies\b/i.test(oracleText)) {
+        return toughness !== null && toughness <= 1;
+    }
+
+    return true;
+}
+
+function sentenceCase(value) {
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function tokenQuantityText(quantity) {
+    if (!quantity || /^(?:a|an|one)$/i.test(quantity)) {
+        return '';
+    }
+
+    return `${quantity.toLowerCase()} `;
+}
+
+function createdTokenDeathEffect(oracleText) {
+    if (/\bcreate (?:a |one )?Treasure token/i.test(oracleText)) {
+        return {
+            detail: 'Death token Treasure',
+            value: 'treasure',
+        };
+    }
+
+    const creatureToken = /\bcreate (?:(a|an|one|two|three|four|five|six|seven|eight|nine|ten|\d+) )?(\d+\/\d+) (?:[a-z]+ )*?([a-z][a-z-]*) creature tokens?(?: with ([^.]+))?/i.exec(oracleText);
+    if (creatureToken) {
+        const quantity = tokenQuantityText(creatureToken[1]);
+        const tokenType = sentenceCase(creatureToken[3]);
+        const abilityText = creatureToken[4] ? ` with ${creatureToken[4].trim()}` : '';
+        return {
+            detail: `Death token ${quantity}${creatureToken[2]} ${tokenType}${abilityText}`,
+            value: 'token',
+        };
+    }
+
+    if (/\bcreate a token that's a copy of/i.test(oracleText)) {
+        return {
+            detail: 'Death token copy',
+            value: 'token',
+        };
+    }
+
+    return null;
 }
 
 function creatureDeathEffect(source) {
@@ -421,11 +489,9 @@ function creatureDeathEffect(source) {
         };
     }
 
-    if (/create (?:a )?Treasure token/i.test(oracleText)) {
-        return {
-            detail: 'Death treasure',
-            value: 'treasure',
-        };
+    const tokenEffect = createdTokenDeathEffect(oracleText);
+    if (tokenEffect) {
+        return tokenEffect;
     }
 
     const damage = /deals? (\d+) damage/i.exec(oracleText);
@@ -498,11 +564,11 @@ function addSynergyMatches(summary, card, relatedCard) {
         pushOnce(summary.synergy.etbLifeGain.feeders, card);
     }
 
-    if (isCreatureDeathValueSource(card) && isCreatureCard(relatedCard)) {
+    if (isCreatureDeathValueSource(card) && isCreatureCard(relatedCard) && deathSourceAppliesToCreature(card, relatedCard)) {
         pushOnce(summary.synergy.creatureDeathValue.sources, card);
     }
 
-    if (isCreatureDeathValueSource(relatedCard) && isCreatureCard(card)) {
+    if (isCreatureDeathValueSource(relatedCard) && isCreatureCard(card) && deathSourceAppliesToCreature(relatedCard, card)) {
         pushOnce(summary.synergy.creatureDeathValue.feeders, card);
     }
 }

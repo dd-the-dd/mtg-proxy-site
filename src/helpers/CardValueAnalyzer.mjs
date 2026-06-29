@@ -737,6 +737,7 @@ function synergyValueText(key, card, relatedCard) {
         return {
             lifeDrain: 'Life drain',
             treasure: 'Treasure generation',
+            token: 'Creature token generation',
             damage: 'Direct damage',
             cardDraw: 'Card draw',
             payoff: 'Death payoff',
