@@ -243,6 +243,77 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Analysis mode exposes meta removal action rows for damage and blocked targets.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const shock = {
+            quantity: 4,
+            name: 'shock',
+            selectedOption: {
+                typeLine: 'Instant',
+                oracleText: 'Shock deals 2 damage to any target.',
+                manaCost: '{R}',
+            },
+        };
+        const pyroclasm = {
+            quantity: 2,
+            name: 'pyroclasm',
+            selectedOption: {
+                typeLine: 'Sorcery',
+                oracleText: 'Pyroclasm deals 2 damage to each creature.',
+                manaCost: '{1}{R}',
+            },
+        };
+        const hexproofCreature = {
+            quantity: 3,
+            name: 'slippery bogle',
+            selectedOption: {
+                typeLine: 'Creature - Beast',
+                oracleText: 'Hexproof',
+                power: '1',
+                toughness: '1',
+            },
+        };
+        const largeCreature = {
+            quantity: 5,
+            name: 'large creature',
+            selectedOption: {
+                typeLine: 'Creature - Beast',
+                oracleText: '',
+                power: '3',
+                toughness: '3',
+            },
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisMetric = 'count';
+        component.data.config.analysisColumnMode = 'metaDeck';
+        component.data.config.analysisMatchupSessionId = 'all';
+        component.data.cards = [shock, pyroclasm];
+        component.data.metaDeckStates = [
+            {
+                id: 'removal-meta',
+                name: 'Removal Meta',
+                state: {
+                    cards: [hexproofCreature, largeCreature],
+                },
+            },
+        ];
+
+        const column = component.proxy.analysisColumns[0];
+        const blockedTargetCategory = component.proxy.analysisCategories.find(category => category.key === 'removalActions.instant.blockedTarget');
+        const instantDamageCategory = component.proxy.analysisCategories.find(category => category.key === 'removalActions.instant.damage');
+        const sorceryKillCategory = component.proxy.analysisCategories.find(category => category.key === 'sorceryRemoval');
+
+        expect(component.ctx.cardAnalysisCell(shock, blockedTargetCategory, column).display).toBe('3');
+        expect(component.ctx.cardAnalysisCell(shock, instantDamageCategory, column).display).toBe('5');
+        expect(component.ctx.cardAnalysisCell(pyroclasm, sorceryKillCategory, column).display).toBe('3');
+
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.config.decklist = '';
+    });
+
     test('Feature: Mana-value analysis cells sum matching meta cards inside fixed mana columns.', async () => {
         const component = wrapper.getCurrentComponent();
         const burstLightning = {

@@ -1161,6 +1161,10 @@ const basicLands = [
 const analysisCategories = [
     { key: "instantRemoval", label: "Kill inst." },
     { key: "sorceryRemoval", label: "Kill sorc." },
+    { key: "removalActions.instant.damage", label: "Dmg inst." },
+    { key: "removalActions.sorcery.damage", label: "Dmg sorc." },
+    { key: "removalActions.instant.blockedTarget", label: "No target inst." },
+    { key: "removalActions.sorcery.blockedTarget", label: "No target sorc." },
     { key: "combat.attacking.bothSurvive", label: "Atk hold" },
     { key: "combat.attacking.bothDie", label: "Atk trade" },
     { key: "combat.attacking.defenderSurvives", label: "Atk lose" },
@@ -1683,6 +1687,18 @@ export default {
             return {
                 instantRemoval: this.countCards(summary.instantRemoval),
                 sorceryRemoval: this.countCards(summary.sorceryRemoval),
+                removalActions: {
+                    instant: {
+                        kill: this.countCards(summary.removalActions.instant.kill),
+                        damage: this.countCards(summary.removalActions.instant.damage),
+                        blockedTarget: this.countCards(summary.removalActions.instant.blockedTarget),
+                    },
+                    sorcery: {
+                        kill: this.countCards(summary.removalActions.sorcery.kill),
+                        damage: this.countCards(summary.removalActions.sorcery.damage),
+                        blockedTarget: this.countCards(summary.removalActions.sorcery.blockedTarget),
+                    },
+                },
                 combat: {
                     attacking: countCombat(summary.combat.attacking),
                     defending: countCombat(summary.combat.defending),

@@ -53,9 +53,11 @@ function keywordsOf(card) {
         'double strike',
         'first strike',
         'flying',
+        'hexproof',
         'indestructible',
         'menace',
         'reach',
+        'shroud',
         'trample',
         'vigilance',
     ].filter(keyword => {
@@ -150,23 +152,129 @@ export function spellSpeed(card) {
 
 export function damageAmount(card) {
     const oracleText = textOf(card);
-    const match = /deals? (\d+) damage to (?:any target|target (?:creature|creature or planeswalker|player or planeswalker|opponent|player))/i.exec(oracleText);
+    const match = /deals? (\d+) damage to (?:any target|target (?:creature|creature or planeswalker|player or planeswalker|opponent|player)|each creature|each creature and each player|each opponent)/i.exec(oracleText);
     return match ? parseInt(match[1], 10) : 0;
 }
 
-export function canDestroyCreatureWithSpell(card, creature) {
+function sourceColors(card) {
+    const selectedCard = selected(card);
+    if (Array.isArray(selectedCard.colors) && selectedCard.colors.length > 0) {
+        return selectedCard.colors.map(color => String(color).toLowerCase());
+    }
+
+    const colorMap = {
+        W: 'white',
+        U: 'blue',
+        B: 'black',
+        R: 'red',
+        G: 'green',
+    };
+
+    return [...manaCostOf(card).matchAll(/\{([WUBRG])\}/gi)]
+        .map(match => colorMap[match[1].toUpperCase()])
+        .filter(Boolean);
+}
+
+function targetsCreature(card) {
+    return /\b(?:any target|target (?:nonland )?(?:creature|permanent)|target creature or planeswalker)\b/i.test(textOf(card));
+}
+
+function preventsTargeting(source, creature) {
+    const creatureText = textOf(creature);
+    if (!targetsCreature(source)) {
+        return '';
+    }
+
+    if (/\bshroud\b/i.test(creatureText)) {
+        return 'shroud';
+    }
+
+    if (/\bhexproof\b/i.test(creatureText)) {
+        return 'hexproof';
+    }
+
+    const sourceColorNames = sourceColors(source);
+    for (const color of sourceColorNames) {
+        if (new RegExp(`\\bprotection from ${color}\\b`, 'i').test(creatureText)) {
+            return `protection from ${color}`;
+        }
+    }
+
+    return '';
+}
+
+function preventsDamage(source, creature) {
+    const creatureText = textOf(creature);
+    const sourceColorNames = sourceColors(source);
+    return sourceColorNames.some(color => {
+        return new RegExp(`\\bprotection from ${color}\\b`, 'i').test(creatureText);
+    });
+}
+
+function emptyRemovalActionSummary() {
+    return {
+        kill: [],
+        damage: [],
+        blockedTarget: [],
+    };
+}
+
+function createRemovalActionSummary() {
+    return {
+        instant: emptyRemovalActionSummary(),
+        sorcery: emptyRemovalActionSummary(),
+    };
+}
+
+function removalActionAgainstCreature(card, creature) {
     const speed = spellSpeed(card);
-    if (!speed) {
-        return false;
+    if (!speed || !isCreatureCard(creature)) {
+        return null;
+    }
+
+    const blockedReason = preventsTargeting(card, creature);
+    if (blockedReason) {
+        return {
+            speed,
+            outcome: 'blockedTarget',
+            reason: blockedReason,
+        };
     }
 
     const oracleText = textOf(card);
-    if (/(destroy|exile) target (?:nonland )?(?:creature|permanent)/i.test(oracleText)) {
-        return true;
+    const destroysCreature = /\bdestroy (?:target|all) (?:nonland )?creatures?\b/i.test(oracleText);
+    const exilesCreature = /\bexile (?:target|all) (?:nonland )?creatures?\b/i.test(oracleText);
+    const characteristics = creatureCharacteristics(creature);
+
+    if (exilesCreature || (destroysCreature && !characteristics.keywords.has('indestructible'))) {
+        return {
+            speed,
+            outcome: 'kill',
+        };
     }
 
-    const { toughness } = creatureStats(creature);
-    return toughness !== null && damageAmount(card) >= toughness;
+    const damage = damageAmount(card);
+    if (damage <= 0 || preventsDamage(card, creature)) {
+        return null;
+    }
+
+    if (characteristics.toughness !== null && !characteristics.keywords.has('indestructible') && damage >= characteristics.toughness) {
+        return {
+            speed,
+            outcome: 'kill',
+            damage,
+        };
+    }
+
+    return {
+        speed,
+        outcome: 'damage',
+        damage,
+    };
+}
+
+export function canDestroyCreatureWithSpell(card, creature) {
+    return removalActionAgainstCreature(card, creature)?.outcome === 'kill';
 }
 
 export function canBlock(attacker, defender) {
@@ -710,14 +818,18 @@ export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
             attacking: emptyCombatSummary(),
             defending: emptyCombatSummary(),
         },
+        removalActions: createRemovalActionSummary(),
         synergies: [],
         synergy: createSynergySummary(),
     };
 
     for (const card of evaluatedCards) {
-        if (canDestroyCreatureWithSpell(card, enemyCreature)) {
-            const speed = spellSpeed(card);
-            summary[speed === 'instant' ? 'instantRemoval' : 'sorceryRemoval'].push(card);
+        const removalAction = removalActionAgainstCreature(card, enemyCreature);
+        if (removalAction) {
+            summary.removalActions[removalAction.speed][removalAction.outcome].push(card);
+            if (removalAction.outcome === 'kill') {
+                summary[removalAction.speed === 'instant' ? 'instantRemoval' : 'sorceryRemoval'].push(card);
+            }
         }
 
         for (const combatCard of combatRepresentatives(card)) {

@@ -32,6 +32,46 @@ describe('DeckInteractionAnalyzer', () => {
         expect(summary.sorceryRemoval).toEqual([]);
     });
 
+    test('Feature: Meta removal actions separate target-blocked, damage, and kill outcomes.', () => {
+        const shock = card('shock', {
+            typeLine: 'Instant',
+            oracleText: 'Shock deals 2 damage to any target.',
+            manaCost: '{R}',
+        });
+        const murder = card('murder', {
+            typeLine: 'Instant',
+            oracleText: 'Destroy target creature.',
+            manaCost: '{1}{B}{B}',
+        });
+        const pyroclasm = card('pyroclasm', {
+            typeLine: 'Sorcery',
+            oracleText: 'Pyroclasm deals 2 damage to each creature.',
+            manaCost: '{1}{R}',
+        });
+        const hexproofCreature = card('slippery bogle', {
+            typeLine: 'Creature - Beast',
+            oracleText: 'Hexproof',
+            power: '1',
+            toughness: '1',
+        });
+        const largeCreature = card('large creature', {
+            typeLine: 'Creature - Beast',
+            oracleText: '',
+            power: '3',
+            toughness: '3',
+        });
+
+        const hexproofSummary = summarizeCreatureInteractions([shock, murder, pyroclasm], hexproofCreature);
+        const largeSummary = summarizeCreatureInteractions([shock, pyroclasm], largeCreature);
+
+        expect(hexproofSummary.removalActions.instant.blockedTarget.map(item => item.name)).toEqual(['shock', 'murder']);
+        expect(hexproofSummary.removalActions.instant.kill).toEqual([]);
+        expect(hexproofSummary.removalActions.instant.damage).toEqual([]);
+        expect(hexproofSummary.removalActions.sorcery.kill.map(item => item.name)).toEqual(['pyroclasm']);
+        expect(largeSummary.removalActions.instant.damage.map(item => item.name)).toEqual(['shock']);
+        expect(largeSummary.removalActions.sorcery.damage.map(item => item.name)).toEqual(['pyroclasm']);
+    });
+
     test('Feature: Creature combat analysis identifies mirrored creatures that both survive combat.', () => {
         const attacker = card('slickshot show-off', {
             typeLine: 'Creature - Bird Wizard',
