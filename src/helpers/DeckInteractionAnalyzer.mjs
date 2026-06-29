@@ -215,6 +215,7 @@ function emptyRemovalActionSummary() {
     return {
         kill: [],
         damage: [],
+        targetable: [],
         blockedTarget: [],
     };
 }
@@ -850,6 +851,11 @@ export function summarizeCreatureInteractions(evaluatedCards, enemyCreature) {
 
     for (const card of evaluatedCards) {
         const removalAction = removalActionAgainstCreature(card, enemyCreature);
+        const speed = spellSpeed(card);
+        if (speed && targetsCreature(card) && !preventsTargeting(card, enemyCreature)) {
+            summary.removalActions[speed].targetable.push(card);
+        }
+
         if (removalAction) {
             summary.removalActions[removalAction.speed][removalAction.outcome].push(card);
             if (removalAction.outcome === 'kill') {

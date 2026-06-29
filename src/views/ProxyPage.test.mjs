@@ -314,6 +314,75 @@ describe('Core Rendering', async () => {
         component.data.config.decklist = '';
     });
 
+    test('Feature: Meta deck analysis headers show removal coverage and can collapse a matchup column.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const shock = {
+            quantity: 4,
+            name: 'shock',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Instant',
+                oracleText: 'Shock deals 2 damage to any target.',
+                manaCost: '{R}',
+            },
+        };
+        const smallCreature = {
+            quantity: 3,
+            name: 'small creature',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Creature - Mouse',
+                oracleText: '',
+                power: '1',
+                toughness: '2',
+            },
+        };
+        const largeCreature = {
+            quantity: 5,
+            name: 'large creature',
+            selectedOption: {
+                manaValue: 3,
+                typeLine: 'Creature - Beast',
+                oracleText: '',
+                power: '3',
+                toughness: '3',
+            },
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisMetric = 'count';
+        component.data.config.analysisColumnMode = 'metaDeck';
+        component.data.config.analysisMatchupSessionId = 'all';
+        component.data.cards = [shock];
+        component.data.metaDeckStates = [
+            {
+                id: 'coverage-meta',
+                name: 'Coverage Meta',
+                state: {
+                    cards: [smallCreature, largeCreature],
+                },
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+
+        const header = component.ctx.analysisColumnHeader(shock, component.proxy.analysisColumns[0]);
+        expect(header.killPercent).toBe('37.5%');
+        expect(header.interactionPercent).toBe('100.0%');
+        expect(wrapper.find('.analysis-column-summary').text()).toContain('K 37.5% / I 100.0%');
+
+        await wrapper.find('.analysis-column-toggle').trigger('click');
+
+        expect(component.proxy.analysisColumns[0].collapsed).toBe(true);
+        expect(wrapper.find('.analysis-column-collapsed').exists()).toBe(true);
+
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.collapsedAnalysisDeckIds = {};
+        component.data.config.decklist = '';
+    });
+
     test('Feature: Mana-value analysis cells sum matching meta cards inside fixed mana columns.', async () => {
         const component = wrapper.getCurrentComponent();
         const burstLightning = {

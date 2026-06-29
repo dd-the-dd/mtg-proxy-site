@@ -933,8 +933,30 @@
                     <th
                       v-for="column in analysisColumns"
                       :key="column.key"
+                      :class="{ 'analysis-column-collapsed': column.collapsed }"
                     >
-                      {{ column.label }}
+                      <button
+                        v-if="column.type === 'metaDeck'"
+                        type="button"
+                        class="btn btn-link analysis-column-toggle"
+                        @click="toggleAnalysisDeckCollapse(column.key)"
+                      >
+                        <span class="analysis-column-title">{{ column.label }}</span>
+                        <span
+                          v-if="!column.collapsed"
+                          class="analysis-column-summary"
+                        >
+                          K {{ analysisColumnHeader(card, column).killPercent }} /
+                          I {{ analysisColumnHeader(card, column).interactionPercent }}
+                        </span>
+                        <span
+                          v-else
+                          class="analysis-column-summary"
+                        >
+                          Collapsed
+                        </span>
+                      </button>
+                      <span v-else>{{ column.label }}</span>
                     </th>
                   </tr>
                 </thead>
@@ -947,10 +969,10 @@
                     <td
                       v-for="{ column, cell } in row.cells"
                       :key="`${row.category.key}-${column.key}`"
-                      :class="{ 'analysis-cell-active': cell.active }"
+                      :class="{ 'analysis-cell-active': cell.active && !column.collapsed, 'analysis-column-collapsed': column.collapsed }"
                       :title="cell.title"
                     >
-                      {{ cell.display }}
+                      {{ column.collapsed ? '' : cell.display }}
                     </td>
                   </tr>
                   <tr v-if="isCardAnalysisLoading(card) && analysisRowsForCard(card).length === 0">
@@ -1127,6 +1149,7 @@ import {
 import {
     buildAnalysisCell,
     buildAnalysisRowsForCard,
+    buildMetaDeckRemovalSummary,
     buildValueAnalysisForCard,
     cardsForAnalysisCategory,
     countCards,
@@ -1161,6 +1184,8 @@ const basicLands = [
 const analysisCategories = [
     { key: "instantRemoval", label: "Kill inst." },
     { key: "sorceryRemoval", label: "Kill sorc." },
+    { key: "removalActions.instant.targetable", label: "Target inst." },
+    { key: "removalActions.sorcery.targetable", label: "Target sorc." },
     { key: "removalActions.instant.damage", label: "Dmg inst." },
     { key: "removalActions.sorcery.damage", label: "Dmg sorc." },
     { key: "removalActions.instant.blockedTarget", label: "No target inst." },
@@ -1282,6 +1307,7 @@ export default {
             analysisLoadingCardIds: {},
             analysisRowsByCardId: {},
             valueAnalysisByCardId: {},
+            collapsedAnalysisDeckIds: {},
             analysisQueueTimer: null,
             analysisGeneration: 0,
             analysisClient: null,
@@ -1540,6 +1566,7 @@ export default {
                         key: isNinePlus ? '9-plus' : String(manaValue),
                         sortValue: manaValue,
                         label: isNinePlus ? '9+ mana' : `${manaValue} mana`,
+                        type: 'manaValue',
                         actionCost: manaValue,
                         cards: [],
                         allCards: sessions.flatMap(session => session.state?.cards ?? []),
@@ -1570,6 +1597,8 @@ export default {
                 return {
                     key: session.id,
                     label: session.name,
+                    type: 'metaDeck',
+                    collapsed: Boolean(this.collapsedAnalysisDeckIds[session.id]),
                     cards: session.state?.cards ?? [],
                     creatures: (session.state?.cards ?? []).filter(card => isCreatureCard(card)),
                     totalCards: this.countCards(session.state?.cards ?? []),
@@ -1691,11 +1720,13 @@ export default {
                     instant: {
                         kill: this.countCards(summary.removalActions.instant.kill),
                         damage: this.countCards(summary.removalActions.instant.damage),
+                        targetable: this.countCards(summary.removalActions.instant.targetable),
                         blockedTarget: this.countCards(summary.removalActions.instant.blockedTarget),
                     },
                     sorcery: {
                         kill: this.countCards(summary.removalActions.sorcery.kill),
                         damage: this.countCards(summary.removalActions.sorcery.damage),
+                        targetable: this.countCards(summary.removalActions.sorcery.targetable),
                         blockedTarget: this.countCards(summary.removalActions.sorcery.blockedTarget),
                     },
                 },
@@ -1708,6 +1739,22 @@ export default {
         },
         cardsForAnalysisCategory(summary, categoryKey) {
             return cardsForAnalysisCategory(summary, categoryKey);
+        },
+        analysisColumnHeader(card, column) {
+            if (column.type !== 'metaDeck') {
+                return {
+                    killPercent: '',
+                    interactionPercent: '',
+                };
+            }
+
+            return buildMetaDeckRemovalSummary(card, column);
+        },
+        toggleAnalysisDeckCollapse(columnKey) {
+            this.collapsedAnalysisDeckIds = {
+                ...this.collapsedAnalysisDeckIds,
+                [columnKey]: !this.collapsedAnalysisDeckIds[columnKey],
+            };
         },
         isSynergyCategory(category) {
             return isSynergyCategory(category);
@@ -2993,6 +3040,38 @@ export default {
 .analysis-grid td:first-child {
     text-align: left;
     width: 5.5rem;
+}
+
+.analysis-column-toggle {
+    align-items: center;
+    color: inherit;
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.08rem;
+    height: auto;
+    line-height: 1.05;
+    padding: 0;
+    text-decoration: none;
+    white-space: normal;
+}
+
+.analysis-column-title {
+    font-weight: 600;
+}
+
+.analysis-column-summary {
+    color: #667085;
+    font-size: 0.58rem;
+    font-weight: 500;
+}
+
+.analysis-grid th.analysis-column-collapsed,
+.analysis-grid td.analysis-column-collapsed {
+    width: 2.6rem;
+}
+
+.analysis-grid td.analysis-column-collapsed {
+    background: #f8f9fa;
 }
 
 .analysis-cell-active {
