@@ -348,6 +348,16 @@ describe('Core Rendering', async () => {
                 toughness: '3',
             },
         };
+        const shoreUp = {
+            quantity: 2,
+            name: 'shore up',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Instant',
+                oracleText: 'Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.',
+                manaCost: '{U}',
+            },
+        };
 
         component.data.config.analysisMode = true;
         component.data.config.analysisMetric = 'count';
@@ -359,7 +369,7 @@ describe('Core Rendering', async () => {
                 id: 'coverage-meta',
                 name: 'Coverage Meta',
                 state: {
-                    cards: [smallCreature, largeCreature],
+                    cards: [smallCreature, largeCreature, shoreUp],
                 },
             },
         ];
@@ -367,9 +377,9 @@ describe('Core Rendering', async () => {
         await wrapper.vm.$nextTick();
 
         const header = component.ctx.analysisColumnHeader(shock, component.proxy.analysisColumns[0]);
-        expect(header.killPercent).toBe('37.5%');
-        expect(header.interactionPercent).toBe('100.0%');
-        expect(wrapper.find('.analysis-column-summary').text()).toContain('K 37.5% / I 100.0%');
+        expect(header.killPercent).toBe('30.0%');
+        expect(header.interactionPercent).toBe('80.0%');
+        expect(wrapper.find('.analysis-column-summary').text()).toContain('K 30.0% / I 80.0%');
 
         await wrapper.find('.analysis-column-toggle').trigger('click');
 
@@ -449,8 +459,8 @@ describe('Core Rendering', async () => {
         await wrapper.vm.$nextTick();
 
         expect(wrapper.find('.value-meta-removal-options').text()).toContain('Abrade Meta');
-        expect(wrapper.find('.value-meta-removal-options').text()).toContain('Removed 37.5%');
-        expect(wrapper.find('.value-meta-removal-options').text()).toContain('Affected 100.0%');
+        expect(wrapper.find('.value-meta-removal-options').text()).toContain('Removed 30.0%');
+        expect(wrapper.find('.value-meta-removal-options').text()).toContain('Affected 80.0%');
         expect(wrapper.find('.value-meta-removal-targets').exists()).toBe(false);
 
         await wrapper.find('.value-meta-removal-toggle').trigger('click');

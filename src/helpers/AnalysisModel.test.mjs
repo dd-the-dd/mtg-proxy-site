@@ -61,11 +61,11 @@ describe('AnalysisModel', () => {
         expect(targetCell.display).toBe('8');
         expect(targetCell.title).toContain('3x small creature - target red; mana +1; cards even; responses: 2x shore up');
         expect(summary).toMatchObject({
-            killPercent: '37.5%',
-            interactionPercent: '100.0%',
+            killPercent: '30.0%',
+            interactionPercent: '80.0%',
             killedQuantity: 3,
             interactedQuantity: 8,
-            totalCreatureQuantity: 8,
+            totalQuantity: 10,
         });
     });
 
@@ -111,8 +111,8 @@ describe('AnalysisModel', () => {
         expect(cast.metaRemovalOptions).toContainEqual(expect.objectContaining({
             deckId: 'meta',
             deckName: 'Meta',
-            removedPercent: '37.5%',
-            affectedPercent: '100.0%',
+            removedPercent: '30.0%',
+            affectedPercent: '80.0%',
             effect: 'Battlefield removal',
             value: 'Removal coverage',
         }));

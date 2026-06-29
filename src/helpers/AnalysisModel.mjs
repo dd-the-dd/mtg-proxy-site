@@ -235,7 +235,7 @@ export function buildAnalysisCell(card, category, column, metric) {
 
 export function buildMetaDeckRemovalSummary(card, column) {
     const creatures = column.creatures ?? [];
-    const totalCreatureQuantity = countCards(creatures);
+    const totalQuantity = column.totalCards ?? countCards(column.cards ?? creatures);
     let killedQuantity = 0;
     let interactedQuantity = 0;
 
@@ -258,15 +258,15 @@ export function buildMetaDeckRemovalSummary(card, column) {
     }
 
     const percent = quantity => {
-        return totalCreatureQuantity > 0
-            ? `${(quantity / totalCreatureQuantity * 100).toFixed(1)}%`
+        return totalQuantity > 0
+            ? `${(quantity / totalQuantity * 100).toFixed(1)}%`
             : '0.0%';
     };
 
     return {
         killedQuantity,
         interactedQuantity,
-        totalCreatureQuantity,
+        totalQuantity,
         killPercent: percent(killedQuantity),
         interactionPercent: percent(interactedQuantity),
     };
@@ -339,7 +339,7 @@ function buildMetaRemovalOptions(card, columns = []) {
                 affectedPercent: summary.interactionPercent,
                 removedQuantity: summary.killedQuantity,
                 affectedQuantity: summary.interactedQuantity,
-                totalCreatureQuantity: summary.totalCreatureQuantity,
+                totalQuantity: summary.totalQuantity,
                 effect: 'Battlefield removal',
                 value: 'Removal coverage',
                 targets,
