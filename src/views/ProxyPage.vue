@@ -953,6 +953,7 @@
                     v-for="(mana, manaIndex) in manaSummaryForCard(card)"
                     :key="`mana-summary-${cardIndex}-${manaIndex}`"
                     class="value-mana-chip"
+                    :class="`value-mana-chip-${mana.kind}`"
                   >
                     <span class="value-mana-source">{{ mana.condition }}</span>
                     <span class="value-mana-quantity">x{{ mana.quantity }}</span>
@@ -1962,10 +1963,12 @@ export default {
             for (const option of this.valueAnalysisForCard(card).castOptions) {
                 for (const mana of option.manaOptions ?? []) {
                     const producedSymbols = mana.producedSymbols ?? [];
-                    const key = `${mana.condition}:${producedSymbols.join('/')}`;
+                    const kind = mana.kind ?? 'payment';
+                    const key = `${kind}:${mana.condition}:${producedSymbols.join('/')}`;
                     if (!seen.has(key)) {
                         seen.set(key, {
                             condition: mana.condition,
+                            kind,
                             producedSymbols,
                             quantity: mana.quantity ?? 1,
                         });
@@ -3368,10 +3371,10 @@ export default {
 
 .value-mana-chip {
     align-items: center;
-    background: #f0f9ff;
-    border: 1px solid #7dd3fc;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
     border-radius: 999px;
-    color: #075985;
+    color: #334155;
     display: inline-flex;
     font-size: 0.58rem;
     font-weight: 700;
@@ -3380,6 +3383,12 @@ export default {
     max-width: 100%;
     min-height: 1.25rem;
     padding: 0.16rem 0.34rem;
+}
+
+.value-mana-chip-payment {
+    background: #ecfdf3;
+    border-color: #75e0a7;
+    color: #047857;
 }
 
 .value-mana-source {

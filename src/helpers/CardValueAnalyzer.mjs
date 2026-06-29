@@ -1044,6 +1044,7 @@ function manaOptionsForCast(card, option, relatedCards) {
                 cost: ability.cost,
                 costSymbols: ability.costSymbols,
                 effect: ability.effect,
+                kind: 'payment',
                 quantity: relatedCard.quantity ?? 1,
                 producedSymbols: ability.anyColor ? coloredManaSymbols(option.cost) : ability.symbols,
                 source: relatedCard.name,

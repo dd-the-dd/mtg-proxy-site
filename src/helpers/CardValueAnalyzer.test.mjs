@@ -431,6 +431,7 @@ describe('CardValueAnalyzer', () => {
             condition: 'island',
             costSymbols: ['T'],
             effect: 'Add {U}',
+            kind: 'payment',
             sourceLine: 'x6',
             value: 'Pays {U}',
         }));
@@ -468,6 +469,7 @@ describe('CardValueAnalyzer', () => {
         expect(thunderMana).toContainEqual(expect.objectContaining({
             condition: 'tablet of discovery',
             effect: 'Add {R}{R}. Spend this mana only to cast instant and sorcery spells',
+            kind: 'payment',
             producedSymbols: ['R', 'R'],
             sourceLine: 'x4',
             value: 'Pays {R}',

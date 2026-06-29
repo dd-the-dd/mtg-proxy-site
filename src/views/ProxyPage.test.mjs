@@ -1013,6 +1013,10 @@ describe('Core Rendering', async () => {
 
     test('Feature: Value view renders mana sources as compact chips at the bottom.', async () => {
         const component = wrapper.getCurrentComponent();
+        while(!component.data.activeSessionId) {
+            await new Promise(r => setTimeout(r, 50));
+        }
+
         const opt = {
             quantity: 1,
             name: 'opt',
@@ -1063,6 +1067,7 @@ describe('Core Rendering', async () => {
         expect(manaSources.text()).toContain('x5');
         expect(manaSources.text()).not.toContain('mountain');
         expect(wrapper.find('.value-mana-chip .ms-u').exists()).toBe(true);
+        expect(wrapper.find('.value-mana-chip-payment').exists()).toBe(true);
         expect(wrapper.find('.value-rows-mana').exists()).toBe(false);
 
         component.data.config.analysisView = 'interaction';

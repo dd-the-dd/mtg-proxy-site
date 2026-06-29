@@ -80,7 +80,7 @@
 - Value rows nested under a cast option display the full mana cost of that cast option, including colored symbols, while independent zone or activated actions keep their own action cost.
 - Value analysis uses the current deck's cards for internal synergies and mana sources; meta decks only feed the against-meta interaction grid.
 - Value analysis shows land mana abilities that can pay a cast option, keeps ETB passives under the cast in their own row color, and shows death triggers in a separate death-trigger section rather than as cast value.
-- Value analysis shows mana sources as compact chips at the bottom of the card analysis, and additional-value rows show the full setup mana cost of the source that provides the value.
+- Value analysis shows mana sources as compact color-coded chips at the bottom of the card analysis, where payment sources use a distinct payment color, and additional-value rows show the full setup mana cost of the source that provides the value.
 - Permanent mana sources such as artifacts can appear in value analysis, and restricted mana such as `Spend this mana only to cast instant and sorcery spells` appears only on matching cast options while preserving all produced mana symbols.
 - Value analysis parses 4c control spell patterns into concrete cast options, including modal choices, tiered additional costs, spree single and combined choices, conditional counters, battlefield removal, drain, card selection with X, and split prepared spell faces.
 - Value analysis maps same-deck spell impacts onto permanents that care about those spells, including creature-land combat pumps that require a conversion setup cost and activated abilities unlocked by casting an instant or sorcery.
