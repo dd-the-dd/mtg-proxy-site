@@ -437,6 +437,52 @@ describe('CardValueAnalyzer', () => {
         expect(manaOptions.map(option => option.condition)).not.toContain('mountain');
     });
 
+    test('Feature: Value analysis treats restricted artifact mana as a source only for matching spell casts.', () => {
+        const thunderMagic = card('thunder magic', {
+            typeLine: 'Instant',
+            oracleText: 'Thunder Magic deals 2 damage to target creature.',
+            manaCost: '{R}',
+            manaValue: 1,
+        });
+        const sanar = card('sanar, unfinished genius', {
+            typeLine: 'Legendary Creature - Goblin Sorcerer // Sorcery',
+            oracleText: "Sanar enters prepared.\n{T}: Create a Treasure token. Activate only if you've cast an instant or sorcery spell this turn.\nSearch your library for an instant or sorcery card, reveal it, put it into your hand, then shuffle.",
+            manaCost: '{U}{R} // {3}{U}{R}',
+            manaValue: 2,
+            power: '0',
+            toughness: '4',
+        });
+        const tablet = card('tablet of discovery', {
+            typeLine: 'Artifact',
+            oracleText: 'When this artifact enters, mill a card. You may play that card this turn.\n{T}: Add {R}.\n{T}: Add {R}{R}. Spend this mana only to cast instant and sorcery spells.',
+            manaCost: '{2}{R}',
+            manaValue: 3,
+        }, 4);
+
+        const thunderMana = analyzeCardValue(thunderMagic, [tablet]).castOptions[0].manaOptions;
+        expect(analyzeCardValue(tablet).activatedOptions).toContainEqual(expect.objectContaining({
+            cost: '{T}',
+            effect: 'Add {R}{R}',
+            value: 'Mana production',
+        }));
+        expect(thunderMana).toContainEqual(expect.objectContaining({
+            condition: 'tablet of discovery',
+            effect: 'Add {R}{R}. Spend this mana only to cast instant and sorcery spells',
+            producedSymbols: ['R', 'R'],
+            sourceLine: 'x4',
+            value: 'Pays {R}',
+        }));
+
+        const sanarValue = analyzeCardValue(sanar, [tablet]);
+        expect(sanarValue.castOptions.find(option => option.label === 'Cast').manaOptions).not.toContainEqual(expect.objectContaining({
+            effect: 'Add {R}{R}. Spend this mana only to cast instant and sorcery spells',
+        }));
+        expect(sanarValue.castOptions.find(option => option.label === 'Spell face').manaOptions).toContainEqual(expect.objectContaining({
+            effect: 'Add {R}{R}. Spend this mana only to cast instant and sorcery spells',
+            producedSymbols: ['R', 'R'],
+        }));
+    });
+
     test('Feature: Value analysis shows bounce zone movement for non-land permanents only.', () => {
         const boomerang = card('boomerang', {
             typeLine: 'Instant',

@@ -156,6 +156,10 @@ function isLandCard(card) {
     return /\bLand\b/i.test(typeLineOf(card));
 }
 
+function isPermanentCard(card) {
+    return /\b(?:Artifact|Battle|Creature|Enchantment|Land|Planeswalker)\b/i.test(typeLineOf(card));
+}
+
 function isCreatureCard(card) {
     return /\bCreature\b/i.test(typeLineOf(card));
 }
@@ -231,7 +235,7 @@ function normalizedAbilityCost(cost) {
 }
 
 function manaSourceAbilities(card) {
-    if (!isLandCard(card)) {
+    if (!isPermanentCard(card)) {
         return [];
     }
 
@@ -242,6 +246,10 @@ function manaSourceAbilities(card) {
             const effect = cleanAbilityText(separatorIndex === -1 ? line : line.slice(separatorIndex + 1));
 
             if (!/\badd\b/i.test(effect)) {
+                return null;
+            }
+
+            if (!isActivatedAbilityCost(cost)) {
                 return null;
             }
 
@@ -258,6 +266,7 @@ function manaSourceAbilities(card) {
                 effect,
                 symbols,
                 anyColor,
+                onlyInstantSorcery: /\bspend this mana only to cast instant and sorcery spells\b/i.test(effect),
             };
         })
         .filter(Boolean);
@@ -305,7 +314,7 @@ function activatedCondition(cost, effect = '') {
 }
 
 function activatedEffectText(effect) {
-    const mana = /\badd ({[^}]+}|one mana(?: of any color)?)/i.exec(effect);
+    const mana = /\badd (((?:\{[^}]+\})+)|one mana(?: of any color)?)/i.exec(effect);
     if (mana) {
         return `Add ${mana[1]}`;
     }
@@ -1001,7 +1010,7 @@ function ownBattlefieldToHandOption(entry, card, relatedCard, key) {
     };
 }
 
-function manaOptionsForCast(option, relatedCards) {
+function manaOptionsForCast(card, option, relatedCards) {
     const requiredSymbols = coloredManaSymbols(option.cost);
     if (requiredSymbols.length === 0) {
         return [];
@@ -1012,6 +1021,10 @@ function manaOptionsForCast(option, relatedCards) {
 
     for (const relatedCard of relatedCards) {
         for (const ability of manaSourceAbilities(relatedCard)) {
+            if (ability.onlyInstantSorcery && !isInstantOrSorceryOption(card, option)) {
+                continue;
+            }
+
             const matchedSymbols = requiredSymbols.filter(symbol => {
                 return ability.anyColor || ability.symbols.some(produced => produced.toUpperCase() === symbol.toUpperCase());
             });
@@ -1032,7 +1045,7 @@ function manaOptionsForCast(option, relatedCards) {
                 costSymbols: ability.costSymbols,
                 effect: ability.effect,
                 quantity: relatedCard.quantity ?? 1,
-                producedSymbols: ability.anyColor ? coloredManaSymbols(option.cost) : matchedSymbols,
+                producedSymbols: ability.anyColor ? coloredManaSymbols(option.cost) : ability.symbols,
                 source: relatedCard.name,
                 sourceLine: `x${relatedCard.quantity ?? 1}`,
                 speed: 'Mana',
@@ -1302,7 +1315,7 @@ export function analyzeCardValue(card, relatedCards = []) {
             bonuses: [],
             etbOptions: [],
             permanentOptions: instantSorceryCastUnlockOptions(card, option, relatedCards),
-            manaOptions: manaOptionsForCast(option, relatedCards),
+            manaOptions: manaOptionsForCast(card, option, relatedCards),
             zoneChanges: [],
         };
     });
