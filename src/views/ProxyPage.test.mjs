@@ -383,6 +383,92 @@ describe('Core Rendering', async () => {
         component.data.config.decklist = '';
     });
 
+    test('Feature: Value view shows collapsible per-meta-deck battlefield removal coverage.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const abrade = {
+            quantity: 1,
+            name: 'abrade',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Instant',
+                oracleText: 'Choose one —\n• Abrade deals 3 damage to target creature.\n• Destroy target artifact.',
+                manaCost: '{1}{R}',
+            },
+            setOptions: [],
+        };
+        const shoreUp = {
+            quantity: 2,
+            name: 'shore up',
+            selectedOption: {
+                manaValue: 1,
+                typeLine: 'Instant',
+                oracleText: 'Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.',
+                manaCost: '{U}',
+            },
+        };
+        const smallCreature = {
+            quantity: 3,
+            name: 'small creature',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Creature - Mouse',
+                oracleText: '',
+                power: '1',
+                toughness: '3',
+            },
+        };
+        const largeCreature = {
+            quantity: 5,
+            name: 'large creature',
+            selectedOption: {
+                manaValue: 4,
+                typeLine: 'Creature - Beast',
+                oracleText: '',
+                power: '4',
+                toughness: '4',
+            },
+        };
+
+        component.data.config.analysisMode = true;
+        component.data.config.analysisView = 'value';
+        component.data.config.analysisMetric = 'count';
+        component.data.config.analysisColumnMode = 'metaDeck';
+        component.data.config.analysisMatchupSessionId = 'all';
+        component.data.cards = [abrade];
+        component.data.metaDeckStates = [
+            {
+                id: 'abrade-meta',
+                name: 'Abrade Meta',
+                state: {
+                    cards: [smallCreature, largeCreature, shoreUp],
+                },
+            },
+        ];
+
+        await component.ctx.waitForAnalysisQueue();
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('.value-meta-removal-options').text()).toContain('Abrade Meta');
+        expect(wrapper.find('.value-meta-removal-options').text()).toContain('Removed 37.5%');
+        expect(wrapper.find('.value-meta-removal-options').text()).toContain('Affected 100.0%');
+        expect(wrapper.find('.value-meta-removal-targets').exists()).toBe(false);
+
+        await wrapper.find('.value-meta-removal-toggle').trigger('click');
+
+        expect(wrapper.find('.value-meta-removal-targets').text()).toContain('3x small creature');
+        expect(wrapper.find('.value-meta-removal-targets').text()).toContain('kill');
+        expect(wrapper.find('.value-meta-removal-targets').text()).toContain('2x shore up');
+        expect(wrapper.find('.value-meta-removal-targets').text()).toContain('5x large creature');
+        expect(wrapper.find('.value-meta-removal-targets').text()).toContain('damage');
+
+        component.data.config.analysisView = 'interaction';
+        component.data.config.analysisMode = false;
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.expandedValueRemovalDeckIds = {};
+        component.data.config.decklist = '';
+    });
+
     test('Feature: Mana-value analysis cells sum matching meta cards inside fixed mana columns.', async () => {
         const component = wrapper.getCurrentComponent();
         const burstLightning = {

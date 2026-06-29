@@ -13,7 +13,7 @@ function createDirectAnalysisClient() {
                     payload.columns,
                     payload.metric,
                 ),
-                value: buildValueAnalysisForCard(payload.card, payload.relatedCards),
+                value: buildValueAnalysisForCard(payload.card, payload.relatedCards, payload.columns),
             };
         },
         terminate() {},

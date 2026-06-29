@@ -237,6 +237,82 @@ export function buildMetaDeckRemovalSummary(card, column) {
     };
 }
 
+function removalOutcomeForTarget(card, targetCard) {
+    const summary = summarizeCreatureInteractions([card], targetCard);
+    if (summary.instantRemoval.length > 0 || summary.sorceryRemoval.length > 0) {
+        return 'kill';
+    }
+
+    if (summary.removalActions.instant.damage.length > 0 || summary.removalActions.sorcery.damage.length > 0) {
+        return 'damage';
+    }
+
+    if (summary.removalActions.instant.targetable.length > 0 || summary.removalActions.sorcery.targetable.length > 0) {
+        return 'target';
+    }
+
+    return '';
+}
+
+function removalCategoryForOutcome(card, outcome) {
+    const speed = spellSpeed(card) ?? 'sorcery';
+    if (outcome === 'kill') {
+        return speed === 'instant' ? 'instantRemoval' : 'sorceryRemoval';
+    }
+
+    return `removalActions.${speed}.${outcome === 'target' ? 'targetable' : outcome}`;
+}
+
+function buildMetaRemovalTargets(card, column) {
+    return (column.creatures ?? [])
+        .map(targetCard => {
+            const outcome = removalOutcomeForTarget(card, targetCard);
+            if (!outcome) {
+                return null;
+            }
+
+            const responses = possibleResponses(card, targetCard, column.cards ?? []);
+            return {
+                name: targetCard.name,
+                quantity: targetCard.quantity ?? 1,
+                outcome,
+                detail: removalInteractionDetail(card, targetCard, removalCategoryForOutcome(card, outcome), column.cards ?? []),
+                protection: responses.map(response => `${response.quantity ?? 1}x ${response.name}`).join(', '),
+            };
+        })
+        .filter(Boolean);
+}
+
+function buildMetaRemovalOptions(card, columns = []) {
+    if (damageAmount(card) <= 0) {
+        return [];
+    }
+
+    return columns
+        .filter(column => column.type === 'metaDeck')
+        .map(column => {
+            const summary = buildMetaDeckRemovalSummary(card, column);
+            const targets = buildMetaRemovalTargets(card, column);
+            if (targets.length === 0) {
+                return null;
+            }
+
+            return {
+                deckId: column.key,
+                deckName: column.label,
+                removedPercent: summary.killPercent,
+                affectedPercent: summary.interactionPercent,
+                removedQuantity: summary.killedQuantity,
+                affectedQuantity: summary.interactedQuantity,
+                totalCreatureQuantity: summary.totalCreatureQuantity,
+                effect: 'Battlefield removal',
+                value: 'Removal coverage',
+                targets,
+            };
+        })
+        .filter(Boolean);
+}
+
 export function buildAnalysisRowsForCard(card, categories, columns, metric) {
     return categories
         .map(category => {
@@ -255,8 +331,19 @@ export function buildAnalysisRowsForCard(card, categories, columns, metric) {
         .filter(row => row.cells.some(({ cell }) => cell.active));
 }
 
-export function buildValueAnalysisForCard(card, relatedCards) {
-    return analyzeCardValue(card, relatedCards);
+export function buildValueAnalysisForCard(card, relatedCards, columns = []) {
+    const value = analyzeCardValue(card, relatedCards);
+    const metaRemovalOptions = buildMetaRemovalOptions(card, columns);
+
+    return {
+        ...value,
+        castOptions: value.castOptions.map(option => {
+            return {
+                ...option,
+                metaRemovalOptions,
+            };
+        }),
+    };
 }
 
 export function buildCreatureColumns(sessions) {

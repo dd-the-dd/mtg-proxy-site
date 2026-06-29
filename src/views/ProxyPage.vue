@@ -666,6 +666,49 @@
                       </div>
                     </div>
                   </div>
+                  <div
+                    v-if="option.metaRemovalOptions?.length"
+                    class="value-meta-removal-options"
+                  >
+                    <div
+                      v-for="(metaRemoval, metaRemovalIndex) in option.metaRemovalOptions"
+                      :key="`meta-removal-${cardIndex}-${optionIndex}-${metaRemoval.deckId}`"
+                      class="value-meta-removal"
+                    >
+                      <button
+                        type="button"
+                        class="btn btn-link value-meta-removal-toggle"
+                        @click="toggleValueRemovalDeck(card, optionIndex, metaRemoval.deckId)"
+                      >
+                        <span class="value-meta-removal-deck">{{ metaRemoval.deckName }}</span>
+                        <span>Removed {{ metaRemoval.removedPercent }}</span>
+                        <span>Affected {{ metaRemoval.affectedPercent }}</span>
+                      </button>
+                      <div
+                        v-if="isValueRemovalDeckExpanded(card, optionIndex, metaRemoval.deckId)"
+                        class="value-meta-removal-targets"
+                      >
+                        <div
+                          v-for="(target, targetIndex) in metaRemoval.targets"
+                          :key="`meta-removal-target-${cardIndex}-${optionIndex}-${metaRemovalIndex}-${targetIndex}`"
+                          class="value-meta-removal-target"
+                        >
+                          <div class="value-meta-removal-target-name">
+                            {{ target.quantity }}x {{ target.name }}
+                          </div>
+                          <div class="value-meta-removal-target-detail">
+                            {{ target.outcome }} / {{ target.detail }}
+                          </div>
+                          <div
+                            v-if="target.protection"
+                            class="value-meta-removal-protection"
+                          >
+                            Protect: {{ target.protection }}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <div v-if="option.etbOptions.length" class="value-rows value-rows-etb">
                     <div
                       v-for="(etb, etbIndex) in option.etbOptions"
@@ -1308,6 +1351,7 @@ export default {
             analysisRowsByCardId: {},
             valueAnalysisByCardId: {},
             collapsedAnalysisDeckIds: {},
+            expandedValueRemovalDeckIds: {},
             analysisQueueTimer: null,
             analysisGeneration: 0,
             analysisClient: null,
@@ -1756,6 +1800,19 @@ export default {
                 [columnKey]: !this.collapsedAnalysisDeckIds[columnKey],
             };
         },
+        valueRemovalDeckKey(card, optionIndex, deckId) {
+            return `${this.cardRuntimeKey(card)}:${optionIndex}:${deckId}`;
+        },
+        isValueRemovalDeckExpanded(card, optionIndex, deckId) {
+            return Boolean(this.expandedValueRemovalDeckIds[this.valueRemovalDeckKey(card, optionIndex, deckId)]);
+        },
+        toggleValueRemovalDeck(card, optionIndex, deckId) {
+            const key = this.valueRemovalDeckKey(card, optionIndex, deckId);
+            this.expandedValueRemovalDeckIds = {
+                ...this.expandedValueRemovalDeckIds,
+                [key]: !this.expandedValueRemovalDeckIds[key],
+            };
+        },
         isSynergyCategory(category) {
             return isSynergyCategory(category);
         },
@@ -1856,7 +1913,7 @@ export default {
                             this.analysisColumns,
                             this.config.analysisMetric,
                         ),
-                        value: buildValueAnalysisForCard(card, this.cards),
+                        value: buildValueAnalysisForCard(card, this.cards, this.analysisColumns),
                     };
                 }
 
@@ -1898,7 +1955,7 @@ export default {
             return buildAnalysisCell(card, category, column, this.config.analysisMetric);
         },
         valueAnalysis(card) {
-            return buildValueAnalysisForCard(card, this.cards);
+            return buildValueAnalysisForCard(card, this.cards, this.analysisColumns);
         },
         manaSummaryForCard(card) {
             const seen = new Map();
@@ -3097,6 +3154,64 @@ export default {
 
 .value-cast {
     display: block;
+}
+
+.value-meta-removal-options {
+    display: grid;
+    gap: 0.22rem;
+}
+
+.value-meta-removal {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.value-meta-removal-toggle {
+    align-items: center;
+    color: #7c2d12;
+    display: grid;
+    font-size: 0.62rem;
+    font-weight: 700;
+    grid-template-columns: minmax(5.6rem, 1fr) repeat(2, minmax(4.6rem, auto));
+    height: auto;
+    line-height: 1.15;
+    padding: 0.28rem 0.36rem;
+    text-align: left;
+    text-decoration: none;
+    width: 100%;
+}
+
+.value-meta-removal-deck {
+    color: #431407;
+}
+
+.value-meta-removal-targets {
+    border-top: 1px solid #fed7aa;
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.28rem 0.36rem;
+}
+
+.value-meta-removal-target {
+    display: grid;
+    font-size: 0.6rem;
+    gap: 0.08rem;
+    grid-template-columns: minmax(5.5rem, 1fr) minmax(7rem, 1.4fr) minmax(5rem, 1fr);
+    line-height: 1.15;
+}
+
+.value-meta-removal-target-name {
+    font-weight: 700;
+}
+
+.value-meta-removal-target-detail {
+    color: #7c2d12;
+}
+
+.value-meta-removal-protection {
+    color: #475467;
 }
 
 .value-death-options,

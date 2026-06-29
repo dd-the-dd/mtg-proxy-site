@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
     buildAnalysisCell,
-    buildMetaDeckRemovalSummary
+    buildMetaDeckRemovalSummary,
+    buildValueAnalysisForCard
 } from './AnalysisModel.mjs';
 
 const card = (name, selectedOption, quantity = 1) => {
@@ -66,5 +67,66 @@ describe('AnalysisModel', () => {
             interactedQuantity: 8,
             totalCreatureQuantity: 8,
         });
+    });
+
+    test('Feature: Value analysis exposes per-meta-deck removal coverage for damage spells.', () => {
+        const abrade = card('abrade', {
+            manaCost: '{1}{R}',
+            manaValue: 2,
+            typeLine: 'Instant',
+            oracleText: 'Choose one —\n• Abrade deals 3 damage to target creature.\n• Destroy target artifact.',
+        });
+        const shoreUp = card('shore up', {
+            manaCost: '{U}',
+            manaValue: 1,
+            typeLine: 'Instant',
+            oracleText: 'Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.',
+        }, 2);
+        const smallCreature = card('small creature', {
+            manaValue: 2,
+            typeLine: 'Creature - Mouse',
+            oracleText: '',
+            power: '1',
+            toughness: '3',
+        }, 3);
+        const largeCreature = card('large creature', {
+            manaValue: 4,
+            typeLine: 'Creature - Beast',
+            oracleText: '',
+            power: '4',
+            toughness: '4',
+        }, 5);
+        const column = {
+            key: 'meta',
+            label: 'Meta',
+            type: 'metaDeck',
+            cards: [smallCreature, largeCreature, shoreUp],
+            creatures: [smallCreature, largeCreature],
+            totalCards: 10,
+        };
+
+        const value = buildValueAnalysisForCard(abrade, [], [column]);
+        const cast = value.castOptions[0];
+
+        expect(cast.metaRemovalOptions).toContainEqual(expect.objectContaining({
+            deckId: 'meta',
+            deckName: 'Meta',
+            removedPercent: '37.5%',
+            affectedPercent: '100.0%',
+            effect: 'Battlefield removal',
+            value: 'Removal coverage',
+        }));
+        expect(cast.metaRemovalOptions[0].targets).toContainEqual(expect.objectContaining({
+            name: 'small creature',
+            quantity: 3,
+            outcome: 'kill',
+            protection: '2x shore up',
+        }));
+        expect(cast.metaRemovalOptions[0].targets).toContainEqual(expect.objectContaining({
+            name: 'large creature',
+            quantity: 5,
+            outcome: 'damage',
+            protection: '2x shore up',
+        }));
     });
 });

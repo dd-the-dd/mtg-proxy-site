@@ -16,6 +16,6 @@ self.onmessage = event => {
     self.postMessage({
         id,
         rows: buildAnalysisRowsForCard(card, categories, columns, metric),
-        value: buildValueAnalysisForCard(card, relatedCards),
+        value: buildValueAnalysisForCard(card, relatedCards, columns),
     });
 };
