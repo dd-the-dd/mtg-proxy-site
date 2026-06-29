@@ -1039,6 +1039,28 @@ describe('Core Rendering', async () => {
             },
             setOptions: [],
         };
+        const riverpyre = {
+            quantity: 2,
+            name: 'riverpyre verge',
+            selectedOption: {
+                manaValue: 0,
+                typeLine: 'Land',
+                oracleText: '{T}: Add {U} or {R}.',
+                manaCost: '',
+            },
+            setOptions: [],
+        };
+        const arcaneSignet = {
+            quantity: 1,
+            name: 'arcane signet',
+            selectedOption: {
+                manaValue: 2,
+                typeLine: 'Artifact',
+                oracleText: '{T}: Add one mana of any color.',
+                manaCost: '{2}',
+            },
+            setOptions: [],
+        };
         const mountain = {
             quantity: 3,
             name: 'mountain',
@@ -1055,7 +1077,7 @@ describe('Core Rendering', async () => {
         component.data.config.analysisView = 'value';
         component.data.config.includeCards = true;
         component.data.config.includeGamePieces = true;
-        component.data.cards = [opt, island, mountain];
+        component.data.cards = [opt, island, riverpyre, arcaneSignet, mountain];
         component.data.metaDeckStates = [];
 
         await component.ctx.waitForAnalysisQueue();
@@ -1064,11 +1086,16 @@ describe('Core Rendering', async () => {
         const manaSources = wrapper.find('.value-mana-options');
         expect(manaSources.text()).toContain('Mana sources');
         expect(manaSources.text()).toContain('island');
+        expect(manaSources.text()).toContain('riverpyre verge');
         expect(manaSources.text()).toContain('x5');
+        expect(manaSources.text()).toContain('/');
         expect(manaSources.text()).not.toContain('mountain');
+        expect(manaSources.text()).not.toContain('arcane signet');
         expect(wrapper.find('.value-mana-chip .ms-u').exists()).toBe(true);
-        expect(wrapper.find('.value-mana-chip-payment').exists()).toBe(true);
-        expect(wrapper.find('.value-rows-mana').exists()).toBe(false);
+        expect(wrapper.find('.value-mana-chip-land-payment').exists()).toBe(true);
+        expect(wrapper.find('.value-mana-choice-separator').exists()).toBe(true);
+        expect(wrapper.find('.value-rows-mana').text()).toContain('arcane signet');
+        expect(wrapper.find('.value-row-mana').exists()).toBe(true);
 
         component.data.config.analysisView = 'interaction';
         component.data.config.analysisMode = false;

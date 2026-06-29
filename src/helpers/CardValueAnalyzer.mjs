@@ -43,12 +43,123 @@ function manaSymbols(cost) {
     return [...cost.matchAll(/\{([^}]+)\}/g)].map(match => match[1]);
 }
 
-function numericCostSymbols(cost) {
-    return cost === '' ? [] : [cost];
+function manaSymbolGroupsFromText(value) {
+    const addMatch = /\badd ([^.]+)/i.exec(value);
+    const manaText = (addMatch?.[1] ?? value)
+        .replace(/\bspend this mana\b.*$/i, '')
+        .trim();
+    const groups = manaText
+        .split(/\s+or\s+/i)
+        .map(part => manaSymbols(part).filter(symbol => /^[WUBRGC]$/i.test(symbol)))
+        .filter(group => group.length > 0);
+
+    return groups.length > 0 ? groups : [];
 }
 
-function coloredManaSymbols(cost) {
-    return manaSymbols(cost).filter(symbol => /^[WUBRG]$/i.test(symbol));
+function flatManaSymbols(groups) {
+    return groups.flat();
+}
+
+function manaRequirements(cost) {
+    return manaSymbols(cost).reduce((requirements, symbol) => {
+        if (/^[WUBRG]$/i.test(symbol)) {
+            requirements.colored.push(symbol.toUpperCase());
+        } else if (/^C$/i.test(symbol)) {
+            requirements.colorless += 1;
+        } else if (/^\d+$/.test(symbol)) {
+            requirements.generic += parseInt(symbol, 10);
+        }
+
+        return requirements;
+    }, {
+        colored: [],
+        colorless: 0,
+        generic: 0,
+    });
+}
+
+function formatManaSymbolValue(symbolGroups) {
+    return symbolGroups
+        .map(group => group.map(symbol => `{${symbol}}`).join(''))
+        .join('/');
+}
+
+function anyColorSymbolGroups(requirements, includeColorless = false) {
+    const uniqueRequiredColors = [...new Set(requirements.colored)];
+    const symbolGroups = uniqueRequiredColors.map(symbol => [symbol]);
+
+    if (includeColorless && requirements.colorless > 0) {
+        symbolGroups.push(['C']);
+    }
+
+    if (symbolGroups.length > 0) {
+        return symbolGroups;
+    }
+
+    return requirements.generic > 0
+        ? [['W'], ['U'], ['B'], ['R'], ['G'], ...(includeColorless ? [['C']] : [])]
+        : [];
+}
+
+function paySymbolsForProducedGroup(group, requirements) {
+    const remainingColored = [...requirements.colored];
+    let remainingColorless = requirements.colorless;
+    let remainingGeneric = requirements.generic;
+    const deferredSymbols = [];
+    const paidSymbols = [];
+    let matchedPrimaryRequirement = false;
+
+    for (const rawSymbol of group) {
+        const symbol = rawSymbol.toUpperCase();
+        const colorIndex = remainingColored.indexOf(symbol);
+        if (colorIndex !== -1) {
+            remainingColored.splice(colorIndex, 1);
+            paidSymbols.push(symbol);
+            matchedPrimaryRequirement = true;
+        } else if (symbol === 'C' && remainingColorless > 0) {
+            remainingColorless -= 1;
+            paidSymbols.push('C');
+            matchedPrimaryRequirement = true;
+        } else {
+            deferredSymbols.push(symbol);
+        }
+    }
+
+    for (const symbol of deferredSymbols) {
+        if (remainingGeneric <= 0) {
+            continue;
+        }
+
+        if (symbol === 'C' || matchedPrimaryRequirement) {
+            paidSymbols.push('1');
+            remainingGeneric -= 1;
+        }
+    }
+
+    return paidSymbols;
+}
+
+function manaPaymentForAbility(ability, cost) {
+    const requirements = manaRequirements(cost);
+    const producedSymbolGroups = ability.anyColor || ability.anyType
+        ? anyColorSymbolGroups(requirements, ability.anyType)
+        : ability.symbolGroups;
+    const paySymbolGroups = producedSymbolGroups
+        .map(group => paySymbolsForProducedGroup(group, requirements))
+        .filter(group => group.length > 0);
+
+    if (paySymbolGroups.length === 0) {
+        return null;
+    }
+
+    return {
+        paySymbolGroups,
+        producedSymbolGroups,
+    };
+}
+
+function numericCostSymbols(cost) {
+    return cost === '' ? [] : [cost];
 }
 
 function sentenceCase(value) {
@@ -234,41 +345,56 @@ function normalizedAbilityCost(cost) {
     return cost;
 }
 
+function manaSourceAbility(cost, effect, speed = 'Mana') {
+    if (!/\badd\b/i.test(effect)) {
+        return null;
+    }
+
+    const symbolGroups = manaSymbolGroupsFromText(effect);
+    const symbols = flatManaSymbols(symbolGroups);
+    const anyColor = /\bone mana of any colo[u]?r\b|\bmana of any colo[u]?r\b/i.test(effect);
+    const anyType = /\bone mana of any type\b|\bmana of any type\b/i.test(effect);
+
+    if (symbols.length === 0 && !anyColor && !anyType) {
+        return null;
+    }
+
+    return {
+        cost,
+        costSymbols: manaSymbols(cost),
+        effect,
+        symbolGroups,
+        symbols,
+        anyColor,
+        anyType,
+        onlyInstantSorcery: /\bspend this mana only to cast instant and sorcery spells\b/i.test(effect),
+        speed,
+    };
+}
+
 function manaSourceAbilities(card) {
-    if (!isPermanentCard(card)) {
+    if (isPermanentCard(card)) {
+        return abilityLines(card)
+            .map(line => {
+                const separatorIndex = line.indexOf(':');
+                const cost = separatorIndex === -1 ? '' : cleanAbilityText(line.slice(0, separatorIndex));
+                const effect = cleanAbilityText(separatorIndex === -1 ? line : line.slice(separatorIndex + 1));
+
+                if (!isActivatedAbilityCost(cost)) {
+                    return null;
+                }
+
+                return manaSourceAbility(cost, effect);
+            })
+            .filter(Boolean);
+    }
+
+    if (!isCastableSpell(card)) {
         return [];
     }
 
     return abilityLines(card)
-        .map(line => {
-            const separatorIndex = line.indexOf(':');
-            const cost = separatorIndex === -1 ? '' : cleanAbilityText(line.slice(0, separatorIndex));
-            const effect = cleanAbilityText(separatorIndex === -1 ? line : line.slice(separatorIndex + 1));
-
-            if (!/\badd\b/i.test(effect)) {
-                return null;
-            }
-
-            if (!isActivatedAbilityCost(cost)) {
-                return null;
-            }
-
-            const symbols = manaSymbols(effect).filter(symbol => /^[WUBRGC]$/i.test(symbol));
-            const anyColor = /\bone mana of any colo[u]?r\b|\bmana of any colo[u]?r\b/i.test(effect);
-
-            if (symbols.length === 0 && !anyColor) {
-                return null;
-            }
-
-            return {
-                cost,
-                costSymbols: manaSymbols(cost),
-                effect,
-                symbols,
-                anyColor,
-                onlyInstantSorcery: /\bspend this mana only to cast instant and sorcery spells\b/i.test(effect),
-            };
-        })
+        .map(line => manaSourceAbility(manaCostOf(card), cleanAbilityText(line), castSpeed(card)))
         .filter(Boolean);
 }
 
@@ -1011,8 +1137,8 @@ function ownBattlefieldToHandOption(entry, card, relatedCard, key) {
 }
 
 function manaOptionsForCast(card, option, relatedCards) {
-    const requiredSymbols = coloredManaSymbols(option.cost);
-    if (requiredSymbols.length === 0) {
+    const requirements = manaRequirements(option.cost);
+    if (requirements.colored.length === 0 && requirements.colorless === 0 && requirements.generic === 0) {
         return [];
     }
 
@@ -1025,11 +1151,8 @@ function manaOptionsForCast(card, option, relatedCards) {
                 continue;
             }
 
-            const matchedSymbols = requiredSymbols.filter(symbol => {
-                return ability.anyColor || ability.symbols.some(produced => produced.toUpperCase() === symbol.toUpperCase());
-            });
-
-            if (matchedSymbols.length === 0) {
+            const payment = manaPaymentForAbility(ability, option.cost);
+            if (!payment) {
                 continue;
             }
 
@@ -1043,14 +1166,18 @@ function manaOptionsForCast(card, option, relatedCards) {
                 condition: relatedCard.name,
                 cost: ability.cost,
                 costSymbols: ability.costSymbols,
+                display: isLandCard(relatedCard) ? 'chip' : 'row',
                 effect: ability.effect,
-                kind: 'payment',
+                kind: isLandCard(relatedCard) ? 'land-payment' : 'payment',
+                paySymbolGroups: payment.paySymbolGroups,
                 quantity: relatedCard.quantity ?? 1,
-                producedSymbols: ability.anyColor ? coloredManaSymbols(option.cost) : ability.symbols,
+                restriction: ability.onlyInstantSorcery ? 'instant/sorcery only' : '',
+                producedSymbolGroups: payment.producedSymbolGroups,
+                producedSymbols: flatManaSymbols(payment.producedSymbolGroups),
                 source: relatedCard.name,
                 sourceLine: `x${relatedCard.quantity ?? 1}`,
-                speed: 'Mana',
-                value: `Pays ${matchedSymbols.map(symbol => `{${symbol}}`).join(' ')}`,
+                speed: ability.speed,
+                value: `Pays ${formatManaSymbolValue(payment.paySymbolGroups)}`,
             });
         }
     }

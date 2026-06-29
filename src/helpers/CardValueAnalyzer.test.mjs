@@ -430,12 +430,66 @@ describe('CardValueAnalyzer', () => {
         expect(manaOptions).toContainEqual(expect.objectContaining({
             condition: 'island',
             costSymbols: ['T'],
+            display: 'chip',
             effect: 'Add {U}',
-            kind: 'payment',
+            kind: 'land-payment',
+            producedSymbolGroups: [['U']],
             sourceLine: 'x6',
             value: 'Pays {U}',
         }));
         expect(manaOptions.map(option => option.condition)).not.toContain('mountain');
+    });
+
+    test('Feature: Value analysis distinguishes colorless generic payment and mana alternatives.', () => {
+        const spell = card('fire prophecy', {
+            typeLine: 'Instant',
+            oracleText: 'Fire Prophecy deals 3 damage to target creature.',
+            manaCost: '{2}{R}',
+            manaValue: 3,
+        });
+        const greatHall = card('great hall of the biblioplex', {
+            typeLine: 'Land',
+            oracleText: '{T}: Add {C}.',
+            manaCost: '',
+            manaValue: 0,
+        }, 4);
+        const riverpyreVerge = card('riverpyre verge', {
+            typeLine: 'Land',
+            oracleText: '{T}: Add {U} or {R}.',
+            manaCost: '',
+            manaValue: 0,
+        }, 2);
+        const tablet = card('tablet of discovery', {
+            typeLine: 'Artifact',
+            oracleText: 'When this artifact enters, mill a card. You may play that card this turn.\n{T}: Add {R}.\n{T}: Add {R}{R}. Spend this mana only to cast instant and sorcery spells.',
+            manaCost: '{2}{R}',
+            manaValue: 3,
+        }, 4);
+
+        const manaOptions = analyzeCardValue(spell, [greatHall, riverpyreVerge, tablet]).castOptions[0].manaOptions;
+
+        expect(manaOptions).toContainEqual(expect.objectContaining({
+            condition: 'great hall of the biblioplex',
+            display: 'chip',
+            kind: 'land-payment',
+            producedSymbolGroups: [['C']],
+            value: 'Pays {1}',
+        }));
+        expect(manaOptions).toContainEqual(expect.objectContaining({
+            condition: 'riverpyre verge',
+            display: 'chip',
+            kind: 'land-payment',
+            producedSymbolGroups: [['U'], ['R']],
+            value: 'Pays {R}',
+        }));
+        expect(manaOptions).toContainEqual(expect.objectContaining({
+            condition: 'tablet of discovery',
+            display: 'row',
+            effect: 'Add {R}{R}. Spend this mana only to cast instant and sorcery spells',
+            kind: 'payment',
+            producedSymbolGroups: [['R', 'R']],
+            value: 'Pays {R}{1}',
+        }));
     });
 
     test('Feature: Value analysis treats restricted artifact mana as a source only for matching spell casts.', () => {
@@ -468,8 +522,10 @@ describe('CardValueAnalyzer', () => {
         }));
         expect(thunderMana).toContainEqual(expect.objectContaining({
             condition: 'tablet of discovery',
+            display: 'row',
             effect: 'Add {R}{R}. Spend this mana only to cast instant and sorcery spells',
             kind: 'payment',
+            producedSymbolGroups: [['R', 'R']],
             producedSymbols: ['R', 'R'],
             sourceLine: 'x4',
             value: 'Pays {R}',
