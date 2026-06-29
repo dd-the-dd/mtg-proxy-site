@@ -709,65 +709,6 @@
                       </div>
                     </div>
                   </div>
-                  <div v-if="rowManaOptions(option).length" class="value-rows value-rows-mana">
-                    <div
-                      v-for="(mana, manaIndex) in rowManaOptions(option)"
-                      :key="`mana-row-${cardIndex}-${optionIndex}-${manaIndex}`"
-                      class="value-row value-row-mana"
-                    >
-                      <div class="value-row-cell value-row-condition">
-                        <div>{{ mana.condition }}</div>
-                        <div class="value-row-source">
-                          {{ mana.sourceLine }}
-                        </div>
-                      </div>
-                      <div class="value-row-cell value-row-cost">
-                        <i
-                          v-if="mana.speed === 'Instant' || mana.speed === 'Flash'"
-                          class="ms value-speed"
-                          :class="speedSymbolClass(mana.speed)"
-                          :title="mana.speed"
-                        />
-                        <i
-                          v-for="(symbol, symbolIndex) in mana.costSymbols"
-                          :key="`mana-row-cost-${cardIndex}-${optionIndex}-${manaIndex}-${symbolIndex}`"
-                          class="ms ms-cost mana-symbol"
-                          :class="manaSymbolClass(symbol)"
-                          :title="symbol"
-                        />
-                      </div>
-                      <div class="value-row-cell value-row-effect">
-                        <span class="value-mana-effect-label">Add</span>
-                        <span class="value-mana-symbol-groups">
-                          <template
-                            v-for="(group, groupIndex) in manaSymbolGroups(mana)"
-                            :key="`mana-row-group-${cardIndex}-${optionIndex}-${manaIndex}-${groupIndex}`"
-                          >
-                            <span
-                              v-if="groupIndex > 0"
-                              class="value-mana-choice-separator"
-                            >/</span>
-                            <i
-                              v-for="(symbol, symbolIndex) in group"
-                              :key="`mana-row-symbol-${cardIndex}-${optionIndex}-${manaIndex}-${groupIndex}-${symbolIndex}`"
-                              class="ms ms-cost mana-symbol"
-                              :class="manaSymbolClass(symbol)"
-                              :title="symbol"
-                            />
-                          </template>
-                        </span>
-                        <span
-                          v-if="mana.restriction"
-                          class="value-mana-restriction"
-                        >
-                          {{ mana.restriction }}
-                        </span>
-                      </div>
-                      <div class="value-row-cell value-row-state">
-                        {{ mana.value || '-' }}
-                      </div>
-                    </div>
-                  </div>
                   <div v-if="option.etbOptions.length" class="value-rows value-rows-etb">
                     <div
                       v-for="(etb, etbIndex) in option.etbOptions"
@@ -1001,7 +942,7 @@
                 </div>
               </div>
               <div
-                v-if="manaSummaryForCard(card).length"
+                v-if="manaSummaryForCard(card).length || rowManaOptionsForCard(card).length"
                 class="value-mana-options"
               >
                 <div class="value-line-header">
@@ -1035,6 +976,65 @@
                         />
                       </template>
                     </span>
+                  </div>
+                </div>
+                <div v-if="rowManaOptionsForCard(card).length" class="value-rows value-rows-mana">
+                  <div
+                    v-for="(mana, manaIndex) in rowManaOptionsForCard(card)"
+                    :key="`mana-row-${cardIndex}-${manaIndex}`"
+                    class="value-row value-row-mana"
+                  >
+                    <div class="value-row-cell value-row-condition">
+                      <div>{{ mana.condition }}</div>
+                      <div class="value-row-source">
+                        {{ mana.sourceLine }}
+                      </div>
+                    </div>
+                    <div class="value-row-cell value-row-cost">
+                      <i
+                        v-if="mana.speed === 'Instant' || mana.speed === 'Flash'"
+                        class="ms value-speed"
+                        :class="speedSymbolClass(mana.speed)"
+                        :title="mana.speed"
+                      />
+                      <i
+                        v-for="(symbol, symbolIndex) in mana.costSymbols"
+                        :key="`mana-row-cost-${cardIndex}-${manaIndex}-${symbolIndex}`"
+                        class="ms ms-cost mana-symbol"
+                        :class="manaSymbolClass(symbol)"
+                        :title="symbol"
+                      />
+                    </div>
+                    <div class="value-row-cell value-row-effect">
+                      <span class="value-mana-effect-label">Add</span>
+                      <span class="value-mana-symbol-groups">
+                        <template
+                          v-for="(group, groupIndex) in manaSymbolGroups(mana)"
+                          :key="`mana-row-group-${cardIndex}-${manaIndex}-${groupIndex}`"
+                        >
+                          <span
+                            v-if="groupIndex > 0"
+                            class="value-mana-choice-separator"
+                          >/</span>
+                          <i
+                            v-for="(symbol, symbolIndex) in group"
+                            :key="`mana-row-symbol-${cardIndex}-${manaIndex}-${groupIndex}-${symbolIndex}`"
+                            class="ms ms-cost mana-symbol"
+                            :class="manaSymbolClass(symbol)"
+                            :title="symbol"
+                          />
+                        </template>
+                      </span>
+                      <span
+                        v-if="mana.restriction"
+                        class="value-mana-restriction"
+                      >
+                        {{ mana.restriction }}
+                      </span>
+                    </div>
+                    <div class="value-row-cell value-row-state">
+                      {{ mana.value || '-' }}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2028,8 +2028,32 @@ export default {
         valueAnalysis(card) {
             return buildValueAnalysisForCard(card, this.cards, this.analysisColumns);
         },
-        rowManaOptions(option) {
-            return (option.manaOptions ?? []).filter(mana => mana.display !== 'chip');
+        rowManaOptionsForCard(card) {
+            const seen = new Map();
+            for (const option of this.valueAnalysisForCard(card).castOptions) {
+                for (const mana of option.manaOptions ?? []) {
+                    if (mana.display === 'chip') {
+                        continue;
+                    }
+
+                    const producedKey = JSON.stringify(mana.producedSymbolGroups ?? mana.producedSymbols ?? []);
+                    const payKey = JSON.stringify(mana.paySymbolGroups ?? []);
+                    const key = [
+                        mana.condition,
+                        mana.cost,
+                        mana.effect,
+                        mana.restriction,
+                        mana.value,
+                        producedKey,
+                        payKey,
+                    ].join(':');
+                    if (!seen.has(key)) {
+                        seen.set(key, mana);
+                    }
+                }
+            }
+
+            return [...seen.values()];
         },
         manaSymbolGroups(mana) {
             if (Array.isArray(mana.producedSymbolGroups) && mana.producedSymbolGroups.length > 0) {

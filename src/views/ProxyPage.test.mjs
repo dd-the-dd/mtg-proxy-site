@@ -1113,12 +1113,12 @@ describe('Core Rendering', async () => {
         expect(manaSources.text()).toContain('x5');
         expect(manaSources.text()).toContain('/');
         expect(manaSources.text()).not.toContain('mountain');
-        expect(manaSources.text()).not.toContain('arcane signet');
         expect(wrapper.find('.value-mana-chip .ms-u').exists()).toBe(true);
         expect(wrapper.find('.value-mana-chip-land-payment').exists()).toBe(true);
         expect(wrapper.find('.value-mana-choice-separator').exists()).toBe(true);
-        expect(wrapper.find('.value-rows-mana').text()).toContain('arcane signet');
-        expect(wrapper.find('.value-row-mana').exists()).toBe(true);
+        expect(manaSources.find('.value-rows-mana').text()).toContain('arcane signet');
+        expect(manaSources.find('.value-row-mana').exists()).toBe(true);
+        expect(wrapper.find('.value-cast .value-rows-mana').exists()).toBe(false);
 
         component.data.config.analysisView = 'interaction';
         component.data.config.analysisMode = false;
