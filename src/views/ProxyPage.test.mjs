@@ -46,7 +46,7 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.app-layout-sidebar-collapsed').exists()).toBe(false);
     });
 
-    test('Feature: Hovering a card image opens a large delayed card preview.', async () => {
+    test('Feature: Hovering a card image opens a fast center-left card preview.', async () => {
         const component = wrapper.getCurrentComponent();
         vi.useFakeTimers();
 
@@ -70,7 +70,7 @@ describe('Core Rendering', async () => {
             expect(wrapper.find('#card-hover-preview').exists()).toBe(false);
 
             await cardImage.trigger('mouseenter');
-            await vi.advanceTimersByTimeAsync(2499);
+            await vi.advanceTimersByTimeAsync(699);
             await wrapper.vm.$nextTick();
             expect(wrapper.find('#card-hover-preview').exists()).toBe(false);
 

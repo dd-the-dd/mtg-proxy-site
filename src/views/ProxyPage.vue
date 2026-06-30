@@ -1893,7 +1893,7 @@ const analysisCategories = [
     { key: "synergy.creatureDeathValue.feeders", label: "Feeds death", targetGroup: "cards" },
 ];
 
-const cardPreviewDelayMs = 2500;
+const cardPreviewDelayMs = 700;
 
 function createDefaultConfig() {
     return {
@@ -5643,24 +5643,23 @@ html.dark-theme {
 
 .card-hover-preview {
     align-items: center;
-    background: rgb(16 24 40 / 46%);
     display: flex;
-    inset: 0;
-    justify-content: center;
-    padding: clamp(0.75rem, 3vw, 2rem);
+    left: clamp(0.75rem, 16vw, 15rem);
     pointer-events: none;
     position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
     z-index: 2200;
 }
 
 .card-hover-preview-image {
     aspect-ratio: 63 / 88;
-    background: #111827;
     border-radius: 8px;
-    box-shadow: 0 1.1rem 3rem rgb(16 24 40 / 38%);
-    max-height: min(88vh, 42rem);
+    box-shadow: 0 1rem 2rem rgb(16 24 40 / 22%);
+    max-height: min(82vh, 38rem);
+    max-width: min(36vw, 25rem);
     object-fit: contain;
-    width: min(92vw, 30rem);
+    width: auto;
 }
 
 .print-order-modal-container {
