@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
     damageActionAmountValue,
+    OracleParseError,
     oracleTargetMatchesCard,
-    parseOracleActions
+    parseOracleActions,
+    parseOracleDocument
 } from './OracleParser.mjs';
 
 const card = (typeLine, oracleText = '') => {
@@ -99,5 +101,48 @@ describe('OracleParser', () => {
         });
         expect(oracleTargetMatchesCard(actions[3].targets[0], card('Artifact Creature - Thopter', 'Flying'))).toBe(true);
         expect(oracleTargetMatchesCard(actions[3].targets[0], card('Artifact Creature - Construct'))).toBe(false);
+    });
+
+    test('Feature: Oracle parser reports unsupported oracle clauses for audit.', () => {
+        const result = parseOracleDocument([
+            'Abrade deals 3 damage to target creature.',
+            'Tap target creature.',
+            'Mystery Bolt deals damage equal to the number of cards in your hand to target creature.',
+            'Wildfire deals 3 damage divided as you choose among one, two, or three targets.',
+        ].join('\n'), { cardName: 'Parser Fixture' });
+
+        expect(result.actions).toHaveLength(1);
+        expect(result.errors).toEqual([
+            expect.objectContaining({
+                cardName: 'Parser Fixture',
+                code: 'unsupported_oracle_clause',
+                clause: 'Tap target creature.',
+            }),
+            expect.objectContaining({
+                code: 'unsupported_damage_amount',
+                clause: 'Mystery Bolt deals damage equal to the number of cards in your hand to target creature.',
+            }),
+            expect.objectContaining({
+                code: 'unsupported_damage_target',
+                clause: 'Wildfire deals 3 damage divided as you choose among one, two, or three targets.',
+            }),
+        ]);
+    });
+
+    test('Feature: Oracle parser strict mode raises parse errors for unsupported oracle text.', () => {
+        expect(() => parseOracleActions('Tap target creature.', { strict: true })).toThrow(OracleParseError);
+
+        try {
+            parseOracleActions('Tap target creature.', { strict: true, cardName: 'Strict Fixture' });
+        } catch (error) {
+            expect(error).toBeInstanceOf(OracleParseError);
+            expect(error.errors).toEqual([
+                expect.objectContaining({
+                    cardName: 'Strict Fixture',
+                    code: 'unsupported_oracle_clause',
+                    clause: 'Tap target creature.',
+                }),
+            ]);
+        }
     });
 });

@@ -3,6 +3,16 @@ const SUPERTYPES = ['basic', 'legendary', 'snow', 'world'];
 const COLORS = ['white', 'blue', 'black', 'red', 'green', 'colorless', 'multicolored', 'monocolored'];
 const STATE_QUALIFIERS = ['attacking', 'blocking', 'tapped', 'untapped'];
 
+export class OracleParseError extends Error {
+    constructor(errors, actions = []) {
+        const count = errors.length;
+        super(`${count} unsupported Oracle ${count === 1 ? 'clause' : 'clauses'}`);
+        this.name = 'OracleParseError';
+        this.actions = actions;
+        this.errors = errors;
+    }
+}
+
 function selected(card) {
     return card.selectedOption ?? card;
 }
@@ -21,6 +31,43 @@ function normalizeText(value) {
         .replace(/\n+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function splitOracleClauses(value) {
+    return [...String(value ?? '')
+        .replace(/\r/g, '\n')
+        .replace(/\u2022/g, '\n')
+        .matchAll(/[^.;\n]+[.;]?/g)]
+        .map(match => {
+            return {
+                clause: normalizeText(match[0]),
+                index: match.index ?? 0,
+            };
+        })
+        .filter(entry => entry.clause.length > 0);
+}
+
+function parseContext(options = {}) {
+    return {
+        cardName: options.cardName,
+    };
+}
+
+function diagnostic(code, clause, message, context = {}, details = {}) {
+    return {
+        code,
+        severity: 'unsupported',
+        message,
+        clause,
+        ...context.cardName ? { cardName: context.cardName } : {},
+        ...Object.keys(details).length > 0 ? { details } : {},
+    };
+}
+
+function throwIfStrict(result, options = {}) {
+    if (options.strict && result.errors.length > 0) {
+        throw new OracleParseError(result.errors, result.actions);
+    }
 }
 
 function parseAmount(raw) {
@@ -94,21 +141,27 @@ function extractQualifiers(body) {
     };
 }
 
-function parseEntityCandidate(rawBody) {
+function parseEntityCandidateDetailed(rawBody) {
     const { body, qualifiers } = extractQualifiers(rawBody.toLowerCase());
     if (/\bopponents?\b/.test(body)) {
         return {
-            entity: 'player',
-            role: 'opponent',
-            qualifiers,
+            candidate: {
+                entity: 'player',
+                role: 'opponent',
+                qualifiers,
+            },
+            supported: true,
         };
     }
 
     if (/\bplayers?\b/.test(body)) {
         return {
-            entity: 'player',
-            role: 'any',
-            qualifiers,
+            candidate: {
+                entity: 'player',
+                role: 'any',
+                qualifiers,
+            },
+            supported: true,
         };
     }
 
@@ -134,13 +187,21 @@ function parseEntityCandidate(rawBody) {
         'target',
     ]);
     const subtypes = words.filter(word => !knownWords.has(word));
-    return permanentCandidate(cardTypes, {
-        colors,
-        excludedCardTypes,
-        qualifiers,
-        subtypes,
-        supertypes,
-    });
+    const hasSupportedPermanentScope = cardTypes.length > 0
+        || supertypes.length > 0
+        || colors.length > 0
+        || excludedCardTypes.length > 0
+        || words.includes('permanent');
+    return {
+        candidate: permanentCandidate(cardTypes, {
+            colors,
+            excludedCardTypes,
+            qualifiers,
+            subtypes,
+            supertypes,
+        }),
+        supported: hasSupportedPermanentScope,
+    };
 }
 
 function targetObject(selector, raw, candidates, quantity = {}) {
@@ -152,17 +213,44 @@ function targetObject(selector, raw, candidates, quantity = {}) {
     };
 }
 
-export function parseOracleTargets(value) {
+function unsupportedTargetDiagnostic(raw, clause, context) {
+    return diagnostic(
+        'unsupported_damage_target',
+        clause,
+        'Damage target expression is not supported yet.',
+        context,
+        { target: raw },
+    );
+}
+
+function parseOracleTargetsDetailed(value, clause, context) {
     const raw = cleanTargetExpression(value);
+    const errors = [];
+    if (!raw || /\bdamage\b|\bdivided\b|\bamong\b|\bchoose\b/i.test(raw)) {
+        return {
+            targets: [],
+            errors: [unsupportedTargetDiagnostic(raw, clause, context)],
+        };
+    }
+
     if (/^any target$/i.test(raw)) {
-        return [targetObject('anyTarget', raw, anyTargetCandidates(), { min: 1, max: 1 })];
+        return {
+            targets: [targetObject('anyTarget', raw, anyTargetCandidates(), { min: 1, max: 1 })],
+            errors,
+        };
     }
 
     const each = /^each (.+)$/i.exec(raw);
     if (each) {
-        return splitEachTargets(each[1]).map(part => {
-            return targetObject('each', `each ${part}`, [parseEntityCandidate(part)]);
+        const targets = splitEachTargets(each[1]).map(part => {
+            const parsed = parseEntityCandidateDetailed(part);
+            if (!parsed.supported) {
+                errors.push(unsupportedTargetDiagnostic(part, clause, context));
+            }
+
+            return targetObject('each', `each ${part}`, [parsed.candidate]);
         });
+        return { targets: errors.length > 0 ? [] : targets, errors };
     }
 
     const target = /^(up to one )?target (.+)$/i.exec(raw);
@@ -170,35 +258,127 @@ export function parseOracleTargets(value) {
         const quantity = target[1]
             ? { min: 0, max: 1 }
             : { min: 1, max: 1 };
-        return [
-            targetObject(
-                'target',
-                raw,
-                splitEntityAlternatives(target[2]).map(parseEntityCandidate),
-                quantity,
-            ),
-        ];
+        const candidates = splitEntityAlternatives(target[2]).map(part => {
+            const parsed = parseEntityCandidateDetailed(part);
+            if (!parsed.supported) {
+                errors.push(unsupportedTargetDiagnostic(part, clause, context));
+            }
+
+            return parsed.candidate;
+        });
+        return {
+            targets: errors.length > 0
+                ? []
+                : [targetObject(
+                    'target',
+                    raw,
+                    candidates,
+                    quantity,
+                )],
+            errors,
+        };
     }
 
-    return [targetObject('implicit', raw, [parseEntityCandidate(raw)])];
+    const parsed = parseEntityCandidateDetailed(raw);
+    if (!parsed.supported) {
+        errors.push(unsupportedTargetDiagnostic(raw, clause, context));
+    }
+
+    return {
+        targets: errors.length > 0
+            ? []
+            : [targetObject('implicit', raw, [parsed.candidate])],
+        errors,
+    };
 }
 
-export function parseDamageActions(text) {
-    const normalized = normalizeText(text);
-    return [...normalized.matchAll(/\bdeals? (X|\d+) damage to ([^.]+)/gi)].map(match => {
-        return {
+export function parseOracleTargets(value, options = {}) {
+    const context = parseContext(options);
+    const result = parseOracleTargetsDetailed(value, cleanTargetExpression(value), context);
+    throwIfStrict({ actions: [], errors: result.errors }, options);
+    return result.targets;
+}
+
+function parseDamageClause(clause, context) {
+    const actions = [];
+    const errors = [];
+    const matches = [...clause.matchAll(/\bdeals? (X|\d+) damage to ([^.]+)/gi)];
+    for (const match of matches) {
+        const targetResult = parseOracleTargetsDetailed(match[2], clause, context);
+        errors.push(...targetResult.errors);
+        if (targetResult.errors.length > 0) {
+            continue;
+        }
+
+        actions.push({
             type: 'damage',
             raw: match[0],
             amount: parseAmount(match[1]),
-            targets: parseOracleTargets(match[2]),
+            targets: targetResult.targets,
+        });
+    }
+
+    if (matches.length > 0) {
+        return {
+            actions,
+            errors,
+            handled: true,
         };
-    });
+    }
+
+    if (/\bdeals?\b[^.;]*\bdamage\b/i.test(clause)) {
+        const code = /\b(X|\d+) damage\b/i.test(clause)
+            ? 'unsupported_damage_target'
+            : 'unsupported_damage_amount';
+        const message = code === 'unsupported_damage_amount'
+            ? 'Damage amount expression is not supported yet.'
+            : 'Damage target expression is not supported yet.';
+        return {
+            actions,
+            errors: [
+                diagnostic(code, clause, message, context),
+            ],
+            handled: true,
+        };
+    }
+
+    return {
+        actions,
+        errors,
+        handled: false,
+    };
 }
 
-export function parseOracleActions(text) {
-    return [
-        ...parseDamageActions(text),
-    ];
+export function parseOracleDocument(text, options = {}) {
+    const context = parseContext(options);
+    const actions = [];
+    const errors = [];
+    for (const { clause } of splitOracleClauses(text)) {
+        const damage = parseDamageClause(clause, context);
+        actions.push(...damage.actions);
+        errors.push(...damage.errors);
+        if (!damage.handled) {
+            errors.push(diagnostic(
+                'unsupported_oracle_clause',
+                clause,
+                'Oracle clause is not supported yet.',
+                context,
+            ));
+        }
+    }
+
+    const result = { actions, errors };
+    throwIfStrict(result, options);
+    return result;
+}
+
+export function parseDamageActions(text, options = {}) {
+    const result = parseOracleDocument(text, options);
+    return result.actions.filter(action => action.type === 'damage');
+}
+
+export function parseOracleActions(text, options = {}) {
+    return parseOracleDocument(text, options).actions;
 }
 
 export function damageActionAmountValue(action) {
