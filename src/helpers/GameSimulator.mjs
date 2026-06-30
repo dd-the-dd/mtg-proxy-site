@@ -65,10 +65,306 @@ const phaseSequence = [
 ];
 
 const defaultMaxHandSize = 7;
+const manaSymbols = ['W', 'U', 'B', 'R', 'G', 'C'];
+const basicLandMana = {
+    forest: 'G',
+    island: 'U',
+    mountain: 'R',
+    plains: 'W',
+    swamp: 'B',
+    wastes: 'C',
+};
 
 function normalizeMaxHandSize(value) {
     const maxHandSize = Number(value ?? defaultMaxHandSize);
     return Number.isFinite(maxHandSize) ? maxHandSize : defaultMaxHandSize;
+}
+
+function emptyManaPool() {
+    return manaSymbols.reduce((pool, symbol) => {
+        pool[symbol] = 0;
+        return pool;
+    }, {});
+}
+
+function normalizeManaPool(pool = {}) {
+    return manaSymbols.reduce((normalized, symbol) => {
+        const amount = Number(pool[symbol] ?? 0);
+        normalized[symbol] = Number.isFinite(amount) && amount > 0 ? Math.floor(amount) : 0;
+        return normalized;
+    }, {});
+}
+
+export function parseManaCost(manaCost = '') {
+    const cost = {
+        colored: emptyManaPool(),
+        generic: 0,
+    };
+    for (const match of String(manaCost).matchAll(/\{([^}]+)\}/g)) {
+        const symbol = match[1].toUpperCase();
+        if (/^\d+$/.test(symbol)) {
+            cost.generic += Number(symbol);
+        } else if (manaSymbols.includes(symbol)) {
+            cost.colored[symbol] += 1;
+        }
+    }
+
+    return cost;
+}
+
+function manaCostHasRequirement(cost) {
+    return cost.generic > 0 || manaSymbols.some(symbol => cost.colored[symbol] > 0);
+}
+
+function formatManaSymbols(symbols = []) {
+    return symbols.map(symbol => `{${symbol}}`).join('');
+}
+
+function sourceKey(card, zoneName = '') {
+    return `${zoneName}:${card.id ?? card.name}:${card.name}`;
+}
+
+function addManaToPool(pool, symbols = []) {
+    const nextPool = normalizeManaPool(pool);
+    for (const symbol of symbols) {
+        if (manaSymbols.includes(symbol)) {
+            nextPool[symbol] += 1;
+        }
+    }
+
+    return nextPool;
+}
+
+function spendManaPool(pool, cost) {
+    const nextPool = normalizeManaPool(pool);
+    for (const symbol of manaSymbols) {
+        const required = cost.colored[symbol] ?? 0;
+        if (nextPool[symbol] < required) {
+            return null;
+        }
+        nextPool[symbol] -= required;
+    }
+
+    let genericRemaining = cost.generic;
+    for (const symbol of manaSymbols) {
+        const spent = Math.min(nextPool[symbol], genericRemaining);
+        nextPool[symbol] -= spent;
+        genericRemaining -= spent;
+        if (genericRemaining === 0) {
+            break;
+        }
+    }
+
+    return genericRemaining === 0 ? nextPool : null;
+}
+
+function canPayManaCost(pool, cost) {
+    return spendManaPool(pool, cost) !== null;
+}
+
+function manaSymbolsFromBasicLand(card) {
+    const typeLine = typeLineOf(card).toLowerCase();
+    return Object.entries(basicLandMana)
+        .filter(([subtype]) => {
+            return new RegExp(`\\b${subtype}\\b`, 'i').test(typeLine);
+        })
+        .map(([, symbol]) => symbol);
+}
+
+function manaAbilityChoicesFromOracle(card) {
+    const oracleText = oracleTextOf(card);
+    const abilities = [];
+    for (const match of oracleText.matchAll(/\badd ([^.]+)\./ig)) {
+        const clause = match[1];
+        if (/one mana of any color/i.test(clause)) {
+            for (const symbol of ['W', 'U', 'B', 'R', 'G']) {
+                abilities.push([symbol]);
+            }
+            continue;
+        }
+
+        const symbols = [...clause.matchAll(/\{([WUBRGC])\}/ig)].map(symbolMatch => {
+            return symbolMatch[1].toUpperCase();
+        });
+        if (symbols.length === 0) {
+            continue;
+        }
+
+        if (/\bor\b/i.test(clause)) {
+            for (const symbol of symbols) {
+                abilities.push([symbol]);
+            }
+        } else {
+            abilities.push(symbols);
+        }
+    }
+
+    return abilities;
+}
+
+export function manaAbilitiesForCard(card) {
+    if (card?.state?.tapped) {
+        return [];
+    }
+
+    const choices = isLand(card)
+        ? [
+            ...manaSymbolsFromBasicLand(card).map(symbol => [symbol]),
+            ...manaAbilityChoicesFromOracle(card),
+        ]
+        : manaAbilityChoicesFromOracle(card);
+
+    const seen = new Set();
+    return choices
+        .filter(symbols => symbols.length > 0)
+        .filter(symbols => {
+            const key = symbols.join('');
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        })
+        .map(symbols => {
+            return {
+                label: `Tap: Add ${formatManaSymbols(symbols)}`,
+                manaProduced: symbols,
+            };
+        });
+}
+
+function expandGroupedCards(cards = []) {
+    const expanded = [];
+    for (const card of cards) {
+        const quantity = Number(card.quantity ?? 1);
+        const count = Number.isFinite(quantity) && quantity > 0 ? Math.floor(quantity) : 1;
+        for (let index = 0; index < count; index += 1) {
+            expanded.push({
+                ...card,
+                id: `${card.id ?? card.name}:${index}`,
+                quantity: 1,
+            });
+        }
+    }
+
+    return expanded;
+}
+
+function manaSourcesFromZones(zones = {}) {
+    const sourceZones = [
+        ['lands', zones.battlefield?.lands ?? []],
+        ['nonCreaturePermanents', zones.battlefield?.nonCreaturePermanents ?? []],
+        ['creatures', zones.battlefield?.creatures ?? []],
+    ];
+    const sources = [];
+    for (const [zoneName, cards] of sourceZones) {
+        for (const card of expandGroupedCards(cards)) {
+            const abilities = manaAbilitiesForCard(card);
+            for (const ability of abilities) {
+                sources.push({
+                    id: sourceKey(card, zoneName),
+                    manaProduced: ability.manaProduced,
+                    name: card.name,
+                    sourceCard: card,
+                    zoneName,
+                });
+            }
+        }
+    }
+
+    return sources;
+}
+
+function paymentLabel(payment) {
+    if (payment.sources.length === 0) {
+        return 'Pay from mana pool';
+    }
+
+    return `Pay with ${payment.sources.map(source => {
+        return `${source.name} ${formatManaSymbols(source.manaProduced)}`;
+    }).join(', ')}`;
+}
+
+export function findManaPaymentOptions(manaCost, manaPool = {}, manaSources = []) {
+    const cost = parseManaCost(manaCost);
+    if (!manaCostHasRequirement(cost)) {
+        return [{
+            id: 'free',
+            label: 'No mana payment',
+            manaProduced: [],
+            poolAfterPayment: normalizeManaPool(manaPool),
+            sources: [],
+        }];
+    }
+
+    const normalizedPool = normalizeManaPool(manaPool);
+    const options = [];
+    const seen = new Set();
+
+    const recordPayment = sources => {
+        const manaProduced = sources.flatMap(source => source.manaProduced);
+        const poolWithProduced = addManaToPool(normalizedPool, manaProduced);
+        const poolAfterPayment = spendManaPool(poolWithProduced, cost);
+        if (!poolAfterPayment) {
+            return;
+        }
+
+        const key = sources.map(source => source.id).sort().join('|');
+        if (seen.has(key)) {
+            return;
+        }
+        seen.add(key);
+
+        const payment = {
+            id: key || 'pool',
+            manaProduced,
+            poolAfterPayment,
+            sources: sources.map(source => {
+                return {
+                    id: source.id,
+                    manaProduced: source.manaProduced,
+                    name: source.name,
+                    sourceCard: source.sourceCard,
+                    zoneName: source.zoneName,
+                };
+            }),
+        };
+        payment.label = paymentLabel(payment);
+        options.push(payment);
+    };
+
+    if (canPayManaCost(normalizedPool, cost)) {
+        recordPayment([]);
+    }
+
+    const visit = (index, selected) => {
+        if (options.length >= 20) {
+            return;
+        }
+        if (index >= manaSources.length) {
+            if (selected.length > 0) {
+                recordPayment(selected);
+            }
+            return;
+        }
+
+        visit(index + 1, selected);
+        visit(index + 1, [...selected, manaSources[index]]);
+    };
+    visit(0, []);
+
+    const minimumSourceCount = Math.min(...options.map(option => option.sources.length));
+    return options.filter(option => option.sources.length === minimumSourceCount).sort((left, right) => {
+        return left.sources.length - right.sources.length || left.label.localeCompare(right.label);
+    });
+}
+
+export function findManaPaymentOptionsForCard(card, player) {
+    return findManaPaymentOptions(
+        manaCostOf(card),
+        player?.zones?.manaPool ?? emptyManaPool(),
+        manaSourcesFromZones(player?.zones ?? {}),
+    );
 }
 
 function canUseFromGraveyard(card) {
@@ -250,14 +546,20 @@ function buildActionContext(playerState, phase, options = {}) {
     const landOptions = playerState.hand.filter(isLand);
     const landPlaysAvailable = playerState.landPlaysAvailable ?? 1;
     const canPlayLand = isActivePlayer && isMainPhase(phase) && landPlaysAvailable > 0 && landOptions.length > 0;
-    const availableMana = playerState.zones.battlefield.lands.length;
+    const manaPool = normalizeManaPool(playerState.manaPool);
+    const manaSources = manaSourcesFromZones(playerState.zones);
+    const availableMana = manaSymbols.reduce((total, symbol) => {
+        return total + manaPool[symbol];
+    }, manaSources.length);
 
     return {
         availableMana,
         canPlayLand,
         canCastSorcerySpeed: isActivePlayer && isMainPhase(phase),
         landPlaysAvailable,
-        manaForActions: availableMana + (canPlayLand ? 1 : 0),
+        manaForActions: availableMana,
+        manaPool,
+        manaSources,
         phase,
     };
 }
@@ -267,15 +569,15 @@ function canCastInPhase(card, context) {
         return false;
     }
 
-    if (isInstant(card)) {
-        return card.manaValue <= context.manaForActions;
-    }
-
-    if (!context.canCastSorcerySpeed) {
+    if (!isInstant(card) && !context.canCastSorcerySpeed) {
         return false;
     }
 
-    return card.manaValue <= context.manaForActions;
+    return findManaPaymentOptions(
+        manaCostOf(card) || `{${card.manaValue ?? 0}}`,
+        context.manaPool,
+        context.manaSources,
+    ).length > 0;
 }
 
 function cardActionState(card, context, zone) {
@@ -292,22 +594,52 @@ function cardActionState(card, context, zone) {
         } else if (!isLand(card) && canCastInPhase(card, context)) {
             const label = isInstant(card) ? 'Cast instant' : 'Cast';
             const targetProfile = damageTargetProfile(card);
+            const paymentOptions = findManaPaymentOptions(
+                manaCostOf(card) || `{${card.manaValue ?? 0}}`,
+                context.manaPool,
+                context.manaSources,
+            );
             actions.push(label);
-            options.push(actionOption(card, label, 'cast', 'hand', targetProfile));
+            options.push(actionOption(card, label, 'cast', 'hand', {
+                ...targetProfile,
+                manaCost: manaCostOf(card),
+                paymentOptions,
+                requiresPayment: paymentOptions.some(payment => payment.sources.length > 0),
+            }));
         }
     }
 
     if (zone === 'graveyard' && canUseFromGraveyard(card) && canCastInPhase(card, context)) {
+        const paymentOptions = findManaPaymentOptions(manaCostOf(card) || `{${card.manaValue ?? 0}}`, context.manaPool, context.manaSources);
         actions.push('Use from graveyard');
-        options.push(actionOption(card, 'Use from graveyard', 'cast', 'graveyard', damageTargetProfile(card)));
+        options.push(actionOption(card, 'Use from graveyard', 'cast', 'graveyard', {
+            ...damageTargetProfile(card),
+            manaCost: manaCostOf(card),
+            paymentOptions,
+            requiresPayment: paymentOptions.some(payment => payment.sources.length > 0),
+        }));
     }
 
     if (zone === 'exile' && canUseFromExile(card) && canCastInPhase(card, context)) {
+        const paymentOptions = findManaPaymentOptions(manaCostOf(card) || `{${card.manaValue ?? 0}}`, context.manaPool, context.manaSources);
         actions.push('Use from exile');
-        options.push(actionOption(card, 'Use from exile', 'cast', 'exile', damageTargetProfile(card)));
+        options.push(actionOption(card, 'Use from exile', 'cast', 'exile', {
+            ...damageTargetProfile(card),
+            manaCost: manaCostOf(card),
+            paymentOptions,
+            requiresPayment: paymentOptions.some(payment => payment.sources.length > 0),
+        }));
     }
 
     if (zone === 'battlefield') {
+        for (const manaAbility of manaAbilitiesForCard(card)) {
+            actions.push(manaAbility.label);
+            options.push(actionOption(card, manaAbility.label, 'mana', 'battlefield', {
+                manaProduced: manaAbility.manaProduced,
+                sourceZoneName: isLand(card) ? 'lands' : isCreature(card) ? 'creatures' : 'nonCreaturePermanents',
+            }));
+        }
+
         if (
             context.phase === 'attack' &&
             isCreature(card) &&
@@ -364,7 +696,7 @@ function zoneSummary(cards, sourceZone, actionContext = null) {
     };
 }
 
-function finalizeZones(hand, library, mutableZones, actionContext = null) {
+function finalizeZones(hand, library, mutableZones, actionContext = null, resources = {}) {
     const graveyard = zoneSummary(mutableZones.graveyard, 'graveyard', actionContext);
     const exile = zoneSummary(mutableZones.exile, 'exile', actionContext);
     const actionableHand = hand.map(card => withActionState(card, actionContext, 'hand'));
@@ -388,7 +720,9 @@ function finalizeZones(hand, library, mutableZones, actionContext = null) {
         graveyard,
         hand: groupCards(actionableHand),
         handCount: hand.length,
+        landPlaysAvailable: resources.landPlaysAvailable ?? 0,
         libraryCount: library.length,
+        manaPool: normalizeManaPool(resources.manaPool),
         playableHand: groupCards([
             ...actionableHand,
             ...graveyard.recoverable,
@@ -442,6 +776,48 @@ function buildPlayerSummary(player, playerState, actionContext = null) {
             playerState.library.slice(playerState.libraryIndex),
             playerState.zones,
             actionContext,
+            {
+                landPlaysAvailable: playerState.landPlaysAvailable,
+                manaPool: playerState.manaPool,
+            },
+        ),
+    };
+}
+
+function summaryZonesToMutableZones(zones = {}) {
+    return {
+        battlefield: {
+            creatures: expandGroupedCards(zones.battlefield?.creatures ?? []),
+            lands: expandGroupedCards(zones.battlefield?.lands ?? []),
+            nonCreaturePermanents: expandGroupedCards(zones.battlefield?.nonCreaturePermanents ?? []),
+        },
+        exile: expandGroupedCards(zones.exile?.cards ?? []),
+        graveyard: expandGroupedCards(zones.graveyard?.cards ?? []),
+    };
+}
+
+export function annotateSimulationPlayerActions(player, phase, options = {}) {
+    const mutableZones = summaryZonesToMutableZones(player.zones);
+    const hand = expandGroupedCards(player.zones?.hand ?? []);
+    const state = {
+        hand,
+        landPlaysAvailable: player.zones?.landPlaysAvailable ?? 0,
+        manaPool: normalizeManaPool(player.zones?.manaPool),
+        zones: mutableZones,
+    };
+    const actionContext = buildActionContext(state, phase, options);
+
+    return {
+        ...player,
+        zones: finalizeZones(
+            hand,
+            [],
+            mutableZones,
+            actionContext,
+            {
+                landPlaysAvailable: state.landPlaysAvailable,
+                manaPool: state.manaPool,
+            },
         ),
     };
 }
@@ -739,6 +1115,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
                 landPlaysAvailable: 1,
                 library: player.library,
                 libraryIndex: 7,
+                manaPool: emptyManaPool(),
                 maxHandSize: normalizeMaxHandSize(options.maxHandSize),
                 zones: createMutableZones(),
             },

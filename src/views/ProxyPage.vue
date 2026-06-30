@@ -679,6 +679,9 @@
             </div>
             <div class="simulation-current-actions">
               Mana {{ activeSimulationStep.actionContext.availableMana }}
+              <span v-if="simulationManaPoolText(activeSimulationPlayer?.zones?.manaPool)">
+                / pool {{ simulationManaPoolText(activeSimulationPlayer.zones.manaPool) }}
+              </span>
               <span v-if="activeSimulationStep.actionContext.canPlayLand">
                 / land available
               </span>
@@ -752,7 +755,7 @@
                         <div class="simulation-hand-card-row">
                           <div
                             v-for="card in visibleSimulationHandCards(seat.player)"
-                            :key="`simulation-hand-${seat.player.key}-${card.name}-${card.sourceZone ?? 'hand'}`"
+                            :key="`simulation-hand-${seat.player.key}-${card.id ?? card.name}-${card.sourceZone ?? 'hand'}`"
                             class="simulation-hand-card"
                             :class="simulationCardClasses(card)"
                             :title="simulationCardActionTitle(card)"
@@ -1820,6 +1823,7 @@ import {
 } from "../helpers/AnalysisModel.mjs";
 import { createAnalysisWorkerClient } from "../helpers/AnalysisWorkerClient.mjs";
 import {
+    annotateSimulationPlayerActions,
     buildGameSimulation,
     findNextInteractiveStepIndex
 } from "../helpers/GameSimulator.mjs";
@@ -2298,6 +2302,11 @@ export default {
         activeSimulationStep() {
             return this.gameSimulation?.phaseSteps?.[this.activeSimulationStepIndex] ?? null;
         },
+        activeSimulationPlayer() {
+            return this.simulationPlayerList.find(player => {
+                return player.key === this.activeSimulationStep?.playerKey;
+            }) ?? null;
+        },
         isLastSimulationStep() {
             const steps = this.gameSimulation?.phaseSteps ?? [];
             return steps.length === 0 || this.activeSimulationStepIndex >= steps.length - 1;
@@ -2629,6 +2638,16 @@ export default {
         simulationPlayerLife(player) {
             return this.simulationLifeTotals[player.key] ?? 20;
         },
+        simulationManaPoolText(pool = {}) {
+            return ['W', 'U', 'B', 'R', 'G', 'C'].flatMap(symbol => {
+                const amount = Number(pool?.[symbol] ?? 0);
+                if (!Number.isFinite(amount) || amount <= 0) {
+                    return [];
+                }
+
+                return Array.from({ length: Math.floor(amount) }, () => `{${symbol}}`);
+            }).join('');
+        },
         simulationCardClasses(card, targetable = false) {
             return {
                 'simulation-card-actionable': Boolean(card?.actionState?.actionable),
@@ -2693,15 +2712,45 @@ export default {
             this.simulationActionMenu = null;
         },
         startSimulationAction(card, player, option) {
+            let resolvedOption = option;
+            if (option.kind === 'cast' && !option.payment) {
+                const paymentOptions = option.paymentOptions ?? [];
+                if (Array.isArray(option.paymentOptions) && paymentOptions.length === 0) {
+                    return;
+                }
+                if (paymentOptions.length > 1) {
+                    this.simulationActionMenu = {
+                        card,
+                        options: paymentOptions.map((payment, index) => {
+                            return {
+                                ...option,
+                                id: `${option.id}:payment:${payment.id}:${index}`,
+                                label: payment.label,
+                                payment,
+                            };
+                        }),
+                        player,
+                    };
+                    return;
+                }
+
+                if (paymentOptions.length === 1) {
+                    resolvedOption = {
+                        ...option,
+                        payment: paymentOptions[0],
+                    };
+                }
+            }
+
             const action = {
                 card,
-                option,
+                option: resolvedOption,
                 playerKey: player.key,
                 playerName: player.name,
                 stepIndex: this.activeSimulationStepIndex,
             };
 
-            if (option.requiresTarget) {
+            if (resolvedOption.requiresTarget) {
                 this.simulationPendingAction = action;
                 return;
             }
@@ -2813,6 +2862,76 @@ export default {
 
             cards.push(normalizedCard);
         },
+        addSimulationManaToPool(player, symbols = []) {
+            const currentPool = player.zones.manaPool ?? {};
+            const nextPool = { ...currentPool };
+            for (const symbol of ['W', 'U', 'B', 'R', 'G', 'C']) {
+                nextPool[symbol] = Number(nextPool[symbol] ?? 0);
+            }
+            for (const symbol of symbols) {
+                if (Object.hasOwn(nextPool, symbol)) {
+                    nextPool[symbol] += 1;
+                }
+            }
+            player.zones.manaPool = nextPool;
+        },
+        markSimulationCardGroupTapped(cards = [], sourceCard = {}) {
+            const index = cards.findIndex(entry => {
+                return entry.name === sourceCard.name &&
+                    (entry.typeLine ?? '') === (sourceCard.typeLine ?? '');
+            });
+            if (index === -1) {
+                return;
+            }
+
+            const tappedCard = {
+                ...cards[index],
+                actionState: undefined,
+                quantity: 1,
+                state: {
+                    ...(cards[index].state ?? {}),
+                    tapped: true,
+                },
+            };
+            if ((cards[index].quantity ?? 1) > 1) {
+                cards[index].quantity -= 1;
+                cards.push(tappedCard);
+                return;
+            }
+
+            cards.splice(index, 1, tappedCard);
+        },
+        simulationBattlefieldZone(player, zoneName) {
+            if (zoneName === 'creatures') {
+                return player.zones.battlefield.creatures;
+            }
+            if (zoneName === 'nonCreaturePermanents') {
+                return player.zones.battlefield.nonCreaturePermanents;
+            }
+
+            return player.zones.battlefield.lands;
+        },
+        applySimulationPayment(player, payment) {
+            if (!payment) {
+                return;
+            }
+
+            for (const source of payment.sources ?? []) {
+                this.markSimulationCardGroupTapped(
+                    this.simulationBattlefieldZone(player, source.zoneName),
+                    source.sourceCard ?? source,
+                );
+            }
+            player.zones.manaPool = {
+                B: 0,
+                C: 0,
+                G: 0,
+                R: 0,
+                U: 0,
+                W: 0,
+                ...(payment.poolAfterPayment ?? {}),
+            };
+        },
         markSimulationCardGroupAttacking(cards = [], card) {
             const index = cards.findIndex(entry => {
                 return entry.name === card.name &&
@@ -2876,9 +2995,20 @@ export default {
                 zone.top = zone.cards.at(-1) ?? null;
             }
         },
-        applyResolvedSimulationAction(players, action) {
+        applyResolvedSimulationAction(players, action, options = {}) {
             const player = players.find(candidate => candidate.key === action.playerKey);
             if (!player) {
+                return;
+            }
+
+            if (action.option.kind === 'mana') {
+                this.markSimulationCardGroupTapped(
+                    this.simulationBattlefieldZone(player, action.option.sourceZoneName),
+                    action.card,
+                );
+                if (options.preserveManaPool !== false) {
+                    this.addSimulationManaToPool(player, action.option.manaProduced);
+                }
                 return;
             }
 
@@ -2894,11 +3024,19 @@ export default {
             this.removeResolvedSimulationSource(player, action);
 
             if (action.option.kind === 'playLand') {
-                this.addSimulationCardGroup(player.zones.battlefield.lands, action.card);
+                player.zones.landPlaysAvailable = Math.max(0, Number(player.zones.landPlaysAvailable ?? 1) - 1);
+                this.addSimulationCardGroup(player.zones.battlefield.lands, {
+                    ...action.card,
+                    state: {
+                        ...(action.card.state ?? {}),
+                        tapped: false,
+                    },
+                });
                 return;
             }
 
             if (action.option.kind === 'cast') {
+                this.applySimulationPayment(player, action.option.payment);
                 const destination = this.simulationCastDestination(action.card);
                 if (destination === 'creatures') {
                     this.addSimulationCardGroup(player.zones.battlefield.creatures, action.card);
@@ -2920,11 +3058,17 @@ export default {
             const clonedPlayers = this.cloneForStorage(players);
             for (const action of this.simulationResolvedActions) {
                 if (action.stepIndex <= this.activeSimulationStepIndex) {
-                    this.applyResolvedSimulationAction(clonedPlayers, action);
+                    this.applyResolvedSimulationAction(clonedPlayers, action, {
+                        preserveManaPool: action.stepIndex === this.activeSimulationStepIndex,
+                    });
                 }
             }
 
-            return clonedPlayers;
+            return clonedPlayers.map(player => {
+                return annotateSimulationPlayerActions(player, this.activeSimulationStep?.phase ?? '', {
+                    isActivePlayer: player.key === this.activeSimulationStep?.playerKey,
+                });
+            });
         },
         resetSimulationRuntime() {
             this.simulationActionMenu = null;

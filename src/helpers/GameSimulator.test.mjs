@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import {
+    annotateSimulationPlayerActions,
     buildGameSimulation,
     expandDeckCards,
-    findNextInteractiveStepIndex
+    findManaPaymentOptionsForCard,
+    findNextInteractiveStepIndex,
+    manaAbilitiesForCard
 } from './GameSimulator.mjs';
 
 const card = (name, quantity, selectedOption = {}) => {
@@ -163,21 +166,10 @@ describe('GameSimulator', () => {
                 color: 'blue',
             }),
         }));
-        expect(firstMainPlayer.zones.playableHand).toContainEqual(expect.objectContaining({
-            name: 'burst lightning',
-            actionState: expect.objectContaining({
-                actionable: true,
-                color: 'blue',
-                options: expect.arrayContaining([
-                    expect.objectContaining({
-                        damageAmount: 2,
-                        kind: 'cast',
-                        requiresTarget: true,
-                        targetTypes: expect.arrayContaining(['player', 'creature']),
-                    }),
-                ]),
-            }),
-        }));
+        const burstLightning = firstMainPlayer.zones.playableHand.find(cardInHand => {
+            return cardInHand.name === 'burst lightning';
+        });
+        expect(burstLightning.actionState).toBeUndefined();
     });
 
     test('Feature: Game simulation automatically advances past no-decision and dependent phase steps.', () => {
@@ -250,6 +242,93 @@ describe('GameSimulator', () => {
                 playerKey: 'opponent',
             }),
         ]);
+    });
+
+    test('Feature: Game simulation parses mana abilities and exposes cast payment options.', () => {
+        const island = {
+            id: 'island:0',
+            name: 'island',
+            quantity: 1,
+            state: { tapped: false },
+            typeLine: 'Basic Land - Island',
+        };
+        const mysticSanctuary = {
+            id: 'mystic sanctuary:0',
+            name: 'mystic sanctuary',
+            oracleText: '{T}: Add {U}.',
+            quantity: 1,
+            state: { tapped: false },
+            typeLine: 'Land',
+        };
+        const opt = {
+            id: 'opt:0',
+            manaCost: '{U}',
+            manaValue: 1,
+            name: 'opt',
+            quantity: 1,
+            typeLine: 'Instant',
+        };
+        const player = {
+            key: 'you',
+            name: 'You',
+            role: 'human',
+            zones: {
+                battlefield: {
+                    creatures: [],
+                    lands: [island, mysticSanctuary],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, recoverable: [], top: null },
+                graveyard: { cards: [], count: 0, recoverable: [], top: null },
+                hand: [opt],
+                handCount: 1,
+                landPlaysAvailable: 0,
+                libraryCount: 0,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [opt],
+            },
+        };
+
+        expect(manaAbilitiesForCard(island)).toContainEqual(expect.objectContaining({
+            manaProduced: ['U'],
+        }));
+
+        const paymentOptions = findManaPaymentOptionsForCard(opt, player);
+        expect(paymentOptions.map(option => option.sources.map(source => source.name))).toEqual([
+            ['island'],
+            ['mystic sanctuary'],
+        ]);
+
+        const annotated = annotateSimulationPlayerActions(player, 'main', { isActivePlayer: true });
+        expect(annotated.zones.battlefield.lands).toContainEqual(expect.objectContaining({
+            name: 'island',
+            actionState: expect.objectContaining({
+                options: expect.arrayContaining([
+                    expect.objectContaining({
+                        kind: 'mana',
+                        manaProduced: ['U'],
+                    }),
+                ]),
+            }),
+        }));
+        expect(annotated.zones.hand).toContainEqual(expect.objectContaining({
+            name: 'opt',
+            actionState: expect.objectContaining({
+                options: expect.arrayContaining([
+                    expect.objectContaining({
+                        kind: 'cast',
+                        paymentOptions: expect.arrayContaining([
+                            expect.objectContaining({
+                                sources: [expect.objectContaining({ name: 'island' })],
+                            }),
+                            expect.objectContaining({
+                                sources: [expect.objectContaining({ name: 'mystic sanctuary' })],
+                            }),
+                        ]),
+                    }),
+                ]),
+            }),
+        }));
     });
 
     test('Feature: Game simulation phase snapshots surface recoverable graveyard and exile actions.', () => {

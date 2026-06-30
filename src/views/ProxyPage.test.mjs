@@ -611,6 +611,14 @@ describe('Core Rendering', async () => {
         await wrapper.find('#simulation-next-step').trigger('click');
         await wrapper.find('#simulation-next-step').trigger('click');
 
+        const mountainCard = wrapper.findAll('.simulation-hand-card').find(cardWrapper => {
+            return cardWrapper.find('img[alt="mountain"]').exists();
+        });
+        expect(mountainCard).toBeTruthy();
+
+        await mountainCard.trigger('dblclick');
+        await wrapper.vm.$nextTick();
+
         const burstCard = wrapper.findAll('.simulation-hand-card').find(cardWrapper => {
             return cardWrapper.find('img[alt="burst lightning"]').exists();
         });
@@ -630,7 +638,7 @@ describe('Core Rendering', async () => {
 
         expect(wrapper.find('.simulation-player-board-top .simulation-life-total').text()).toBe('18');
         expect(wrapper.find('.simulation-targeting-banner').exists()).toBe(false);
-        expect(component.data.simulationResolvedActions).toHaveLength(1);
+        expect(component.data.simulationResolvedActions).toHaveLength(2);
 
         component.data.config.activeWorkspaceTab = 'cards';
         component.data.metaDeckStates = [];
@@ -734,6 +742,121 @@ describe('Core Rendering', async () => {
             }),
         }));
         expect(player.zones.battlefield.count).toBeUndefined();
+    });
+
+    test('Feature: Simulation mana actions tap lands and mana expires after the current step.', () => {
+        const component = wrapper.getCurrentComponent();
+        const island = {
+            name: 'island',
+            quantity: 1,
+            state: { tapped: false },
+            typeLine: 'Basic Land - Island',
+        };
+        const player = {
+            key: 'you',
+            zones: {
+                battlefield: {
+                    creatures: [],
+                    lands: [island],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, top: null },
+                graveyard: { cards: [], count: 0, top: null },
+                hand: [],
+                handCount: 0,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [],
+            },
+        };
+        const action = {
+            card: island,
+            option: {
+                kind: 'mana',
+                manaProduced: ['U'],
+                sourceZoneName: 'lands',
+            },
+            playerKey: 'you',
+            stepIndex: 0,
+        };
+
+        component.ctx.applyResolvedSimulationAction([player], action);
+        expect(player.zones.manaPool.U).toBe(1);
+        expect(player.zones.battlefield.lands[0].state.tapped).toBe(true);
+
+        const nextStepPlayer = {
+            ...player,
+            zones: component.ctx.cloneForStorage({
+                ...player.zones,
+                battlefield: {
+                    creatures: [],
+                    lands: [island],
+                    nonCreaturePermanents: [],
+                },
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+            }),
+        };
+        component.ctx.applyResolvedSimulationAction([nextStepPlayer], action, { preserveManaPool: false });
+        expect(nextStepPlayer.zones.manaPool.U).toBe(0);
+        expect(nextStepPlayer.zones.battlefield.lands[0].state.tapped).toBe(true);
+    });
+
+    test('Feature: Simulation cast actions ask for a payment choice when multiple lands can pay.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const opt = {
+            name: 'opt',
+            actionState: {
+                actionable: true,
+                actions: ['Cast instant'],
+                options: [
+                    {
+                        id: 'cast:hand:opt',
+                        kind: 'cast',
+                        label: 'Cast instant',
+                        paymentOptions: [
+                            {
+                                id: 'island',
+                                label: 'Pay with island {U}',
+                                poolAfterPayment: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                                sources: [
+                                    {
+                                        manaProduced: ['U'],
+                                        name: 'island',
+                                        sourceCard: { name: 'island', typeLine: 'Basic Land - Island' },
+                                        zoneName: 'lands',
+                                    },
+                                ],
+                            },
+                            {
+                                id: 'sanctuary',
+                                label: 'Pay with mystic sanctuary {U}',
+                                poolAfterPayment: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                                sources: [
+                                    {
+                                        manaProduced: ['U'],
+                                        name: 'mystic sanctuary',
+                                        sourceCard: { name: 'mystic sanctuary', typeLine: 'Land' },
+                                        zoneName: 'lands',
+                                    },
+                                ],
+                            },
+                        ],
+                        sourceZone: 'hand',
+                    },
+                ],
+            },
+        };
+
+        component.ctx.handleSimulationCardDoubleClick(opt, { key: 'you', name: 'You' });
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('#simulation-action-menu').exists()).toBe(true);
+        expect(wrapper.findAll('.simulation-action-choice').map(button => button.text())).toEqual([
+            'Pay with island {U}',
+            'Pay with mystic sanctuary {U}',
+        ]);
+
+        component.ctx.closeSimulationActionMenu();
+        await wrapper.vm.$nextTick();
     });
 
     test('Feature: Analysis mode exposes meta removal action rows for damage and blocked targets.', async () => {
