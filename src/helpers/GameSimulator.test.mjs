@@ -76,6 +76,50 @@ describe('GameSimulator', () => {
         );
     });
 
+    test('Feature: Game simulation keeps lands in hand until a land play is chosen.', () => {
+        const currentDeck = [
+            card('mountain', 4, { typeLine: 'Basic Land - Mountain' }),
+            card('burst lightning', 4, {
+                manaValue: 1,
+                typeLine: 'Instant',
+                manaCost: '{R}',
+            }),
+        ];
+        const metaDeck = [
+            card('island', 4, { typeLine: 'Basic Land - Island' }),
+            card('opt', 4, { manaValue: 1, manaCost: '{U}', typeLine: 'Instant' }),
+        ];
+
+        const simulation = buildGameSimulation(currentDeck, metaDeck, {
+            seed: 1,
+            shuffle: false,
+            turnCount: 1,
+        });
+        const yourTurnOne = simulation.timeline.find(step => {
+            return step.turn === 1 && step.playerKey === 'you' && step.phase === 'main';
+        });
+
+        expect(yourTurnOne).toMatchObject({
+            availableMana: 0,
+            landPlaysAvailable: 1,
+            manaAfterLandPlay: 1,
+            playedLand: null,
+        });
+        expect(yourTurnOne.landOptions).toContainEqual(expect.objectContaining({
+            name: 'mountain',
+            quantity: 4,
+        }));
+        expect(yourTurnOne.castOptions).toContainEqual(expect.objectContaining({
+            name: 'burst lightning',
+            quantity: 3,
+        }));
+        expect(simulation.players.you.zones.battlefield.lands).toEqual([]);
+        expect(simulation.players.you.zones.hand).toContainEqual(expect.objectContaining({
+            name: 'mountain',
+            quantity: 4,
+        }));
+    });
+
     test('Feature: Game simulation builds configurable players and visible board zones.', () => {
         const currentDeck = [
             card('mountain', 2, { typeLine: 'Basic Land - Mountain', urlFront: 'mountain-front' }),
@@ -113,6 +157,7 @@ describe('GameSimulator', () => {
             seed: 1,
             shuffle: false,
             turnCount: 2,
+            autoPlayActions: true,
         });
         const you = simulation.playerList[0];
 

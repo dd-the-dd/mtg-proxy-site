@@ -342,6 +342,8 @@ describe('Core Rendering', async () => {
         expect(wrapper.text()).toContain('Izzet Mirror');
         expect(wrapper.text()).toContain('mountain');
         expect(wrapper.text()).toContain('T1 You');
+        expect(wrapper.text()).toContain('Land plays 1');
+        expect(wrapper.text()).toContain('mana 0 now, 1 after land');
 
         await wrapper.find('#simulation-reroll').trigger('click');
         expect(component.data.config.simulationSeed).toBe(3);

@@ -888,6 +888,10 @@
                   <div v-if="step.landOptions?.length" class="simulation-step-line">
                     Land: {{ formatSimulationOptions(step.landOptions) }}
                   </div>
+                  <div v-if="step.phase === 'main'" class="simulation-step-line">
+                    Land plays {{ step.landPlaysAvailable }} /
+                    mana {{ step.availableMana }} now, {{ step.manaAfterLandPlay }} after land
+                  </div>
                   <div v-if="step.castOptions?.length" class="simulation-step-line">
                     Cast: {{ formatSimulationOptions(step.castOptions) }}
                   </div>

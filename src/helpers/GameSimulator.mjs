@@ -217,12 +217,11 @@ function drawCard(playerState) {
 
 function buildMainPhaseStep(player, turn, playerState) {
     const landOptions = groupCards(playerState.hand.filter(isLand));
-    const potentialLandMana = landOptions.length > 0 ? 1 : 0;
-    const availableMana = Math.min(
-        turn,
-        playerState.zones.battlefield.lands.length + potentialLandMana,
-    );
-    const playableCards = playerState.hand.filter(card => !isLand(card) && card.manaValue <= availableMana);
+    const landPlaysAvailable = playerState.landPlaysAvailable ?? 1;
+    const canPlayLand = landPlaysAvailable > 0 && landOptions.length > 0;
+    const availableMana = playerState.zones.battlefield.lands.length;
+    const manaAfterLandPlay = availableMana + (canPlayLand ? 1 : 0);
+    const playableCards = playerState.hand.filter(card => !isLand(card) && card.manaValue <= manaAfterLandPlay);
 
     return {
         turn,
@@ -230,13 +229,19 @@ function buildMainPhaseStep(player, turn, playerState) {
         playerName: player.name,
         phase: 'main',
         availableMana,
+        landPlaysAvailable,
         landOptions,
+        manaAfterLandPlay,
         castOptions: groupCards(playableCards),
         holdUpOptions: groupCards(playableCards.filter(isInstant)),
     };
 }
 
 function playFirstLand(playerState) {
+    if ((playerState.landPlaysAvailable ?? 1) <= 0) {
+        return null;
+    }
+
     const landIndex = playerState.hand.findIndex(isLand);
     if (landIndex === -1) {
         return null;
@@ -244,6 +249,7 @@ function playFirstLand(playerState) {
 
     const [land] = playerState.hand.splice(landIndex, 1);
     playerState.zones.battlefield.lands.push(cardWithState(land));
+    playerState.landPlaysAvailable -= 1;
     return land;
 }
 
@@ -267,7 +273,14 @@ function castCard(card, playerState) {
     return 'graveyard';
 }
 
-function applySimpleMainPhase(playerState) {
+function applySimpleMainPhase(playerState, options = {}) {
+    if (!options.autoPlayActions) {
+        return {
+            castCards: [],
+            playedLand: null,
+        };
+    }
+
     const playedLand = playFirstLand(playerState);
     let remainingMana = playerState.zones.battlefield.lands.length;
     const castCards = [];
@@ -372,6 +385,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
             player.key,
             {
                 hand: [...player.openingHand],
+                landPlaysAvailable: 1,
                 library: player.library,
                 libraryIndex: 7,
                 zones: createMutableZones(),
@@ -383,6 +397,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
     for (let turn = 1; turn <= turnCount; turn += 1) {
         for (const player of basePlayers) {
             const playerState = playerStates.get(player.key);
+            playerState.landPlaysAvailable = 1;
             timeline.push({
                 turn,
                 playerKey: player.key,
@@ -404,7 +419,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
             });
 
             const mainStep = buildMainPhaseStep(player, turn, playerState);
-            const mainActions = applySimpleMainPhase(playerState);
+            const mainActions = applySimpleMainPhase(playerState, options);
             timeline.push({
                 ...mainStep,
                 ...mainActions,
