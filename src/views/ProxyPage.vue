@@ -551,16 +551,16 @@
                 id="simulation-matchup"
                 class="form-select select"
                 v-model="effectiveSimulationMatchupSessionId"
-                :disabled="simulationMetaDeckStates.length === 0"
+                :disabled="simulationMetaDeckOptions.length === 0"
               >
                 <option
-                  v-if="simulationMetaDeckStates.length === 0"
+                  v-if="simulationMetaDeckOptions.length === 0"
                   value=""
                 >
                   No meta deck
                 </option>
                 <option
-                  v-for="session in simulationMetaDeckStates"
+                  v-for="session in simulationMetaDeckOptions"
                   :key="session.id"
                   :value="session.id"
                 >
@@ -669,7 +669,7 @@
                     Current deck
                   </option>
                   <option
-                    v-for="session in simulationMetaDeckStates"
+                    v-for="session in simulationMetaDeckOptions"
                     :key="`simulation-player-${index}-deck-${session.id}`"
                     :value="session.id"
                   >
@@ -2306,16 +2306,56 @@ export default {
 
             return this.metaDeckStates.filter(session => session.id === this.config.analysisMatchupSessionId);
         },
+        simulationMetaDeckOptions() {
+            const optionsById = new Map();
+
+            for (const session of this.localSessions.filter(session => session.isMetaDeck)) {
+                optionsById.set(session.id, {
+                    id: session.id,
+                    name: session.name,
+                    state: null,
+                });
+            }
+
+            for (const session of this.metaDeckStates) {
+                optionsById.set(session.id, {
+                    ...(optionsById.get(session.id) ?? {}),
+                    ...session,
+                });
+            }
+
+            return Array.from(optionsById.values()).filter(session => session.id);
+        },
         simulationMetaDeckStates() {
             return this.metaDeckStates.filter(session => (session.state?.cards ?? []).length > 0);
         },
         selectedSimulationMetaDeck() {
-            return this.simulationMetaDeckStates.find(session => {
-                return session.id === this.config.simulationMatchupSessionId;
-            }) ?? this.simulationMetaDeckStates[0] ?? null;
+            const selectedId = this.config.simulationMatchupSessionId;
+            if (selectedId) {
+                const loadedSelection = this.simulationMetaDeckStates.find(session => {
+                    return session.id === selectedId;
+                });
+                if (loadedSelection) {
+                    return loadedSelection;
+                }
+
+                const pendingSelection = this.simulationMetaDeckOptions.some(session => {
+                    return session.id === selectedId;
+                });
+                if (pendingSelection) {
+                    return null;
+                }
+            }
+
+            return this.simulationMetaDeckStates[0] ?? null;
         },
         effectiveSimulationMatchupSessionId: {
             get() {
+                const selectedId = this.config.simulationMatchupSessionId;
+                if (selectedId && this.simulationMetaDeckOptions.some(session => session.id === selectedId)) {
+                    return selectedId;
+                }
+
                 return this.selectedSimulationMetaDeck?.id ?? "";
             },
             set(value) {
@@ -2656,15 +2696,35 @@ export default {
                 };
             }
 
+            if (deckId === '' && index > 0 && this.selectedSimulationMetaDeck) {
+                return {
+                    cards: this.selectedSimulationMetaDeck.state?.cards ?? [],
+                    id: this.selectedSimulationMetaDeck.id,
+                    name: this.selectedSimulationMetaDeck.name,
+                };
+            }
+
             const selectedSession = this.simulationMetaDeckStates.find(session => {
                 return session.id === deckId;
-            }) ?? (index > 0 ? this.selectedSimulationMetaDeck : null);
+            });
 
             if (selectedSession) {
                 return {
                     cards: selectedSession.state?.cards ?? [],
                     id: selectedSession.id,
                     name: selectedSession.name,
+                };
+            }
+
+            const pendingSession = this.simulationMetaDeckOptions.find(session => {
+                return session.id === deckId;
+            });
+
+            if (pendingSession) {
+                return {
+                    cards: pendingSession.state?.cards ?? [],
+                    id: pendingSession.id,
+                    name: pendingSession.name,
                 };
             }
 

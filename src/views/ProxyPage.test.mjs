@@ -303,6 +303,28 @@ describe('Core Rendering', async () => {
         component.data.config.simulationShowOpponentHands = false;
         component.data.config.simulationSpeed = 'fast';
         component.data.config.simulationBoardZoom = 1.1;
+        component.data.localSessions = [
+            {
+                id: 'izzet-meta',
+                name: 'Izzet Mirror',
+                isMetaDeck: true,
+            },
+            {
+                id: 'aggro-meta',
+                name: 'Aggro Meta',
+                isMetaDeck: true,
+            },
+            {
+                id: 'unloaded-meta',
+                name: 'Unloaded Meta',
+                isMetaDeck: true,
+            },
+            {
+                id: 'non-meta',
+                name: 'Kitchen Table',
+                isMetaDeck: false,
+            },
+        ];
         component.data.cards = [
             {
                 quantity: 8,
@@ -379,6 +401,8 @@ describe('Core Rendering', async () => {
 
         expect(wrapper.find('#game-simulation-tab').exists()).toBe(true);
         expect(wrapper.find('#simulation-matchup').element.value).toBe('izzet-meta');
+        expect(wrapper.find('#simulation-matchup').text()).toContain('Unloaded Meta');
+        expect(wrapper.find('#simulation-matchup').text()).not.toContain('Kitchen Table');
         expect(wrapper.find('#simulation-player-count').element.value).toBe('4');
         expect(wrapper.findAll('.simulation-player-role')).toHaveLength(4);
         expect(wrapper.findAll('.simulation-player-deck')).toHaveLength(4);
@@ -388,6 +412,8 @@ describe('Core Rendering', async () => {
             'aggro-meta',
             'current',
         ]);
+        expect(wrapper.findAll('.simulation-player-deck')[0].text()).toContain('Unloaded Meta');
+        expect(wrapper.findAll('.simulation-player-deck')[0].text()).not.toContain('Kitchen Table');
         expect(wrapper.find('#simulation-show-opponent-hands').element.checked).toBe(false);
         expect(wrapper.find('#simulation-speed').element.value).toBe('fast');
         expect(wrapper.find('#simulation-board-zoom').element.value).toBe('1.1');
