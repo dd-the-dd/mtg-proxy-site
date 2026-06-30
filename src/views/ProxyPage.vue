@@ -680,118 +680,134 @@
                 class="simulation-board-area"
                 :style="simulationBoardStyle()"
               >
-                <section
-                  v-for="player in gameSimulation.playerList"
-                  :key="`simulation-player-${player.key}`"
-                  class="simulation-player-board"
+                <div
+                  v-for="lane in simulationPlayerLanes"
+                  :key="`simulation-lane-${lane.index}`"
+                  class="simulation-player-lane"
+                  :class="`simulation-lane-land-${lane.landSide}`"
                 >
-                  <div class="simulation-player-header">
-                    <span>{{ player.name }}</span>
-                    <span class="label">{{ player.role }}</span>
-                  </div>
-                  <div class="simulation-zone-stacks">
-                    <button
-                      type="button"
-                      class="simulation-zone-stack simulation-zone-stack-library"
-                    >
-                      <ImageLoader
-                        class="simulation-zone-image"
-                        src="./card_back_border_crop.jpg"
-                        placeholder="./card_back_border_crop.jpg"
-                        alt="Library"
-                      />
-                      <span>{{ player.zones.libraryCount }}</span>
-                    </button>
-                    <button
-                      type="button"
-                      class="simulation-zone-stack simulation-zone-stack-graveyard"
-                      @click="toggleSimulationZone(player, 'graveyard')"
-                    >
-                      <ImageLoader
-                        class="simulation-zone-image"
-                        :src="simulationCardImage(player.zones.graveyard.top)"
-                        placeholder="./card_back_border_crop.jpg"
-                        alt="Graveyard"
-                      />
-                      <span>GY {{ player.zones.graveyard.count }}</span>
-                    </button>
-                    <button
-                      type="button"
-                      class="simulation-zone-stack simulation-zone-stack-exile"
-                      @click="toggleSimulationZone(player, 'exile')"
-                    >
-                      <ImageLoader
-                        class="simulation-zone-image simulation-zone-image-exile"
-                        :src="simulationCardImage(player.zones.exile.top)"
-                        placeholder="./card_back_border_crop.jpg"
-                        alt="Exile"
-                      />
-                      <span>EX {{ player.zones.exile.count }}</span>
-                    </button>
-                  </div>
-                  <div
-                    v-if="isSimulationZoneExpanded(player, 'graveyard') || isSimulationZoneExpanded(player, 'exile')"
-                    class="simulation-zone-drawer"
+                  <section
+                    v-for="seat in simulationLaneSeats(lane)"
+                    :key="`simulation-player-${seat.player.key}`"
+                    class="simulation-player-board"
+                    :class="[
+                      `simulation-player-seat-${seat.position}`,
+                      `simulation-player-board-${seat.position}`,
+                    ]"
                   >
-                    <div
-                      v-for="zone in ['graveyard', 'exile']"
-                      :key="`simulation-zone-drawer-${player.key}-${zone}`"
-                      v-show="isSimulationZoneExpanded(player, zone)"
-                    >
-                      <div class="simulation-section-title">
-                        {{ zone }}
-                      </div>
-                      <div v-if="player.zones[zone].cards.length" class="simulation-mini-card-grid">
-                        <div
-                          v-for="card in player.zones[zone].cards"
-                          :key="`simulation-zone-card-${player.key}-${zone}-${card.name}`"
-                          class="simulation-mini-card"
-                        >
-                          <ImageLoader
-                            class="simulation-mini-card-image"
-                            :src="simulationCardImage(card)"
-                            placeholder="./card_back_border_crop.jpg"
-                            :alt="card.name"
-                          />
-                          <span>{{ card.quantity }}x {{ card.name }}</span>
+                    <div class="simulation-player-header">
+                      <span>{{ seat.player.name }}</span>
+                      <span class="label">{{ seat.player.role }}</span>
+                    </div>
+                    <div class="simulation-hand-and-stacks">
+                      <div class="simulation-hand-zone">
+                        <div class="simulation-section-title">
+                          Hand
+                        </div>
+                        <div class="simulation-hand-card-row">
+                          <div
+                            v-for="card in visibleSimulationHandCards(seat.player)"
+                            :key="`simulation-hand-${seat.player.key}-${card.name}-${card.sourceZone ?? 'hand'}`"
+                            class="simulation-hand-card"
+                            :class="{ 'simulation-hand-card-virtual': card.sourceZone }"
+                          >
+                            <ImageLoader
+                              class="simulation-hand-card-image"
+                              :src="simulationCardImage(card)"
+                              placeholder="./card_back_border_crop.jpg"
+                              :alt="card.name"
+                            />
+                            <span class="simulation-card-count">{{ card.quantity }}x</span>
+                            <span v-if="card.sourceZone" class="simulation-source-zone">{{ card.sourceZone }}</span>
+                          </div>
                         </div>
                       </div>
-                      <div v-else class="simulation-zone-empty">
-                        Empty
-                      </div>
-                    </div>
-                  </div>
-                  <div class="simulation-hand-zone">
-                    <div class="simulation-section-title">
-                      Hand
-                    </div>
-                    <div class="simulation-hand-card-row">
                       <div
-                        v-for="card in visibleSimulationHandCards(player)"
-                        :key="`simulation-hand-${player.key}-${card.name}-${card.sourceZone ?? 'hand'}`"
-                        class="simulation-hand-card"
-                        :class="{ 'simulation-hand-card-virtual': card.sourceZone }"
+                        class="simulation-zone-stacks"
+                        :class="`simulation-zone-stacks-${seat.position}`"
                       >
-                        <ImageLoader
-                          class="simulation-hand-card-image"
-                          :src="simulationCardImage(card)"
-                          placeholder="./card_back_border_crop.jpg"
-                          :alt="card.name"
-                        />
-                        <span class="simulation-card-count">{{ card.quantity }}x</span>
-                        <span v-if="card.sourceZone" class="simulation-source-zone">{{ card.sourceZone }}</span>
+                        <button
+                          type="button"
+                          class="simulation-zone-stack simulation-zone-stack-library"
+                        >
+                          <ImageLoader
+                            class="simulation-zone-image"
+                            src="./card_back_border_crop.jpg"
+                            placeholder="./card_back_border_crop.jpg"
+                            alt="Library"
+                          />
+                          <span>{{ seat.player.zones.libraryCount }}</span>
+                        </button>
+                        <button
+                          type="button"
+                          class="simulation-zone-stack simulation-zone-stack-graveyard"
+                          :class="{ 'simulation-zone-stack-empty': seat.player.zones.graveyard.count === 0 }"
+                          @click="toggleSimulationZone(seat.player, 'graveyard')"
+                        >
+                          <ImageLoader
+                            class="simulation-zone-image"
+                            :src="simulationCardImage(seat.player.zones.graveyard.top)"
+                            placeholder="./card_back_border_crop.jpg"
+                            alt="Graveyard"
+                          />
+                          <span>GY {{ seat.player.zones.graveyard.count }}</span>
+                        </button>
+                        <button
+                          type="button"
+                          class="simulation-zone-stack simulation-zone-stack-exile"
+                          :class="{ 'simulation-zone-stack-empty': seat.player.zones.exile.count === 0 }"
+                          @click="toggleSimulationZone(seat.player, 'exile')"
+                        >
+                          <ImageLoader
+                            class="simulation-zone-image simulation-zone-image-exile"
+                            :src="simulationCardImage(seat.player.zones.exile.top)"
+                            placeholder="./card_back_border_crop.jpg"
+                            alt="Exile"
+                          />
+                          <span>EX {{ seat.player.zones.exile.count }}</span>
+                        </button>
                       </div>
                     </div>
-                  </div>
-                  <div class="simulation-battlefield">
+                    <div
+                      v-if="isSimulationZoneExpanded(seat.player, 'graveyard') || isSimulationZoneExpanded(seat.player, 'exile')"
+                      class="simulation-zone-drawer"
+                    >
+                      <div
+                        v-for="zone in ['graveyard', 'exile']"
+                        :key="`simulation-zone-drawer-${seat.player.key}-${zone}`"
+                        v-show="isSimulationZoneExpanded(seat.player, zone)"
+                      >
+                        <div class="simulation-section-title">
+                          {{ zone }}
+                        </div>
+                        <div v-if="seat.player.zones[zone].cards.length" class="simulation-mini-card-grid">
+                          <div
+                            v-for="card in seat.player.zones[zone].cards"
+                            :key="`simulation-zone-card-${seat.player.key}-${zone}-${card.name}`"
+                            class="simulation-mini-card"
+                          >
+                            <ImageLoader
+                              class="simulation-mini-card-image"
+                              :src="simulationCardImage(card)"
+                              placeholder="./card_back_border_crop.jpg"
+                              :alt="card.name"
+                            />
+                            <span>{{ card.quantity }}x {{ card.name }}</span>
+                          </div>
+                        </div>
+                        <div v-else class="simulation-zone-empty">
+                          Empty
+                        </div>
+                      </div>
+                    </div>
                     <div class="simulation-battlefield-row simulation-battlefield-creatures">
                       <div class="simulation-section-title">
                         Creatures
                       </div>
                       <div class="simulation-permanent-row">
                         <div
-                          v-for="card in player.zones.battlefield.creatures"
-                          :key="`simulation-creature-${player.key}-${card.name}`"
+                          v-for="card in seat.player.zones.battlefield.creatures"
+                          :key="`simulation-creature-${seat.player.key}-${card.name}`"
                           class="simulation-permanent-card"
                         >
                           <ImageLoader
@@ -805,15 +821,15 @@
                         </div>
                       </div>
                     </div>
-                    <div class="simulation-battlefield-bottom">
+                    <div class="simulation-battlefield-support">
                       <div class="simulation-battlefield-row simulation-battlefield-lands">
                         <div class="simulation-section-title">
                           Lands
                         </div>
                         <div class="simulation-permanent-row">
                           <div
-                            v-for="card in player.zones.battlefield.lands"
-                            :key="`simulation-land-${player.key}-${card.name}`"
+                            v-for="card in seat.player.zones.battlefield.lands"
+                            :key="`simulation-land-${seat.player.key}-${card.name}`"
                             class="simulation-permanent-card simulation-permanent-card-land"
                           >
                             <ImageLoader
@@ -832,8 +848,8 @@
                         </div>
                         <div class="simulation-permanent-row">
                           <div
-                            v-for="card in player.zones.battlefield.nonCreaturePermanents"
-                            :key="`simulation-noncreature-${player.key}-${card.name}`"
+                            v-for="card in seat.player.zones.battlefield.nonCreaturePermanents"
+                            :key="`simulation-noncreature-${seat.player.key}-${card.name}`"
                             class="simulation-permanent-card simulation-permanent-card-noncreature"
                           >
                             <ImageLoader
@@ -847,8 +863,8 @@
                         </div>
                       </div>
                     </div>
-                  </div>
-                </section>
+                  </section>
+                </div>
               </div>
             </div>
 
@@ -2115,6 +2131,21 @@ export default {
                 },
             );
         },
+        simulationPlayerLanes() {
+            const players = this.gameSimulation?.playerList ?? [];
+            const lanes = [];
+            for (let index = 0; index < players.length; index += 2) {
+                const laneIndex = Math.floor(index / 2);
+                lanes.push({
+                    bottomPlayer: players[index] ?? null,
+                    index: laneIndex,
+                    landSide: laneIndex % 2 === 0 ? 'left' : 'right',
+                    topPlayer: players[index + 1] ?? null,
+                });
+            }
+
+            return lanes;
+        },
         analysisCategories() {
             return analysisCategories;
         },
@@ -2276,6 +2307,12 @@ export default {
         },
         simulationCardImage(card) {
             return card?.faceDown ? './card_back_border_crop.jpg' : (card?.imageUrl || './card_back_border_crop.jpg');
+        },
+        simulationLaneSeats(lane) {
+            return [
+                { player: lane.topPlayer, position: 'top' },
+                { player: lane.bottomPlayer, position: 'bottom' },
+            ].filter(seat => seat.player);
         },
         simulationZoneKey(player, zone) {
             return `${player.key}:${zone}`;
@@ -3758,18 +3795,24 @@ export default {
     border: 1px solid #dadee4;
     border-radius: 4px;
     max-width: 100%;
-    min-height: 28rem;
+    min-height: 33rem;
     overflow: auto;
     padding: 0.6rem;
 }
 
 .simulation-board-area {
-    display: grid;
+    display: flex;
     gap: 0.75rem;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    min-width: 42rem;
+    min-width: min(100%, 44rem);
     transition: transform 0.15s ease;
     width: max-content;
+}
+
+.simulation-player-lane {
+    display: grid;
+    gap: 0.45rem;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    min-width: min(44rem, 76vw);
 }
 
 .simulation-player-board {
@@ -3778,8 +3821,24 @@ export default {
     border-radius: 4px;
     display: grid;
     gap: 0.5rem;
-    min-width: 20rem;
+    grid-template-areas:
+        "header"
+        "hand"
+        "support"
+        "creatures";
+    grid-template-rows: auto auto minmax(5rem, auto) minmax(7rem, 1fr);
+    min-height: 15.2rem;
+    min-width: 0;
     padding: 0.5rem;
+}
+
+.simulation-player-board-bottom {
+    grid-template-areas:
+        "creatures"
+        "support"
+        "hand"
+        "header";
+    grid-template-rows: minmax(7rem, 1fr) minmax(5rem, auto) auto auto;
 }
 
 .simulation-player-header {
@@ -3788,6 +3847,7 @@ export default {
     font-size: 0.8rem;
     font-weight: 800;
     gap: 0.35rem;
+    grid-area: header;
     justify-content: space-between;
 }
 
@@ -3804,6 +3864,20 @@ export default {
     gap: 0.35rem;
 }
 
+.simulation-zone-stacks-top {
+    .simulation-zone-stack-library {
+        order: 3;
+    }
+
+    .simulation-zone-stack-graveyard {
+        order: 1;
+    }
+
+    .simulation-zone-stack-exile {
+        order: 2;
+    }
+}
+
 .simulation-zone-stack {
     align-items: center;
     background: #fff;
@@ -3818,6 +3892,17 @@ export default {
     min-height: 4.9rem;
     padding: 0.18rem;
     width: 3.4rem;
+}
+
+.simulation-zone-stack-empty {
+    background: repeating-linear-gradient(
+        135deg,
+        #fff,
+        #fff 0.38rem,
+        #f2f4f7 0.38rem,
+        #f2f4f7 0.76rem
+    );
+    border-style: dashed;
 }
 
 .simulation-zone-image {
@@ -3878,6 +3963,26 @@ export default {
     border: 1px solid #eef0f3;
     border-radius: 4px;
     padding: 0.4rem;
+}
+
+.simulation-hand-and-stacks {
+    align-items: stretch;
+    display: grid;
+    gap: 0.45rem;
+    grid-area: hand;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.simulation-player-board-top {
+    .simulation-hand-and-stacks {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+}
+
+.simulation-player-board-bottom {
+    .simulation-hand-and-stacks {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
 }
 
 .simulation-hand-card,
@@ -3947,13 +4052,27 @@ export default {
 }
 
 .simulation-battlefield-creatures {
+    grid-area: creatures;
     min-height: 8rem;
 }
 
-.simulation-battlefield-bottom {
+.simulation-battlefield-support {
     display: grid;
     gap: 0.45rem;
+    grid-area: support;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.simulation-lane-land-right {
+    .simulation-battlefield-support {
+        .simulation-battlefield-lands {
+            order: 2;
+        }
+
+        .simulation-battlefield-noncreatures {
+            order: 1;
+        }
+    }
 }
 
 .simulation-card-list {

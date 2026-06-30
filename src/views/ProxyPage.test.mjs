@@ -250,8 +250,8 @@ describe('Core Rendering', async () => {
         component.data.config.simulationMatchupSessionId = 'izzet-meta';
         component.data.config.simulationSeed = 2;
         component.data.config.simulationTurnCount = 2;
-        component.data.config.simulationPlayerCount = 3;
-        component.data.config.simulationPlayerRoles = ['human', 'ai', 'human'];
+        component.data.config.simulationPlayerCount = 4;
+        component.data.config.simulationPlayerRoles = ['human', 'ai', 'human', 'ai'];
         component.data.config.simulationShowOpponentHands = false;
         component.data.config.simulationSpeed = 'fast';
         component.data.config.simulationBoardZoom = 1.1;
@@ -316,12 +316,17 @@ describe('Core Rendering', async () => {
 
         expect(wrapper.find('#game-simulation-tab').exists()).toBe(true);
         expect(wrapper.find('#simulation-matchup').element.value).toBe('izzet-meta');
-        expect(wrapper.find('#simulation-player-count').element.value).toBe('3');
-        expect(wrapper.findAll('.simulation-player-role')).toHaveLength(3);
+        expect(wrapper.find('#simulation-player-count').element.value).toBe('4');
+        expect(wrapper.findAll('.simulation-player-role')).toHaveLength(4);
         expect(wrapper.find('#simulation-show-opponent-hands').element.checked).toBe(false);
         expect(wrapper.find('#simulation-speed').element.value).toBe('fast');
         expect(wrapper.find('#simulation-board-zoom').element.value).toBe('1.1');
-        expect(wrapper.findAll('.simulation-player-board')).toHaveLength(3);
+        expect(wrapper.findAll('.simulation-player-board')).toHaveLength(4);
+        expect(wrapper.findAll('.simulation-player-lane')).toHaveLength(2);
+        expect(wrapper.findAll('.simulation-player-lane')[0].classes()).toContain('simulation-lane-land-left');
+        expect(wrapper.findAll('.simulation-player-lane')[1].classes()).toContain('simulation-lane-land-right');
+        expect(wrapper.findAll('.simulation-player-seat-top')[0].text()).toContain('Izzet Mirror');
+        expect(wrapper.findAll('.simulation-player-seat-bottom')[0].text()).toContain('You');
         expect(wrapper.find('.simulation-hand-card-image').exists()).toBe(true);
         expect(wrapper.find('.simulation-board-area').attributes('style')).toContain('scale(1.1)');
         expect(wrapper.find('.simulation-battlefield-creatures').exists()).toBe(true);
@@ -329,6 +334,7 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.simulation-battlefield-noncreatures').exists()).toBe(true);
         expect(wrapper.find('.simulation-zone-stack-graveyard').exists()).toBe(true);
         expect(wrapper.find('.simulation-zone-stack-exile').exists()).toBe(true);
+        expect(wrapper.find('.simulation-zone-stack-empty').exists()).toBe(true);
         expect(wrapper.find('.simulation-zone-drawer').exists()).toBe(false);
         await wrapper.find('.simulation-zone-stack-graveyard').trigger('click');
         expect(wrapper.find('.simulation-zone-drawer').exists()).toBe(true);
