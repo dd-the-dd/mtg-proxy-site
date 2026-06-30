@@ -666,39 +666,6 @@
           </div>
 
           <div
-            v-if="activeSimulationStep"
-            class="simulation-phase-bar"
-            :class="{ 'simulation-phase-bar-compact': simulationPlayerLanes.length === 1 }"
-          >
-            <div
-              id="simulation-current-step"
-              class="simulation-current-step"
-            >
-              T{{ activeSimulationStep.turn }}
-              {{ activeSimulationStep.playerName }} /
-              {{ phaseLabel(activeSimulationStep.phase) }}
-            </div>
-            <div class="simulation-current-actions">
-              Mana {{ activeSimulationStep.actionContext.availableMana }}
-              <span v-if="simulationManaPoolText(activeSimulationPlayer?.zones?.manaPool)">
-                / pool {{ simulationManaPoolText(activeSimulationPlayer.zones.manaPool) }}
-              </span>
-              <span v-if="activeSimulationStep.actionContext.canPlayLand">
-                / land available
-              </span>
-            </div>
-            <button
-              id="simulation-next-step"
-              type="button"
-              class="btn simulation-next-step"
-              :disabled="isLastSimulationStep"
-              @click="advanceSimulationStep"
-            >
-              Next step
-            </button>
-          </div>
-
-          <div
             v-if="simulationPendingAction"
             class="simulation-targeting-banner"
           >
@@ -714,256 +681,298 @@
             </p>
           </div>
 
-          <div v-else-if="gameSimulation" class="simulation-board">
+          <div
+            v-else-if="gameSimulation"
+            class="simulation-board"
+            :class="{ 'simulation-board-compact': simulationPlayerLanes.length === 1 }"
+          >
             <div
-              class="simulation-board-viewport"
-              :class="{ 'simulation-board-viewport-compact': simulationPlayerLanes.length === 1 }"
+              class="simulation-play-surface"
+              :class="{ 'simulation-play-surface-compact': simulationPlayerLanes.length === 1 }"
             >
               <div
-                class="simulation-board-area"
-                :class="{ 'simulation-board-area-two-player': simulationPlayerLanes.length === 1 }"
-                :style="simulationBoardStyle()"
+                class="simulation-board-viewport"
+                :class="{ 'simulation-board-viewport-compact': simulationPlayerLanes.length === 1 }"
               >
                 <div
-                  v-for="lane in simulationPlayerLanes"
-                  :key="`simulation-lane-${lane.index}`"
-                  class="simulation-player-lane"
+                  class="simulation-board-area"
+                  :class="{ 'simulation-board-area-two-player': simulationPlayerLanes.length === 1 }"
+                  :style="simulationBoardStyle()"
                 >
-                  <section
-                    v-for="seat in simulationLaneSeats(lane)"
-                    :key="`simulation-player-${seat.player.key}`"
-                    class="simulation-player-board"
-                    :class="[
-                      `simulation-player-seat-${seat.position}`,
-                      `simulation-player-board-${seat.position}`,
-                    ]"
+                  <div
+                    v-for="lane in simulationPlayerLanes"
+                    :key="`simulation-lane-${lane.index}`"
+                    class="simulation-player-lane"
                   >
-                    <div class="simulation-player-header">
-                      <span>{{ seat.player.name }}</span>
-                      <button
-                        type="button"
-                        class="simulation-life-total"
-                        :class="{ 'simulation-life-total-targetable': isSimulationPlayerTargetable(seat.player) }"
-                        @click.stop="selectSimulationPlayerTarget(seat.player)"
-                      >
-                        {{ simulationPlayerLife(seat.player) }}
-                      </button>
-                      <span class="label">{{ seat.player.role }}</span>
-                    </div>
-                    <div class="simulation-hand-and-stacks">
-                      <div
-                        class="simulation-hand-zone"
-                        :aria-label="`${seat.player.name} hand`"
-                      >
-                        <div class="simulation-hand-card-row">
-                          <div
-                            v-for="card in visibleSimulationHandCards(seat.player)"
-                            :key="`simulation-hand-${seat.player.key}-${card.id ?? card.name}-${card.sourceZone ?? 'hand'}`"
-                            class="simulation-hand-card"
-                            :class="simulationCardClasses(card)"
-                            :title="simulationCardActionTitle(card)"
-                            @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
-                          >
-                            <ImageLoader
-                              class="simulation-hand-card-image"
-                              :src="simulationCardImage(card)"
-                              placeholder="./card_back_border_crop.jpg"
-                              :alt="card.name"
-                              @mouseenter="scheduleCardPreview(card)"
-                              @mouseleave="hideCardPreview"
-                            />
-                            <span class="simulation-card-count">{{ card.quantity }}x</span>
-                            <span v-if="card.sourceZone" class="simulation-source-zone">{{ simulationSourceZoneLabel(card.sourceZone) }}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        class="simulation-zone-stacks"
-                        :class="`simulation-zone-stacks-${seat.position}`"
-                      >
-                        <button
-                          type="button"
-                          class="simulation-zone-stack simulation-zone-stack-library"
-                          :aria-label="`${seat.player.name} library`"
-                        >
-                          <ImageLoader
-                            class="simulation-zone-image"
-                            src="./card_back_border_crop.jpg"
-                            placeholder="./card_back_border_crop.jpg"
-                            alt="Library"
-                          />
-                          <span class="simulation-zone-count">{{ seat.player.zones.libraryCount }}</span>
-                        </button>
-                        <button
-                          type="button"
-                          class="simulation-zone-stack simulation-zone-stack-graveyard"
-                          :class="{ 'simulation-zone-stack-empty': seat.player.zones.graveyard.count === 0 }"
-                          :aria-label="`${seat.player.name} graveyard`"
-                          @click="toggleSimulationZone(seat.player, 'graveyard')"
-                        >
-                          <ImageLoader
-                            v-if="seat.player.zones.graveyard.top"
-                            class="simulation-zone-image"
-                            :src="simulationCardImage(seat.player.zones.graveyard.top)"
-                            placeholder="./card_back_border_crop.jpg"
-                            alt="Graveyard"
-                            @mouseenter="scheduleCardPreview(seat.player.zones.graveyard.top)"
-                            @mouseleave="hideCardPreview"
-                          />
-                          <div
-                            v-else
-                            class="simulation-zone-empty-card"
-                            aria-label="Empty graveyard"
-                          />
-                          <span class="simulation-zone-count">{{ seat.player.zones.graveyard.count }}</span>
-                        </button>
-                        <button
-                          type="button"
-                          class="simulation-zone-stack simulation-zone-stack-exile"
-                          :class="{ 'simulation-zone-stack-empty': seat.player.zones.exile.count === 0 }"
-                          :aria-label="`${seat.player.name} exile`"
-                          @click="toggleSimulationZone(seat.player, 'exile')"
-                        >
-                          <ImageLoader
-                            v-if="seat.player.zones.exile.top"
-                            class="simulation-zone-image simulation-zone-image-exile"
-                            :src="simulationCardImage(seat.player.zones.exile.top)"
-                            placeholder="./card_back_border_crop.jpg"
-                            alt="Exile"
-                            @mouseenter="scheduleCardPreview(seat.player.zones.exile.top)"
-                            @mouseleave="hideCardPreview"
-                          />
-                          <div
-                            v-else
-                            class="simulation-zone-empty-card"
-                            aria-label="Empty exile"
-                          />
-                          <span class="simulation-zone-count">{{ seat.player.zones.exile.count }}</span>
-                        </button>
-                      </div>
-                    </div>
-                    <div
-                      v-if="isSimulationZoneExpanded(seat.player, 'graveyard') || isSimulationZoneExpanded(seat.player, 'exile')"
-                      class="simulation-zone-drawer"
+                    <section
+                      v-for="seat in simulationLaneSeats(lane)"
+                      :key="`simulation-player-${seat.player.key}`"
+                      class="simulation-player-board"
+                      :class="[
+                        `simulation-player-seat-${seat.position}`,
+                        `simulation-player-board-${seat.position}`,
+                      ]"
                     >
-                      <div
-                        v-for="zone in ['graveyard', 'exile']"
-                        :key="`simulation-zone-drawer-${seat.player.key}-${zone}`"
-                        v-show="isSimulationZoneExpanded(seat.player, zone)"
-                        :aria-label="`${seat.player.name} ${zone}`"
-                      >
-                        <div v-if="seat.player.zones[zone].cards.length" class="simulation-mini-card-grid">
-                          <div
-                            v-for="card in seat.player.zones[zone].cards"
-                            :key="`simulation-zone-card-${seat.player.key}-${zone}-${card.name}`"
-                            class="simulation-mini-card"
-                            :class="simulationCardClasses(card)"
-                            :title="simulationCardActionTitle(card)"
-                            @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
-                          >
-                            <ImageLoader
-                              class="simulation-mini-card-image"
-                              :src="simulationCardImage(card)"
-                              placeholder="./card_back_border_crop.jpg"
-                              :alt="card.name"
-                              @mouseenter="scheduleCardPreview(card)"
-                              @mouseleave="hideCardPreview"
-                            />
-                            <span>{{ card.quantity }}x {{ card.name }}</span>
+                      <div class="simulation-player-header">
+                        <span>{{ seat.player.name }}</span>
+                        <button
+                          type="button"
+                          class="simulation-life-total"
+                          :class="{ 'simulation-life-total-targetable': isSimulationPlayerTargetable(seat.player) }"
+                          @click.stop="selectSimulationPlayerTarget(seat.player)"
+                        >
+                          {{ simulationPlayerLife(seat.player) }}
+                        </button>
+                        <span class="label">{{ seat.player.role }}</span>
+                      </div>
+                      <div class="simulation-hand-and-stacks">
+                        <div
+                          class="simulation-hand-zone"
+                          :aria-label="`${seat.player.name} hand`"
+                        >
+                          <div class="simulation-hand-card-row">
+                            <div
+                              v-for="card in visibleSimulationHandCards(seat.player)"
+                              :key="`simulation-hand-${seat.player.key}-${card.id ?? card.name}-${card.sourceZone ?? 'hand'}`"
+                              class="simulation-hand-card"
+                              :class="simulationCardClasses(card)"
+                              :title="simulationCardActionTitle(card)"
+                              @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                            >
+                              <ImageLoader
+                                class="simulation-hand-card-image"
+                                :src="simulationCardImage(card)"
+                                placeholder="./card_back_border_crop.jpg"
+                                :alt="card.name"
+                                @mouseenter="scheduleCardPreview(card)"
+                                @mouseleave="hideCardPreview"
+                              />
+                              <span class="simulation-card-count">{{ card.quantity }}x</span>
+                              <span v-if="card.sourceZone" class="simulation-source-zone">{{ simulationSourceZoneLabel(card.sourceZone) }}</span>
+                            </div>
                           </div>
                         </div>
-                        <div v-else class="simulation-zone-empty">
-                          Empty
-                        </div>
-                      </div>
-                    </div>
-                    <div
-                      class="simulation-battlefield-zone"
-                      :aria-label="`${seat.player.name} battlefield`"
-                    >
-                      <div
-                        class="simulation-battlefield-row simulation-battlefield-lands simulation-battlefield-column-left"
-                        :aria-label="`${seat.player.name} lands`"
-                      >
-                        <div class="simulation-permanent-row">
-                          <div
-                            v-for="card in seat.player.zones.battlefield.lands"
-                            :key="`simulation-land-${seat.player.key}-${card.name}`"
-                            class="simulation-permanent-card simulation-permanent-card-land"
-                            :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
-                            :title="simulationCardActionTitle(card)"
-                            @click.stop="selectSimulationCardTarget(card, seat.player)"
-                            @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                        <div
+                          class="simulation-zone-stacks"
+                          :class="`simulation-zone-stacks-${seat.position}`"
+                        >
+                          <button
+                            type="button"
+                            class="simulation-zone-stack simulation-zone-stack-library"
+                            :aria-label="`${seat.player.name} library`"
                           >
                             <ImageLoader
-                              class="simulation-permanent-image"
-                              :src="simulationCardImage(card)"
+                              class="simulation-zone-image"
+                              src="./card_back_border_crop.jpg"
                               placeholder="./card_back_border_crop.jpg"
-                              :alt="card.name"
-                              @mouseenter="scheduleCardPreview(card)"
+                              alt="Library"
+                            />
+                            <span class="simulation-zone-count">{{ seat.player.zones.libraryCount }}</span>
+                          </button>
+                          <button
+                            type="button"
+                            class="simulation-zone-stack simulation-zone-stack-graveyard"
+                            :class="{ 'simulation-zone-stack-empty': seat.player.zones.graveyard.count === 0 }"
+                            :aria-label="`${seat.player.name} graveyard`"
+                            @click="toggleSimulationZone(seat.player, 'graveyard')"
+                          >
+                            <ImageLoader
+                              v-if="seat.player.zones.graveyard.top"
+                              class="simulation-zone-image"
+                              :src="simulationCardImage(seat.player.zones.graveyard.top)"
+                              placeholder="./card_back_border_crop.jpg"
+                              alt="Graveyard"
+                              @mouseenter="scheduleCardPreview(seat.player.zones.graveyard.top)"
                               @mouseleave="hideCardPreview"
                             />
-                            <span class="simulation-card-count">{{ card.quantity }}x</span>
+                            <div
+                              v-else
+                              class="simulation-zone-empty-card"
+                              aria-label="Empty graveyard"
+                            />
+                            <span class="simulation-zone-count">{{ seat.player.zones.graveyard.count }}</span>
+                          </button>
+                          <button
+                            type="button"
+                            class="simulation-zone-stack simulation-zone-stack-exile"
+                            :class="{ 'simulation-zone-stack-empty': seat.player.zones.exile.count === 0 }"
+                            :aria-label="`${seat.player.name} exile`"
+                            @click="toggleSimulationZone(seat.player, 'exile')"
+                          >
+                            <ImageLoader
+                              v-if="seat.player.zones.exile.top"
+                              class="simulation-zone-image simulation-zone-image-exile"
+                              :src="simulationCardImage(seat.player.zones.exile.top)"
+                              placeholder="./card_back_border_crop.jpg"
+                              alt="Exile"
+                              @mouseenter="scheduleCardPreview(seat.player.zones.exile.top)"
+                              @mouseleave="hideCardPreview"
+                            />
+                            <div
+                              v-else
+                              class="simulation-zone-empty-card"
+                              aria-label="Empty exile"
+                            />
+                            <span class="simulation-zone-count">{{ seat.player.zones.exile.count }}</span>
+                          </button>
+                        </div>
+                      </div>
+                      <div
+                        v-if="isSimulationZoneExpanded(seat.player, 'graveyard') || isSimulationZoneExpanded(seat.player, 'exile')"
+                        class="simulation-zone-drawer"
+                      >
+                        <div
+                          v-for="zone in ['graveyard', 'exile']"
+                          :key="`simulation-zone-drawer-${seat.player.key}-${zone}`"
+                          v-show="isSimulationZoneExpanded(seat.player, zone)"
+                          :aria-label="`${seat.player.name} ${zone}`"
+                        >
+                          <div v-if="seat.player.zones[zone].cards.length" class="simulation-mini-card-grid">
+                            <div
+                              v-for="card in seat.player.zones[zone].cards"
+                              :key="`simulation-zone-card-${seat.player.key}-${zone}-${card.name}`"
+                              class="simulation-mini-card"
+                              :class="simulationCardClasses(card)"
+                              :title="simulationCardActionTitle(card)"
+                              @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                            >
+                              <ImageLoader
+                                class="simulation-mini-card-image"
+                                :src="simulationCardImage(card)"
+                                placeholder="./card_back_border_crop.jpg"
+                                :alt="card.name"
+                                @mouseenter="scheduleCardPreview(card)"
+                                @mouseleave="hideCardPreview"
+                              />
+                              <span>{{ card.quantity }}x {{ card.name }}</span>
+                            </div>
+                          </div>
+                          <div v-else class="simulation-zone-empty">
+                            Empty
                           </div>
                         </div>
                       </div>
                       <div
-                        class="simulation-battlefield-row simulation-battlefield-creatures simulation-battlefield-column-center"
-                        :aria-label="`${seat.player.name} creatures`"
+                        class="simulation-battlefield-zone"
+                        :aria-label="`${seat.player.name} battlefield`"
                       >
-                        <div class="simulation-permanent-row">
-                          <div
-                            v-for="card in seat.player.zones.battlefield.creatures"
-                            :key="`simulation-creature-${seat.player.key}-${card.name}`"
-                            class="simulation-permanent-card"
-                            :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
-                            :title="simulationCardActionTitle(card)"
-                            @click.stop="selectSimulationCardTarget(card, seat.player)"
-                            @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
-                          >
-                            <ImageLoader
-                              class="simulation-permanent-image"
-                              :src="simulationCardImage(card)"
-                              placeholder="./card_back_border_crop.jpg"
-                              :alt="card.name"
-                              @mouseenter="scheduleCardPreview(card)"
-                              @mouseleave="hideCardPreview"
-                            />
-                            <span class="simulation-card-count">{{ card.quantity }}x</span>
-                            <span v-if="card.state?.summoningSick" class="simulation-state-badge">SS</span>
-                            <span v-else-if="card.state?.attacking" class="simulation-state-badge simulation-state-badge-attack">ATK</span>
+                        <div
+                          class="simulation-battlefield-row simulation-battlefield-lands simulation-battlefield-column-left"
+                          :aria-label="`${seat.player.name} lands`"
+                        >
+                          <div class="simulation-permanent-row">
+                            <div
+                              v-for="card in seat.player.zones.battlefield.lands"
+                              :key="`simulation-land-${seat.player.key}-${card.name}`"
+                              class="simulation-permanent-card simulation-permanent-card-land"
+                              :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
+                              :title="simulationCardActionTitle(card)"
+                              @click.stop="selectSimulationCardTarget(card, seat.player)"
+                              @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                            >
+                              <ImageLoader
+                                class="simulation-permanent-image"
+                                :src="simulationCardImage(card)"
+                                placeholder="./card_back_border_crop.jpg"
+                                :alt="card.name"
+                                @mouseenter="scheduleCardPreview(card)"
+                                @mouseleave="hideCardPreview"
+                              />
+                              <span class="simulation-card-count">{{ card.quantity }}x</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          class="simulation-battlefield-row simulation-battlefield-creatures simulation-battlefield-column-center"
+                          :aria-label="`${seat.player.name} creatures`"
+                        >
+                          <div class="simulation-permanent-row">
+                            <div
+                              v-for="card in seat.player.zones.battlefield.creatures"
+                              :key="`simulation-creature-${seat.player.key}-${card.name}`"
+                              class="simulation-permanent-card"
+                              :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
+                              :title="simulationCardActionTitle(card)"
+                              @click.stop="selectSimulationCardTarget(card, seat.player)"
+                              @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                            >
+                              <ImageLoader
+                                class="simulation-permanent-image"
+                                :src="simulationCardImage(card)"
+                                placeholder="./card_back_border_crop.jpg"
+                                :alt="card.name"
+                                @mouseenter="scheduleCardPreview(card)"
+                                @mouseleave="hideCardPreview"
+                              />
+                              <span class="simulation-card-count">{{ card.quantity }}x</span>
+                              <span v-if="card.state?.summoningSick" class="simulation-state-badge">SS</span>
+                              <span v-else-if="card.state?.attacking" class="simulation-state-badge simulation-state-badge-attack">ATK</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          class="simulation-battlefield-row simulation-battlefield-noncreatures simulation-battlefield-column-right"
+                          :aria-label="`${seat.player.name} noncreature permanents`"
+                        >
+                          <div class="simulation-permanent-row">
+                            <div
+                              v-for="card in seat.player.zones.battlefield.nonCreaturePermanents"
+                              :key="`simulation-noncreature-${seat.player.key}-${card.name}`"
+                              class="simulation-permanent-card simulation-permanent-card-noncreature"
+                              :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
+                              :title="simulationCardActionTitle(card)"
+                              @click.stop="selectSimulationCardTarget(card, seat.player)"
+                              @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                            >
+                              <ImageLoader
+                                class="simulation-permanent-image"
+                                :src="simulationCardImage(card)"
+                                placeholder="./card_back_border_crop.jpg"
+                                :alt="card.name"
+                                @mouseenter="scheduleCardPreview(card)"
+                                @mouseleave="hideCardPreview"
+                              />
+                              <span class="simulation-card-count">{{ card.quantity }}x</span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                      <div
-                        class="simulation-battlefield-row simulation-battlefield-noncreatures simulation-battlefield-column-right"
-                        :aria-label="`${seat.player.name} noncreature permanents`"
-                      >
-                        <div class="simulation-permanent-row">
-                          <div
-                            v-for="card in seat.player.zones.battlefield.nonCreaturePermanents"
-                            :key="`simulation-noncreature-${seat.player.key}-${card.name}`"
-                            class="simulation-permanent-card simulation-permanent-card-noncreature"
-                            :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
-                            :title="simulationCardActionTitle(card)"
-                            @click.stop="selectSimulationCardTarget(card, seat.player)"
-                            @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
-                          >
-                            <ImageLoader
-                              class="simulation-permanent-image"
-                              :src="simulationCardImage(card)"
-                              placeholder="./card_back_border_crop.jpg"
-                              :alt="card.name"
-                              @mouseenter="scheduleCardPreview(card)"
-                              @mouseleave="hideCardPreview"
-                            />
-                            <span class="simulation-card-count">{{ card.quantity }}x</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
+                    </section>
+                  </div>
                 </div>
+              </div>
+
+              <div
+                v-if="activeSimulationStep"
+                class="simulation-phase-bar"
+                :class="{ 'simulation-phase-bar-compact': simulationPlayerLanes.length === 1 }"
+              >
+                <div
+                  id="simulation-current-step"
+                  class="simulation-current-step"
+                >
+                  T{{ activeSimulationStep.turn }}
+                  {{ activeSimulationStep.playerName }} /
+                  {{ phaseLabel(activeSimulationStep.phase) }}
+                </div>
+                <div class="simulation-current-actions">
+                  Mana {{ activeSimulationStep.actionContext.availableMana }}
+                  <span v-if="simulationManaPoolText(activeSimulationPlayer?.zones?.manaPool)">
+                    / pool {{ simulationManaPoolText(activeSimulationPlayer.zones.manaPool) }}
+                  </span>
+                  <span v-if="activeSimulationStep.actionContext.canPlayLand">
+                    / land available
+                  </span>
+                </div>
+                <button
+                  id="simulation-next-step"
+                  type="button"
+                  class="btn simulation-next-step"
+                  :disabled="isLastSimulationStep"
+                  @click="advanceSimulationStep"
+                >
+                  Next step
+                </button>
               </div>
             </div>
 
@@ -4882,6 +4891,17 @@ export default {
     gap: 0.45rem;
 }
 
+.simulation-play-surface {
+    display: grid;
+    gap: 0.35rem;
+    grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.simulation-play-surface-compact {
+    height: clamp(29rem, calc(100vh - 12rem), 44rem);
+    min-height: 0;
+}
+
 .simulation-board-viewport {
     background: #f2f4f7;
     border: 1px solid #dadee4;
@@ -4893,8 +4913,9 @@ export default {
 }
 
 .simulation-board-viewport-compact {
-    height: clamp(23rem, 58vh, 31rem);
+    height: auto;
     min-height: 0;
+    overflow: hidden;
     padding: 0.32rem;
 }
 
@@ -4916,6 +4937,7 @@ export default {
     --simulation-hand-card-width: clamp(2.65rem, 3.25vw, 3.2rem);
     --simulation-zone-card-width: clamp(1.72rem, 2.15vw, 2.05rem);
 
+    height: 100%;
     min-width: 0;
     width: 100%;
 }
@@ -4929,6 +4951,7 @@ export default {
 
 .simulation-board-area-two-player .simulation-player-lane {
     gap: 0.2rem;
+    height: 100%;
     min-width: 0;
     width: 100%;
 }
@@ -4952,6 +4975,7 @@ export default {
 .simulation-board-area-two-player .simulation-player-board {
     gap: 0.22rem;
     min-height: 0;
+    overflow: hidden;
     padding: 0.28rem;
 }
 
