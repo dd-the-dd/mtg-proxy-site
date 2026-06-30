@@ -408,6 +408,81 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Simulation board uses a compact two-player card-first layout.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationMatchupSessionId = 'two-player-meta';
+        component.data.config.simulationSeed = 1;
+        component.data.config.simulationTurnCount = 1;
+        component.data.config.simulationPlayerCount = 2;
+        component.data.config.simulationPlayerRoles = ['human', 'ai'];
+        component.data.cards = [
+            {
+                quantity: 8,
+                name: 'mountain',
+                selectedOption: {
+                    typeLine: 'Basic Land - Mountain',
+                    urlFront: 'mountain-front',
+                },
+            },
+            {
+                quantity: 4,
+                name: 'burst lightning',
+                selectedOption: {
+                    manaValue: 1,
+                    typeLine: 'Instant',
+                    urlFront: 'burst-front',
+                },
+            },
+        ];
+        component.data.metaDeckStates = [
+            {
+                id: 'two-player-meta',
+                name: 'Izzet Mirror',
+                state: {
+                    cards: [
+                        {
+                            quantity: 8,
+                            name: 'island',
+                            selectedOption: {
+                                typeLine: 'Basic Land - Island',
+                            },
+                        },
+                        {
+                            quantity: 4,
+                            name: 'opt',
+                            selectedOption: {
+                                manaValue: 1,
+                                typeLine: 'Instant',
+                            },
+                        },
+                    ],
+                },
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.findAll('.simulation-player-lane')).toHaveLength(1);
+        expect(wrapper.find('.simulation-board-area-two-player').exists()).toBe(true);
+        expect(wrapper.findAll('.simulation-player-board')).toHaveLength(2);
+        expect(wrapper.find('.simulation-hand-zone .simulation-section-title').exists()).toBe(false);
+        expect(wrapper.find('.simulation-battlefield-creatures .simulation-section-title').exists()).toBe(false);
+        expect(wrapper.find('.simulation-battlefield-lands .simulation-section-title').exists()).toBe(false);
+        expect(wrapper.find('.simulation-battlefield-noncreatures .simulation-section-title').exists()).toBe(false);
+        expect(wrapper.find('.simulation-hand-zone').attributes('aria-label')).toContain('hand');
+        expect(wrapper.find('.simulation-battlefield-creatures').attributes('aria-label')).toContain('creatures');
+        expect(wrapper.find('.simulation-zone-stack-library .simulation-zone-count').text()).toMatch(/\d+/);
+        expect(wrapper.find('.simulation-zone-stack-graveyard .simulation-zone-count').text()).toContain('0');
+        expect(wrapper.find('.simulation-zone-stack-exile .simulation-zone-count').text()).toContain('0');
+
+        component.data.config.activeWorkspaceTab = 'cards';
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.config.decklist = '';
+    });
+
     test('Feature: Analysis mode exposes meta removal action rows for damage and blocked targets.', async () => {
         const component = wrapper.getCurrentComponent();
         const shock = {

@@ -678,6 +678,7 @@
             <div class="simulation-board-viewport">
               <div
                 class="simulation-board-area"
+                :class="{ 'simulation-board-area-two-player': simulationPlayerLanes.length === 1 }"
                 :style="simulationBoardStyle()"
               >
                 <div
@@ -700,10 +701,10 @@
                       <span class="label">{{ seat.player.role }}</span>
                     </div>
                     <div class="simulation-hand-and-stacks">
-                      <div class="simulation-hand-zone">
-                        <div class="simulation-section-title">
-                          Hand
-                        </div>
+                      <div
+                        class="simulation-hand-zone"
+                        :aria-label="`${seat.player.name} hand`"
+                      >
                         <div class="simulation-hand-card-row">
                           <div
                             v-for="card in visibleSimulationHandCards(seat.player)"
@@ -731,6 +732,7 @@
                         <button
                           type="button"
                           class="simulation-zone-stack simulation-zone-stack-library"
+                          :aria-label="`${seat.player.name} library`"
                         >
                           <ImageLoader
                             class="simulation-zone-image"
@@ -738,12 +740,13 @@
                             placeholder="./card_back_border_crop.jpg"
                             alt="Library"
                           />
-                          <span>{{ seat.player.zones.libraryCount }}</span>
+                          <span class="simulation-zone-count">{{ seat.player.zones.libraryCount }}</span>
                         </button>
                         <button
                           type="button"
                           class="simulation-zone-stack simulation-zone-stack-graveyard"
                           :class="{ 'simulation-zone-stack-empty': seat.player.zones.graveyard.count === 0 }"
+                          :aria-label="`${seat.player.name} graveyard`"
                           @click="toggleSimulationZone(seat.player, 'graveyard')"
                         >
                           <ImageLoader
@@ -760,12 +763,13 @@
                             class="simulation-zone-empty-card"
                             aria-label="Empty graveyard"
                           />
-                          <span>GY {{ seat.player.zones.graveyard.count }}</span>
+                          <span class="simulation-zone-count">{{ seat.player.zones.graveyard.count }}</span>
                         </button>
                         <button
                           type="button"
                           class="simulation-zone-stack simulation-zone-stack-exile"
                           :class="{ 'simulation-zone-stack-empty': seat.player.zones.exile.count === 0 }"
+                          :aria-label="`${seat.player.name} exile`"
                           @click="toggleSimulationZone(seat.player, 'exile')"
                         >
                           <ImageLoader
@@ -782,7 +786,7 @@
                             class="simulation-zone-empty-card"
                             aria-label="Empty exile"
                           />
-                          <span>EX {{ seat.player.zones.exile.count }}</span>
+                          <span class="simulation-zone-count">{{ seat.player.zones.exile.count }}</span>
                         </button>
                       </div>
                     </div>
@@ -794,10 +798,8 @@
                         v-for="zone in ['graveyard', 'exile']"
                         :key="`simulation-zone-drawer-${seat.player.key}-${zone}`"
                         v-show="isSimulationZoneExpanded(seat.player, zone)"
+                        :aria-label="`${seat.player.name} ${zone}`"
                       >
-                        <div class="simulation-section-title">
-                          {{ zone }}
-                        </div>
                         <div v-if="seat.player.zones[zone].cards.length" class="simulation-mini-card-grid">
                           <div
                             v-for="card in seat.player.zones[zone].cards"
@@ -820,10 +822,10 @@
                         </div>
                       </div>
                     </div>
-                    <div class="simulation-battlefield-row simulation-battlefield-creatures">
-                      <div class="simulation-section-title">
-                        Creatures
-                      </div>
+                    <div
+                      class="simulation-battlefield-row simulation-battlefield-creatures"
+                      :aria-label="`${seat.player.name} creatures`"
+                    >
                       <div class="simulation-permanent-row">
                         <div
                           v-for="card in seat.player.zones.battlefield.creatures"
@@ -844,10 +846,10 @@
                       </div>
                     </div>
                     <div class="simulation-battlefield-support">
-                      <div class="simulation-battlefield-row simulation-battlefield-lands">
-                        <div class="simulation-section-title">
-                          Lands
-                        </div>
+                      <div
+                        class="simulation-battlefield-row simulation-battlefield-lands"
+                        :aria-label="`${seat.player.name} lands`"
+                      >
                         <div class="simulation-permanent-row">
                           <div
                             v-for="card in seat.player.zones.battlefield.lands"
@@ -866,10 +868,10 @@
                           </div>
                         </div>
                       </div>
-                      <div class="simulation-battlefield-row simulation-battlefield-noncreatures">
-                        <div class="simulation-section-title">
-                          Noncreature permanents
-                        </div>
+                      <div
+                        class="simulation-battlefield-row simulation-battlefield-noncreatures"
+                        :aria-label="`${seat.player.name} noncreature permanents`"
+                      >
                         <div class="simulation-permanent-row">
                           <div
                             v-for="card in seat.player.zones.battlefield.nonCreaturePermanents"
@@ -3897,44 +3899,62 @@ export default {
 }
 
 .simulation-board-viewport {
+    background: #f2f4f7;
     border: 1px solid #dadee4;
     border-radius: 4px;
     max-width: 100%;
-    min-height: 33rem;
+    min-height: min(64vh, 34rem);
     overflow: auto;
-    padding: 0.6rem;
+    padding: 0.45rem;
 }
 
 .simulation-board-area {
+    --simulation-card-width: 4.2rem;
+    --simulation-zone-card-width: 2.5rem;
+
+    align-items: stretch;
     display: flex;
-    gap: 0.75rem;
+    gap: 0.5rem;
     min-width: min(100%, 44rem);
     transition: transform 0.15s ease;
     width: max-content;
 }
 
+.simulation-board-area-two-player {
+    --simulation-card-width: clamp(3.2rem, 4.6vw, 4rem);
+    --simulation-zone-card-width: clamp(2rem, 2.7vw, 2.45rem);
+
+    min-width: 0;
+    width: 100%;
+}
+
 .simulation-player-lane {
     display: grid;
-    gap: 0.45rem;
+    gap: 0.28rem;
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
     min-width: min(44rem, 76vw);
 }
 
+.simulation-board-area-two-player .simulation-player-lane {
+    min-width: 0;
+    width: 100%;
+}
+
 .simulation-player-board {
-    background: #f8f9fa;
+    background: #fff;
     border: 1px solid #d0d5dd;
     border-radius: 4px;
     display: grid;
-    gap: 0.5rem;
+    gap: 0.32rem;
     grid-template-areas:
         "header"
         "hand"
         "support"
         "creatures";
-    grid-template-rows: auto auto minmax(5rem, auto) minmax(7rem, 1fr);
-    min-height: 15.2rem;
+    grid-template-rows: auto minmax(0, auto) minmax(0, auto) minmax(0, 1fr);
+    min-height: 12.4rem;
     min-width: 0;
-    padding: 0.5rem;
+    padding: 0.36rem;
 }
 
 .simulation-player-board-bottom {
@@ -3943,17 +3963,18 @@ export default {
         "support"
         "hand"
         "header";
-    grid-template-rows: minmax(7rem, 1fr) minmax(5rem, auto) auto auto;
+    grid-template-rows: minmax(0, 1fr) minmax(0, auto) minmax(0, auto) auto;
 }
 
 .simulation-player-header {
     align-items: center;
     display: flex;
-    font-size: 0.8rem;
+    font-size: 0.68rem;
     font-weight: 800;
     gap: 0.35rem;
     grid-area: header;
     justify-content: space-between;
+    line-height: 1;
 }
 
 .simulation-hand {
@@ -3966,7 +3987,7 @@ export default {
 .simulation-zone-stacks {
     align-items: end;
     display: flex;
-    gap: 0.35rem;
+    gap: 0.2rem;
 }
 
 .simulation-zone-stacks-top {
@@ -3992,11 +4013,11 @@ export default {
     display: grid;
     font-size: 0.62rem;
     font-weight: 700;
-    gap: 0.12rem;
+    gap: 0.08rem;
     justify-items: center;
-    min-height: 4.9rem;
-    padding: 0.18rem;
-    width: 3.4rem;
+    min-height: calc(var(--simulation-zone-card-width) * 1.4 + 1rem);
+    padding: 0.14rem;
+    width: calc(var(--simulation-zone-card-width) + 0.58rem);
 }
 
 .simulation-zone-stack-empty {
@@ -4014,7 +4035,7 @@ export default {
     aspect-ratio: 63 / 88;
     border-radius: 3px;
     object-fit: cover;
-    width: 2.5rem;
+    width: var(--simulation-zone-card-width);
 }
 
 .simulation-zone-empty-card {
@@ -4027,7 +4048,18 @@ export default {
     border-radius: 3px;
     display: flex;
     justify-content: center;
-    width: 2.5rem;
+    width: var(--simulation-zone-card-width);
+}
+
+.simulation-zone-count {
+    background: #344054;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 0.56rem;
+    line-height: 1;
+    min-width: 1.1rem;
+    padding: 0.13rem 0.24rem;
+    text-align: center;
 }
 
 .simulation-zone-image-exile {
@@ -4046,7 +4078,13 @@ export default {
 .simulation-permanent-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
+    gap: 0.22rem;
+}
+
+.simulation-hand-card-row,
+.simulation-permanent-row {
+    align-content: flex-start;
+    min-height: calc(var(--simulation-card-width) * 1.397);
 }
 
 .simulation-mini-card {
@@ -4077,16 +4115,16 @@ export default {
 }
 
 .simulation-hand-zone {
-    background: #fff;
-    border: 1px solid #eef0f3;
+    background: #fcfcfd;
+    border: 1px solid #e4e7ec;
     border-radius: 4px;
-    padding: 0.4rem;
+    padding: 0.24rem;
 }
 
 .simulation-hand-and-stacks {
     align-items: stretch;
     display: grid;
-    gap: 0.45rem;
+    gap: 0.28rem;
     grid-area: hand;
     grid-template-columns: minmax(0, 1fr) auto;
 }
@@ -4108,7 +4146,19 @@ export default {
     aspect-ratio: 63 / 88;
     border-radius: 4px;
     position: relative;
-    width: 4.2rem;
+    width: var(--simulation-card-width);
+}
+
+.simulation-board-area-two-player {
+    .simulation-hand-card + .simulation-hand-card,
+    .simulation-permanent-card + .simulation-permanent-card {
+        margin-left: calc(var(--simulation-card-width) * -0.25);
+    }
+
+    .simulation-hand-card:hover,
+    .simulation-permanent-card:hover {
+        z-index: 3;
+    }
 }
 
 .simulation-hand-card-virtual {
@@ -4162,21 +4212,21 @@ export default {
 }
 
 .simulation-battlefield-row {
-    background: #fff;
+    background: #fcfcfd;
     border: 1px dashed #d0d5dd;
     border-radius: 4px;
-    min-height: 6.6rem;
-    padding: 0.4rem;
+    min-height: calc(var(--simulation-card-width) * 1.397 + 0.52rem);
+    padding: 0.24rem;
 }
 
 .simulation-battlefield-creatures {
     grid-area: creatures;
-    min-height: 8rem;
+    min-height: calc(var(--simulation-card-width) * 1.397 + 0.52rem);
 }
 
 .simulation-battlefield-support {
     display: grid;
-    gap: 0.45rem;
+    gap: 0.28rem;
     grid-area: support;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
