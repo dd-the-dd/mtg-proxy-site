@@ -2657,6 +2657,7 @@ export default {
             return {
                 'simulation-card-actionable': Boolean(card?.actionState?.actionable),
                 'simulation-card-targetable': targetable,
+                'simulation-card-tapped': Boolean(card?.state?.tapped),
                 'simulation-card-source-exile': card?.sourceZone === 'exile',
                 'simulation-card-source-graveyard': card?.sourceZone === 'graveyard',
                 'simulation-hand-card-virtual': Boolean(card?.sourceZone),
@@ -2756,6 +2757,9 @@ export default {
             };
 
             if (resolvedOption.requiresTarget) {
+                if (!this.simulationActionHasValidTarget(action)) {
+                    return;
+                }
                 this.simulationPendingAction = action;
                 return;
             }
@@ -2764,6 +2768,42 @@ export default {
         },
         isSimulationTargetType(option, type) {
             return (option?.targetTypes ?? []).includes(type);
+        },
+        simulationCardMatchesTargetTypes(card, targetTypes = []) {
+            const typeLine = String(card?.typeLine ?? '');
+            return (targetTypes.includes('creature') && /\bcreature\b/i.test(typeLine)) ||
+                (targetTypes.includes('artifact') && /\bartifact\b/i.test(typeLine)) ||
+                (targetTypes.includes('planeswalker') && /\bplaneswalker\b/i.test(typeLine)) ||
+                (targetTypes.includes('battle') && /\bbattle\b/i.test(typeLine)) ||
+                targetTypes.includes('permanent');
+        },
+        simulationBattlefieldCards(player) {
+            return [
+                ...(player?.zones?.battlefield?.creatures ?? []),
+                ...(player?.zones?.battlefield?.lands ?? []),
+                ...(player?.zones?.battlefield?.nonCreaturePermanents ?? []),
+            ];
+        },
+        simulationActionHasValidTarget(action) {
+            if (!action?.option?.requiresTarget) {
+                return true;
+            }
+
+            const targetTypes = action.option.targetTypes ?? [];
+            if (
+                targetTypes.includes('player') &&
+                this.simulationPlayerList.some(player => {
+                    return !this.simulationActionTargetsOwnPlayerOnly(action, player);
+                })
+            ) {
+                return true;
+            }
+
+            return this.simulationPlayerList.some(player => {
+                return this.simulationBattlefieldCards(player).some(card => {
+                    return this.simulationCardMatchesTargetTypes(card, targetTypes);
+                });
+            });
         },
         isSimulationPlayerTargetable(player) {
             return Boolean(this.simulationPendingAction) &&
@@ -2779,12 +2819,7 @@ export default {
             }
 
             const targetTypes = this.simulationPendingAction.option.targetTypes ?? [];
-            const typeLine = String(card?.typeLine ?? '');
-            return (targetTypes.includes('creature') && /\bcreature\b/i.test(typeLine)) ||
-                (targetTypes.includes('artifact') && /\bartifact\b/i.test(typeLine)) ||
-                (targetTypes.includes('planeswalker') && /\bplaneswalker\b/i.test(typeLine)) ||
-                (targetTypes.includes('battle') && /\bbattle\b/i.test(typeLine)) ||
-                targetTypes.includes('permanent');
+            return this.simulationCardMatchesTargetTypes(card, targetTypes);
         },
         selectSimulationPlayerTarget(player) {
             if (!this.isSimulationPlayerTargetable(player)) {
@@ -3072,6 +3107,7 @@ export default {
             return clonedPlayers.map(player => {
                 return annotateSimulationPlayerActions(player, this.activeSimulationStep?.phase ?? '', {
                     isActivePlayer: player.key === this.activeSimulationStep?.playerKey,
+                    targetPlayers: clonedPlayers,
                 });
             });
         },
@@ -4966,6 +5002,16 @@ export default {
         0 0 0 5px rgb(249 115 22 / 28%);
     cursor: pointer;
     z-index: 4;
+}
+
+.simulation-permanent-card.simulation-card-tapped {
+    transform: rotate(90deg);
+    transform-origin: center;
+}
+
+.simulation-permanent-card.simulation-card-tapped .simulation-card-count,
+.simulation-permanent-card.simulation-card-tapped .simulation-state-badge {
+    transform: rotate(-90deg);
 }
 
 .simulation-hand-card-image,

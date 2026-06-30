@@ -331,6 +331,108 @@ describe('GameSimulator', () => {
         }));
     });
 
+    test('Feature: Targeted simulation spells require a valid target before becoming actionable.', () => {
+        const mountain = {
+            id: 'mountain:0',
+            name: 'mountain',
+            quantity: 1,
+            state: { tapped: false },
+            typeLine: 'Basic Land - Mountain',
+        };
+        const flameSlash = {
+            id: 'flame slash:0',
+            manaCost: '{R}',
+            manaValue: 1,
+            name: 'flame slash',
+            oracleText: 'Flame Slash deals 4 damage to target creature.',
+            quantity: 1,
+            typeLine: 'Sorcery',
+        };
+        const you = {
+            key: 'you',
+            name: 'You',
+            role: 'human',
+            zones: {
+                battlefield: {
+                    creatures: [],
+                    lands: [mountain],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, recoverable: [], top: null },
+                graveyard: { cards: [], count: 0, recoverable: [], top: null },
+                hand: [flameSlash],
+                handCount: 1,
+                landPlaysAvailable: 0,
+                libraryCount: 0,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [flameSlash],
+            },
+        };
+        const opponent = {
+            key: 'opponent',
+            name: 'Opponent',
+            role: 'ai',
+            zones: {
+                battlefield: {
+                    creatures: [],
+                    lands: [],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, recoverable: [], top: null },
+                graveyard: { cards: [], count: 0, recoverable: [], top: null },
+                hand: [],
+                handCount: 0,
+                landPlaysAvailable: 0,
+                libraryCount: 0,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [],
+            },
+        };
+
+        const withoutTarget = annotateSimulationPlayerActions(you, 'main', {
+            isActivePlayer: true,
+            targetPlayers: [you, opponent],
+        });
+        expect(withoutTarget.zones.hand.find(cardInHand => {
+            return cardInHand.name === 'flame slash';
+        }).actionState).toBeUndefined();
+
+        const opponentWithCreature = {
+            ...opponent,
+            zones: {
+                ...opponent.zones,
+                battlefield: {
+                    ...opponent.zones.battlefield,
+                    creatures: [
+                        {
+                            id: 'bear:0',
+                            name: 'bear',
+                            quantity: 1,
+                            state: { tapped: false },
+                            typeLine: 'Creature - Bear',
+                        },
+                    ],
+                },
+            },
+        };
+        const withTarget = annotateSimulationPlayerActions(you, 'main', {
+            isActivePlayer: true,
+            targetPlayers: [you, opponentWithCreature],
+        });
+        expect(withTarget.zones.hand).toContainEqual(expect.objectContaining({
+            name: 'flame slash',
+            actionState: expect.objectContaining({
+                actionable: true,
+                options: expect.arrayContaining([
+                    expect.objectContaining({
+                        requiresTarget: true,
+                        targetTypes: ['creature'],
+                    }),
+                ]),
+            }),
+        }));
+    });
+
     test('Feature: Game simulation phase snapshots surface recoverable graveyard and exile actions.', () => {
         const recoverableFromGraveyard = [
             card('mountain', 2, { typeLine: 'Basic Land - Mountain' }),

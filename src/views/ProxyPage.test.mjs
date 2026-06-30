@@ -691,6 +691,13 @@ describe('Core Rendering', async () => {
         expect(component.ctx.simulationCardClasses(targetableCard, true)).toMatchObject({
             'simulation-card-targetable': true,
         });
+        expect(component.ctx.simulationCardClasses({
+            name: 'tapped otter token',
+            state: { tapped: true },
+            typeLine: 'Token Creature - Otter',
+        })).toMatchObject({
+            'simulation-card-tapped': true,
+        });
         component.data.simulationPendingAction = null;
     });
 

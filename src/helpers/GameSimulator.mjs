@@ -202,6 +202,53 @@ function manaAbilityChoicesFromOracle(card) {
     return abilities;
 }
 
+function battlefieldCardsFromZones(zones = {}) {
+    return [
+        ...(zones.battlefield?.creatures ?? []),
+        ...(zones.battlefield?.lands ?? []),
+        ...(zones.battlefield?.nonCreaturePermanents ?? []),
+    ];
+}
+
+function targetCandidatesFromSummaryPlayers(players = []) {
+    return {
+        cards: players.flatMap(player => {
+            return battlefieldCardsFromZones(player.zones ?? {}).map(card => {
+                return {
+                    card,
+                    playerKey: player.key,
+                };
+            });
+        }),
+        players: players.map(player => {
+            return {
+                key: player.key,
+                name: player.name,
+            };
+        }),
+    };
+}
+
+function targetCandidatesFromPlayerStates(players = [], playerStates = new Map()) {
+    return {
+        cards: players.flatMap(player => {
+            const playerState = playerStates.get(player.key);
+            return battlefieldCardsFromZones(playerState?.zones ?? {}).map(card => {
+                return {
+                    card,
+                    playerKey: player.key,
+                };
+            });
+        }),
+        players: players.map(player => {
+            return {
+                key: player.key,
+                name: player.name,
+            };
+        }),
+    };
+}
+
 export function manaAbilitiesForCard(card) {
     if (card?.state?.tapped) {
         return [];
@@ -531,6 +578,33 @@ function damageTargetProfile(card) {
     };
 }
 
+function cardMatchesTargetTypes(card, targetTypes = []) {
+    const typeLine = typeLineOf(card);
+    return (targetTypes.includes('creature') && /\bcreature\b/i.test(typeLine)) ||
+        (targetTypes.includes('artifact') && /\bartifact\b/i.test(typeLine)) ||
+        (targetTypes.includes('planeswalker') && /\bplaneswalker\b/i.test(typeLine)) ||
+        (targetTypes.includes('battle') && /\bbattle\b/i.test(typeLine)) ||
+        targetTypes.includes('permanent');
+}
+
+function hasValidTarget(targetProfile, context) {
+    if (!targetProfile.requiresTarget) {
+        return true;
+    }
+
+    const targetTypes = targetProfile.targetTypes ?? [];
+    if (
+        targetTypes.includes('player') &&
+        (context.targetCandidates?.players?.length ?? 0) > 0
+    ) {
+        return true;
+    }
+
+    return (context.targetCandidates?.cards ?? []).some(candidate => {
+        return cardMatchesTargetTypes(candidate.card ?? candidate, targetTypes);
+    });
+}
+
 function actionOption(card, label, kind, sourceZone, extra = {}) {
     return {
         id: `${kind}:${sourceZone}:${card.id ?? card.name}`,
@@ -561,6 +635,7 @@ function buildActionContext(playerState, phase, options = {}) {
         manaPool,
         manaSources,
         phase,
+        targetCandidates: options.targetCandidates ?? { cards: [], players: [] },
     };
 }
 
@@ -594,6 +669,9 @@ function cardActionState(card, context, zone) {
         } else if (!isLand(card) && canCastInPhase(card, context)) {
             const label = isInstant(card) ? 'Cast instant' : 'Cast';
             const targetProfile = damageTargetProfile(card);
+            if (!hasValidTarget(targetProfile, context)) {
+                return null;
+            }
             const paymentOptions = findManaPaymentOptions(
                 manaCostOf(card) || `{${card.manaValue ?? 0}}`,
                 context.manaPool,
@@ -610,10 +688,14 @@ function cardActionState(card, context, zone) {
     }
 
     if (zone === 'graveyard' && canUseFromGraveyard(card) && canCastInPhase(card, context)) {
+        const targetProfile = damageTargetProfile(card);
+        if (!hasValidTarget(targetProfile, context)) {
+            return null;
+        }
         const paymentOptions = findManaPaymentOptions(manaCostOf(card) || `{${card.manaValue ?? 0}}`, context.manaPool, context.manaSources);
         actions.push('Use from graveyard');
         options.push(actionOption(card, 'Use from graveyard', 'cast', 'graveyard', {
-            ...damageTargetProfile(card),
+            ...targetProfile,
             manaCost: manaCostOf(card),
             paymentOptions,
             requiresPayment: paymentOptions.some(payment => payment.sources.length > 0),
@@ -621,10 +703,14 @@ function cardActionState(card, context, zone) {
     }
 
     if (zone === 'exile' && canUseFromExile(card) && canCastInPhase(card, context)) {
+        const targetProfile = damageTargetProfile(card);
+        if (!hasValidTarget(targetProfile, context)) {
+            return null;
+        }
         const paymentOptions = findManaPaymentOptions(manaCostOf(card) || `{${card.manaValue ?? 0}}`, context.manaPool, context.manaSources);
         actions.push('Use from exile');
         options.push(actionOption(card, 'Use from exile', 'cast', 'exile', {
-            ...damageTargetProfile(card),
+            ...targetProfile,
             manaCost: manaCostOf(card),
             paymentOptions,
             requiresPayment: paymentOptions.some(payment => payment.sources.length > 0),
@@ -799,13 +885,18 @@ function summaryZonesToMutableZones(zones = {}) {
 export function annotateSimulationPlayerActions(player, phase, options = {}) {
     const mutableZones = summaryZonesToMutableZones(player.zones);
     const hand = expandGroupedCards(player.zones?.hand ?? []);
+    const targetCandidates = options.targetCandidates ??
+        targetCandidatesFromSummaryPlayers(options.targetPlayers ?? [player]);
     const state = {
         hand,
         landPlaysAvailable: player.zones?.landPlaysAvailable ?? 0,
         manaPool: normalizeManaPool(player.zones?.manaPool),
         zones: mutableZones,
     };
-    const actionContext = buildActionContext(state, phase, options);
+    const actionContext = buildActionContext(state, phase, {
+        ...options,
+        targetCandidates,
+    });
 
     return {
         ...player,
@@ -880,7 +971,11 @@ function withStepMetadata(step, playerState) {
 
 function buildPhaseStep(basePlayers, playerStates, activePlayer, turn, phase) {
     const activeState = playerStates.get(activePlayer.key);
-    const actionContext = buildActionContext(activeState, phase, { isActivePlayer: true });
+    const targetCandidates = targetCandidatesFromPlayerStates(basePlayers, playerStates);
+    const actionContext = buildActionContext(activeState, phase, {
+        isActivePlayer: true,
+        targetCandidates,
+    });
 
     const step = {
         actionContext,
@@ -891,6 +986,7 @@ function buildPhaseStep(basePlayers, playerStates, activePlayer, turn, phase) {
             const playerState = playerStates.get(player.key);
             const playerActionContext = buildActionContext(playerState, phase, {
                 isActivePlayer: player.key === activePlayer.key,
+                targetCandidates,
             });
             return buildPlayerSummary(
                 player,
