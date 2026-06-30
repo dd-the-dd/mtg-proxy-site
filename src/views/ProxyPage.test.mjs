@@ -467,6 +467,8 @@ describe('Core Rendering', async () => {
 
         expect(wrapper.findAll('.simulation-player-lane')).toHaveLength(1);
         expect(wrapper.find('.simulation-board-area-two-player').exists()).toBe(true);
+        expect(wrapper.find('.simulation-board-viewport').classes()).toContain('simulation-board-viewport-compact');
+        expect(wrapper.find('.simulation-phase-bar').classes()).toContain('simulation-phase-bar-compact');
         expect(wrapper.findAll('.simulation-player-board')).toHaveLength(2);
         expect(wrapper.find('.simulation-hand-zone .simulation-section-title').exists()).toBe(false);
         expect(wrapper.find('.simulation-battlefield-zone').exists()).toBe(true);

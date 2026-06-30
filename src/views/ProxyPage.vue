@@ -668,6 +668,7 @@
           <div
             v-if="activeSimulationStep"
             class="simulation-phase-bar"
+            :class="{ 'simulation-phase-bar-compact': simulationPlayerLanes.length === 1 }"
           >
             <div
               id="simulation-current-step"
@@ -714,7 +715,10 @@
           </div>
 
           <div v-else-if="gameSimulation" class="simulation-board">
-            <div class="simulation-board-viewport">
+            <div
+              class="simulation-board-viewport"
+              :class="{ 'simulation-board-viewport-compact': simulationPlayerLanes.length === 1 }"
+            >
               <div
                 class="simulation-board-area"
                 :class="{ 'simulation-board-area-two-player': simulationPlayerLanes.length === 1 }"
@@ -4442,7 +4446,7 @@ export default {
 
 .game-simulation {
     display: grid;
-    gap: 0.75rem;
+    gap: 0.45rem;
 }
 
 .simulation-toolbar {
@@ -4451,13 +4455,25 @@ export default {
     border: 1px solid #dadee4;
     border-radius: 4px;
     display: grid;
-    gap: 0.5rem;
-    grid-template-columns: minmax(11rem, 1fr) repeat(5, minmax(4.4rem, 6rem)) minmax(7.5rem, auto) auto;
-    padding: 0.55rem;
+    gap: 0.35rem;
+    grid-template-columns: minmax(10rem, 1fr) repeat(5, minmax(4.1rem, 5.6rem)) minmax(6.8rem, auto) auto;
+    padding: 0.4rem;
 }
 
 .simulation-control {
+    font-size: 0.68rem;
     margin: 0;
+}
+
+.simulation-toolbar .form-select,
+.simulation-toolbar .form-input {
+    font-size: 0.68rem;
+    min-height: 1.55rem;
+}
+
+.simulation-toolbar input[type="range"] {
+    height: 1.35rem;
+    padding: 0;
 }
 
 .simulation-control-compact {
@@ -4469,17 +4485,23 @@ export default {
 }
 
 .simulation-switch {
+    font-size: 0.68rem;
     margin-bottom: 0.25rem;
 }
 
 .simulation-player-settings {
     display: grid;
-    gap: 0.35rem;
+    gap: 0.25rem;
     grid-column: 1 / -1;
-    grid-template-columns: repeat(auto-fit, minmax(5.6rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(4.8rem, 1fr));
 }
 
 .simulation-player-role-label {
+    align-items: center;
+    display: grid;
+    font-size: 0.66rem;
+    gap: 0.22rem;
+    grid-template-columns: auto minmax(0, 1fr);
     margin: 0;
 }
 
@@ -4498,6 +4520,19 @@ export default {
     padding: 0.4rem 0.5rem;
 }
 
+.simulation-phase-bar-compact {
+    gap: 0.28rem;
+    grid-template-columns: minmax(7rem, auto) minmax(0, 1fr) auto;
+    padding: 0.22rem 0.38rem;
+}
+
+.simulation-phase-bar-compact .simulation-next-step {
+    font-size: 0.68rem;
+    height: 1.5rem;
+    line-height: 1;
+    padding: 0.12rem 0.45rem;
+}
+
 .simulation-current-step {
     color: #101828;
     font-size: 0.78rem;
@@ -4508,6 +4543,14 @@ export default {
     color: #475467;
     font-size: 0.68rem;
     font-weight: 700;
+}
+
+.simulation-phase-bar-compact .simulation-current-step {
+    font-size: 0.72rem;
+}
+
+.simulation-phase-bar-compact .simulation-current-actions {
+    font-size: 0.64rem;
 }
 
 .simulation-next-step {
@@ -4558,7 +4601,7 @@ export default {
 
 .simulation-board {
     display: grid;
-    gap: 0.75rem;
+    gap: 0.45rem;
 }
 
 .simulation-board-viewport {
@@ -4571,8 +4614,15 @@ export default {
     padding: 0.45rem;
 }
 
+.simulation-board-viewport-compact {
+    height: clamp(23rem, 58vh, 31rem);
+    min-height: 0;
+    padding: 0.32rem;
+}
+
 .simulation-board-area {
     --simulation-card-width: 4.6rem;
+    --simulation-hand-card-width: 3.4rem;
     --simulation-zone-card-width: 2.5rem;
 
     align-items: stretch;
@@ -4584,8 +4634,9 @@ export default {
 }
 
 .simulation-board-area-two-player {
-    --simulation-card-width: clamp(3.85rem, 5.35vw, 5.2rem);
-    --simulation-zone-card-width: clamp(2rem, 2.7vw, 2.45rem);
+    --simulation-card-width: clamp(3.85rem, 4.85vw, 4.8rem);
+    --simulation-hand-card-width: clamp(2.65rem, 3.25vw, 3.2rem);
+    --simulation-zone-card-width: clamp(1.72rem, 2.15vw, 2.05rem);
 
     min-width: 0;
     width: 100%;
@@ -4599,6 +4650,7 @@ export default {
 }
 
 .simulation-board-area-two-player .simulation-player-lane {
+    gap: 0.2rem;
     min-width: 0;
     width: 100%;
 }
@@ -4617,6 +4669,12 @@ export default {
     min-height: 12.4rem;
     min-width: 0;
     padding: 0.36rem;
+}
+
+.simulation-board-area-two-player .simulation-player-board {
+    gap: 0.22rem;
+    min-height: 0;
+    padding: 0.28rem;
 }
 
 .simulation-player-board-bottom {
@@ -4657,6 +4715,14 @@ export default {
     line-height: 1;
     min-width: 1.7rem;
     padding: 0 0.34rem;
+}
+
+.simulation-board-area-two-player .simulation-life-total {
+    border-width: 1px;
+    font-size: 0.7rem;
+    height: 1.38rem;
+    min-width: 1.38rem;
+    padding: 0 0.28rem;
 }
 
 .simulation-life-total-targetable {
@@ -4774,6 +4840,13 @@ export default {
 .simulation-hand-card-row,
 .simulation-permanent-row {
     align-content: flex-start;
+}
+
+.simulation-hand-card-row {
+    min-height: calc(var(--simulation-hand-card-width) * 1.397);
+}
+
+.simulation-permanent-row {
     min-height: calc(var(--simulation-card-width) * 1.397);
 }
 
@@ -4811,6 +4884,10 @@ export default {
     padding: 0.24rem;
 }
 
+.simulation-board-area-two-player .simulation-hand-zone {
+    padding: 0.18rem;
+}
+
 .simulation-hand-and-stacks {
     align-items: stretch;
     display: grid;
@@ -4836,6 +4913,13 @@ export default {
     aspect-ratio: 63 / 88;
     border-radius: 4px;
     position: relative;
+}
+
+.simulation-hand-card {
+    width: var(--simulation-hand-card-width);
+}
+
+.simulation-permanent-card {
     width: var(--simulation-card-width);
 }
 
@@ -4849,6 +4933,10 @@ export default {
     .simulation-permanent-card:hover {
         z-index: 3;
     }
+}
+
+.simulation-board-area-two-player .simulation-hand-card + .simulation-hand-card {
+    margin-left: calc(var(--simulation-hand-card-width) * -0.34);
 }
 
 .simulation-hand-card-virtual {
