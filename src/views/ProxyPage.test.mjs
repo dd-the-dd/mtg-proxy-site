@@ -299,6 +299,7 @@ describe('Core Rendering', async () => {
         component.data.config.simulationTurnCount = 2;
         component.data.config.simulationPlayerCount = 4;
         component.data.config.simulationPlayerRoles = ['human', 'ai', 'human', 'ai'];
+        component.data.config.simulationPlayerDeckIds = ['current', 'izzet-meta', 'aggro-meta', 'current'];
         component.data.config.simulationShowOpponentHands = false;
         component.data.config.simulationSpeed = 'fast';
         component.data.config.simulationBoardZoom = 1.1;
@@ -357,6 +358,21 @@ describe('Core Rendering', async () => {
                     ],
                 },
             },
+            {
+                id: 'aggro-meta',
+                name: 'Aggro Meta',
+                state: {
+                    cards: [
+                        {
+                            quantity: 8,
+                            name: 'forest',
+                            selectedOption: {
+                                typeLine: 'Basic Land - Forest',
+                            },
+                        },
+                    ],
+                },
+            },
         ];
 
         await wrapper.vm.$nextTick();
@@ -365,9 +381,25 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#simulation-matchup').element.value).toBe('izzet-meta');
         expect(wrapper.find('#simulation-player-count').element.value).toBe('4');
         expect(wrapper.findAll('.simulation-player-role')).toHaveLength(4);
+        expect(wrapper.findAll('.simulation-player-deck')).toHaveLength(4);
+        expect(wrapper.findAll('.simulation-player-deck').map(select => select.element.value)).toEqual([
+            'current',
+            'izzet-meta',
+            'aggro-meta',
+            'current',
+        ]);
         expect(wrapper.find('#simulation-show-opponent-hands').element.checked).toBe(false);
         expect(wrapper.find('#simulation-speed').element.value).toBe('fast');
         expect(wrapper.find('#simulation-board-zoom').element.value).toBe('1.1');
+        expect(component.proxy.gameSimulation.playerList[1].zones.hand).toContainEqual(expect.objectContaining({
+            name: 'island',
+        }));
+        expect(component.proxy.gameSimulation.playerList[2].zones.hand).toContainEqual(expect.objectContaining({
+            name: 'forest',
+        }));
+        expect(component.proxy.gameSimulation.playerList[3].zones.hand).toContainEqual(expect.objectContaining({
+            name: 'mountain',
+        }));
         expect(wrapper.findAll('.simulation-player-board')).toHaveLength(4);
         expect(wrapper.findAll('.simulation-player-lane')).toHaveLength(2);
         expect(wrapper.findAll('.simulation-battlefield-lands').every(zone => {
@@ -405,6 +437,7 @@ describe('Core Rendering', async () => {
 
         component.data.config.activeWorkspaceTab = 'cards';
         component.data.metaDeckStates = [];
+        component.data.config.simulationPlayerDeckIds = [];
         component.data.config.decklist = '4 Wild Nacatl';
         await component.ctx.loadCardList();
     });

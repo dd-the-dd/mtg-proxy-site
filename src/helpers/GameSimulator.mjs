@@ -1162,11 +1162,12 @@ function applySimpleMainPhase(playerState, options = {}) {
 function buildPlayerConfig(index, options = {}) {
     const key = index === 0 ? 'you' : index === 1 ? 'opponent' : `opponent-${index}`;
     const opponentName = options.opponentName ?? 'Meta deck';
-    const name = index === 0
+    const fallbackName = index === 0
         ? 'You'
         : index === 1
             ? opponentName
             : `${opponentName} ${index}`;
+    const name = options.playerDeckNames?.[index] ?? fallbackName;
 
     return {
         key,
@@ -1180,7 +1181,7 @@ function buildPlayers(currentDeck, opponentDeck, options = {}) {
 
     return Array.from({ length: playerCount }, (_, index) => {
         const config = buildPlayerConfig(index, options);
-        const deck = index === 0 ? currentDeck : opponentDeck;
+        const deck = options.playerDecks?.[index] ?? (index === 0 ? currentDeck : opponentDeck);
         const expandedDeck = expandDeckCards(deck);
         const library = options.shuffle === false
             ? expandedDeck

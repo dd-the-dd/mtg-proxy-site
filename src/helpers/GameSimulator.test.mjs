@@ -617,4 +617,39 @@ describe('GameSimulator', () => {
             matchupName: 'Izzet Mirror',
         });
     });
+
+    test('Feature: Game simulation can assign a distinct deck to each player.', () => {
+        const currentDeck = [
+            card('mountain', 8, { typeLine: 'Basic Land - Mountain' }),
+        ];
+        const controlDeck = [
+            card('island', 8, { typeLine: 'Basic Land - Island' }),
+        ];
+        const aggroDeck = [
+            card('forest', 8, { typeLine: 'Basic Land - Forest' }),
+        ];
+
+        const simulation = buildGameSimulation(currentDeck, controlDeck, {
+            playerCount: 3,
+            playerDeckNames: ['Current Deck', 'Control Meta', 'Aggro Meta'],
+            playerDecks: [currentDeck, controlDeck, aggroDeck],
+            shuffle: false,
+            turnCount: 1,
+        });
+
+        expect(simulation.playerList.map(player => player.name)).toEqual([
+            'Current Deck',
+            'Control Meta',
+            'Aggro Meta',
+        ]);
+        expect(simulation.playerList[0].zones.hand).toContainEqual(expect.objectContaining({
+            name: 'mountain',
+        }));
+        expect(simulation.playerList[1].zones.hand).toContainEqual(expect.objectContaining({
+            name: 'island',
+        }));
+        expect(simulation.playerList[2].zones.hand).toContainEqual(expect.objectContaining({
+            name: 'forest',
+        }));
+    });
 });

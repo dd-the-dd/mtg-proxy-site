@@ -642,7 +642,7 @@
               id="simulation-reroll"
               type="button"
               class="btn btn-primary simulation-reroll"
-              :disabled="cards.length === 0 || simulationMetaDeckStates.length === 0"
+              :disabled="!gameSimulation"
               @click="rerollSimulation"
             >
               Simulate
@@ -654,6 +654,28 @@
                 class="form-label simulation-player-role-label"
               >
                 P{{ index + 1 }}
+                <select
+                  class="form-select select simulation-player-deck"
+                  :value="simulationPlayerDeckId(index)"
+                  @change="setSimulationPlayerDeckId(index, $event.target.value)"
+                >
+                  <option
+                    v-if="index > 0"
+                    value=""
+                  >
+                    Matchup
+                  </option>
+                  <option value="current">
+                    Current deck
+                  </option>
+                  <option
+                    v-for="session in simulationMetaDeckStates"
+                    :key="`simulation-player-${index}-deck-${session.id}`"
+                    :value="session.id"
+                  >
+                    {{ session.name }}
+                  </option>
+                </select>
                 <select
                   class="form-select select simulation-player-role"
                   v-model="config.simulationPlayerRoles[index]"
@@ -673,11 +695,11 @@
           </div>
 
           <div
-            v-if="!selectedSimulationMetaDeck"
+            v-if="!gameSimulation"
             class="empty simulation-empty"
           >
             <p class="empty-title h5">
-              Tag a local session as a meta deck to run a matchup simulation.
+              Load a deck or choose player decks to run a matchup simulation.
             </p>
           </div>
 
@@ -1942,6 +1964,7 @@ function createDefaultConfig() {
         analysisMatchupSessionId: "all",
         activeWorkspaceTab: "cards",
         simulationMatchupSessionId: "",
+        simulationPlayerDeckIds: ["current", "", "", "", "", ""],
         simulationPlayerCount: 2,
         simulationPlayerRoles: ["human", "ai", "ai", "ai", "ai", "ai"],
         simulationShowOpponentHands: false,
@@ -2303,16 +2326,27 @@ export default {
             const count = Math.max(2, Math.min(Number(this.config.simulationPlayerCount ?? 2), 6));
             return Array.from({ length: count }, (_, index) => index);
         },
+        simulationPlayerDeckSelections() {
+            return this.simulationPlayerSlots.map(index => {
+                return this.simulationDeckSelectionForPlayer(index);
+            });
+        },
         gameSimulation() {
-            if (this.cards.length === 0 || !this.selectedSimulationMetaDeck) {
+            const playerDeckSelections = this.simulationPlayerDeckSelections;
+            if (
+                playerDeckSelections.length === 0 ||
+                playerDeckSelections.some(selection => (selection.cards ?? []).length === 0)
+            ) {
                 return null;
             }
 
             return buildGameSimulation(
-                this.cards,
-                this.selectedSimulationMetaDeck.state?.cards ?? [],
+                playerDeckSelections[0].cards,
+                playerDeckSelections[1]?.cards ?? [],
                 {
-                    opponentName: this.selectedSimulationMetaDeck.name,
+                    opponentName: playerDeckSelections[1]?.name ?? this.selectedSimulationMetaDeck?.name ?? 'Meta deck',
+                    playerDeckNames: playerDeckSelections.map(selection => selection.name),
+                    playerDecks: playerDeckSelections.map(selection => selection.cards),
                     playerCount: this.config.simulationPlayerCount,
                     playerRoles: this.config.simulationPlayerRoles,
                     seed: this.config.simulationSeed,
@@ -2592,6 +2626,52 @@ export default {
             this.expandedSimulationZones = {
                 ...this.expandedSimulationZones,
                 [key]: !this.expandedSimulationZones[key],
+            };
+        },
+        simulationPlayerDeckId(index) {
+            const selectedId = this.config.simulationPlayerDeckIds?.[index];
+            if (selectedId) {
+                return selectedId;
+            }
+
+            return index === 0 ? 'current' : '';
+        },
+        setSimulationPlayerDeckId(index, value) {
+            const deckIds = [...(this.config.simulationPlayerDeckIds ?? [])];
+            while (deckIds.length <= index) {
+                deckIds.push('');
+            }
+            deckIds[index] = value;
+            this.config.simulationPlayerDeckIds = deckIds;
+            this.config.simulationStepIndex = 0;
+            this.resetSimulationRuntime();
+        },
+        simulationDeckSelectionForPlayer(index) {
+            const deckId = this.simulationPlayerDeckId(index);
+            if (deckId === 'current') {
+                return {
+                    cards: this.cards,
+                    id: 'current',
+                    name: index === 0 ? 'You' : 'Current deck',
+                };
+            }
+
+            const selectedSession = this.simulationMetaDeckStates.find(session => {
+                return session.id === deckId;
+            }) ?? (index > 0 ? this.selectedSimulationMetaDeck : null);
+
+            if (selectedSession) {
+                return {
+                    cards: selectedSession.state?.cards ?? [],
+                    id: selectedSession.id,
+                    name: selectedSession.name,
+                };
+            }
+
+            return {
+                cards: this.cards,
+                id: 'current',
+                name: index === 0 ? 'You' : 'Current deck',
             };
         },
         visibleSimulationHandCards(player) {
@@ -4264,6 +4344,7 @@ export default {
                 return Number.isFinite(count) && count >= 2 ? count : 2;
             });
             this.config.simulationPlayerRoles = createDefaultConfig().simulationPlayerRoles;
+            this.config.simulationPlayerDeckIds = createDefaultConfig().simulationPlayerDeckIds;
             this.config.simulationShowOpponentHands = bindStorage('simulationShowOpponentHands', (v) => v === "true");
             this.config.simulationSeed = bindStorage('simulationSeed', (v) => {
                 const seed = Number(v);
@@ -4782,7 +4863,7 @@ export default {
     display: grid;
     gap: 0.25rem;
     grid-column: 1 / -1;
-    grid-template-columns: repeat(auto-fit, minmax(4.8rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
 }
 
 .simulation-player-role-label {
@@ -4790,7 +4871,7 @@ export default {
     display: grid;
     font-size: 0.66rem;
     gap: 0.22rem;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(5.4rem, 1fr) minmax(4.2rem, 0.65fr);
     margin: 0;
 }
 
