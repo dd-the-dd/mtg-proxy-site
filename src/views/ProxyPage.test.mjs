@@ -483,6 +483,82 @@ describe('Core Rendering', async () => {
         component.data.config.decklist = '';
     });
 
+    test('Feature: Simulation board advances phase snapshots and highlights available actions.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationMatchupSessionId = 'phase-meta';
+        component.data.config.simulationSeed = 1;
+        component.data.config.simulationTurnCount = 1;
+        component.data.config.simulationPlayerCount = 2;
+        component.data.config.simulationPlayerRoles = ['human', 'ai'];
+        component.data.config.simulationStepIndex = 0;
+        component.data.cards = [
+            {
+                quantity: 4,
+                name: 'mountain',
+                selectedOption: {
+                    typeLine: 'Basic Land - Mountain',
+                    urlFront: 'mountain-front',
+                },
+            },
+            {
+                quantity: 4,
+                name: 'burst lightning',
+                selectedOption: {
+                    manaValue: 1,
+                    manaCost: '{R}',
+                    typeLine: 'Instant',
+                    oracleText: 'Burst Lightning deals 2 damage to any target.',
+                    urlFront: 'burst-front',
+                },
+            },
+        ];
+        component.data.metaDeckStates = [
+            {
+                id: 'phase-meta',
+                name: 'Izzet Mirror',
+                state: {
+                    cards: [
+                        {
+                            quantity: 4,
+                            name: 'island',
+                            selectedOption: {
+                                typeLine: 'Basic Land - Island',
+                            },
+                        },
+                        {
+                            quantity: 4,
+                            name: 'opt',
+                            selectedOption: {
+                                manaValue: 1,
+                                typeLine: 'Instant',
+                            },
+                        },
+                    ],
+                },
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('#simulation-current-step').text()).toContain('T1 You / Upkeep');
+        expect(component.proxy.activeSimulationStep.players.find(player => player.key === 'you').zones.handCount).toBe(7);
+
+        await wrapper.find('#simulation-next-step').trigger('click');
+        expect(wrapper.find('#simulation-current-step').text()).toContain('Draw');
+
+        await wrapper.find('#simulation-next-step').trigger('click');
+        expect(wrapper.find('#simulation-current-step').text()).toContain('Main');
+        expect(wrapper.find('.simulation-card-actionable').exists()).toBe(true);
+
+        component.data.config.activeWorkspaceTab = 'cards';
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.config.decklist = '';
+        component.data.config.simulationStepIndex = 0;
+    });
+
     test('Feature: Analysis mode exposes meta removal action rows for damage and blocked targets.', async () => {
         const component = wrapper.getCurrentComponent();
         const shock = {

@@ -666,6 +666,35 @@
           </div>
 
           <div
+            v-if="activeSimulationStep"
+            class="simulation-phase-bar"
+          >
+            <div
+              id="simulation-current-step"
+              class="simulation-current-step"
+            >
+              T{{ activeSimulationStep.turn }}
+              {{ activeSimulationStep.playerName }} /
+              {{ phaseLabel(activeSimulationStep.phase) }}
+            </div>
+            <div class="simulation-current-actions">
+              Mana {{ activeSimulationStep.actionContext.availableMana }}
+              <span v-if="activeSimulationStep.actionContext.canPlayLand">
+                / land available
+              </span>
+            </div>
+            <button
+              id="simulation-next-step"
+              type="button"
+              class="btn simulation-next-step"
+              :disabled="isLastSimulationStep"
+              @click="advanceSimulationStep"
+            >
+              Next step
+            </button>
+          </div>
+
+          <div
             v-if="!selectedSimulationMetaDeck"
             class="empty simulation-empty"
           >
@@ -710,7 +739,8 @@
                             v-for="card in visibleSimulationHandCards(seat.player)"
                             :key="`simulation-hand-${seat.player.key}-${card.name}-${card.sourceZone ?? 'hand'}`"
                             class="simulation-hand-card"
-                            :class="{ 'simulation-hand-card-virtual': card.sourceZone }"
+                            :class="simulationCardClasses(card)"
+                            :title="simulationCardActionTitle(card)"
                           >
                             <ImageLoader
                               class="simulation-hand-card-image"
@@ -721,7 +751,7 @@
                               @mouseleave="hideCardPreview"
                             />
                             <span class="simulation-card-count">{{ card.quantity }}x</span>
-                            <span v-if="card.sourceZone" class="simulation-source-zone">{{ card.sourceZone }}</span>
+                            <span v-if="card.sourceZone" class="simulation-source-zone">{{ simulationSourceZoneLabel(card.sourceZone) }}</span>
                           </div>
                         </div>
                       </div>
@@ -805,6 +835,8 @@
                             v-for="card in seat.player.zones[zone].cards"
                             :key="`simulation-zone-card-${seat.player.key}-${zone}-${card.name}`"
                             class="simulation-mini-card"
+                            :class="simulationCardClasses(card)"
+                            :title="simulationCardActionTitle(card)"
                           >
                             <ImageLoader
                               class="simulation-mini-card-image"
@@ -831,6 +863,8 @@
                           v-for="card in seat.player.zones.battlefield.creatures"
                           :key="`simulation-creature-${seat.player.key}-${card.name}`"
                           class="simulation-permanent-card"
+                          :class="simulationCardClasses(card)"
+                          :title="simulationCardActionTitle(card)"
                         >
                           <ImageLoader
                             class="simulation-permanent-image"
@@ -855,6 +889,8 @@
                             v-for="card in seat.player.zones.battlefield.lands"
                             :key="`simulation-land-${seat.player.key}-${card.name}`"
                             class="simulation-permanent-card simulation-permanent-card-land"
+                            :class="simulationCardClasses(card)"
+                            :title="simulationCardActionTitle(card)"
                           >
                             <ImageLoader
                               class="simulation-permanent-image"
@@ -877,6 +913,8 @@
                             v-for="card in seat.player.zones.battlefield.nonCreaturePermanents"
                             :key="`simulation-noncreature-${seat.player.key}-${card.name}`"
                             class="simulation-permanent-card simulation-permanent-card-noncreature"
+                            :class="simulationCardClasses(card)"
+                            :title="simulationCardActionTitle(card)"
                           >
                             <ImageLoader
                               class="simulation-permanent-image"
@@ -1822,6 +1860,7 @@ function createDefaultConfig() {
         simulationShowOpponentHands: false,
         simulationSeed: 1,
         simulationSpeed: "normal",
+        simulationStepIndex: 0,
         simulationTurnCount: 2,
         simulationBoardZoom: 1,
         comboPieceConfigOpen: false,
@@ -2190,8 +2229,27 @@ export default {
                 },
             );
         },
+        activeSimulationStepIndex() {
+            const steps = this.gameSimulation?.phaseSteps ?? [];
+            if (steps.length === 0) {
+                return 0;
+            }
+
+            const index = Number(this.config.simulationStepIndex);
+            return Math.max(0, Math.min(Number.isFinite(index) ? index : 0, steps.length - 1));
+        },
+        activeSimulationStep() {
+            return this.gameSimulation?.phaseSteps?.[this.activeSimulationStepIndex] ?? null;
+        },
+        isLastSimulationStep() {
+            const steps = this.gameSimulation?.phaseSteps ?? [];
+            return steps.length === 0 || this.activeSimulationStepIndex >= steps.length - 1;
+        },
+        simulationPlayerList() {
+            return this.activeSimulationStep?.players ?? this.gameSimulation?.playerList ?? [];
+        },
         simulationPlayerLanes() {
-            const players = this.gameSimulation?.playerList ?? [];
+            const players = this.simulationPlayerList;
             const lanes = [];
             for (let index = 0; index < players.length; index += 2) {
                 const laneIndex = Math.floor(index / 2);
@@ -2471,18 +2529,46 @@ export default {
         rerollSimulation() {
             const currentSeed = Number(this.config.simulationSeed);
             this.config.simulationSeed = Number.isFinite(currentSeed) ? currentSeed + 1 : 1;
+            this.config.simulationStepIndex = 0;
             this.recordSimulationHistory();
+        },
+        advanceSimulationStep() {
+            if (!this.isLastSimulationStep) {
+                this.config.simulationStepIndex = this.activeSimulationStepIndex + 1;
+            }
         },
         phaseLabel(phase) {
             const labels = {
-                upkeep: 'Upkeep',
-                draw: 'Draw',
-                main: 'Main',
+                attack: 'Attack',
+                blockers: 'Declare blockers',
                 combat: 'Combat',
-                end: 'End',
+                damageOrder: 'Damage order',
+                draw: 'Draw',
+                end: 'End phase',
+                main: 'Main',
+                secondMain: 'Second main',
+                upkeep: 'Upkeep',
             };
 
             return labels[phase] ?? phase;
+        },
+        simulationCardClasses(card) {
+            return {
+                'simulation-card-actionable': Boolean(card?.actionState?.actionable),
+                'simulation-card-source-exile': card?.sourceZone === 'exile',
+                'simulation-card-source-graveyard': card?.sourceZone === 'graveyard',
+                'simulation-hand-card-virtual': Boolean(card?.sourceZone),
+            };
+        },
+        simulationCardActionTitle(card) {
+            return card?.actionState?.actions?.join(', ') ?? '';
+        },
+        simulationSourceZoneLabel(sourceZone) {
+            return sourceZone === 'graveyard'
+                ? 'GY'
+                : sourceZone === 'exile'
+                    ? 'EX'
+                    : sourceZone;
         },
         formatSimulationOptions(options = []) {
             return options.map(option => {
@@ -3386,6 +3472,7 @@ export default {
                 return Number.isFinite(seed) && seed > 0 ? seed : 1;
             });
             this.config.simulationSpeed = bindStorage('simulationSpeed', (v) => v ?? "normal");
+            this.config.simulationStepIndex = 0;
             this.config.simulationTurnCount = bindStorage('simulationTurnCount', (v) => {
                 const count = Number(v);
                 return Number.isFinite(count) && count > 0 ? count : 2;
@@ -3893,6 +3980,33 @@ export default {
     margin-top: 0;
 }
 
+.simulation-phase-bar {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #d0d5dd;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.45rem;
+    grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) auto;
+    padding: 0.4rem 0.5rem;
+}
+
+.simulation-current-step {
+    color: #101828;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.simulation-current-actions {
+    color: #475467;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.simulation-next-step {
+    white-space: nowrap;
+}
+
 .simulation-board {
     display: grid;
     gap: 0.75rem;
@@ -4162,8 +4276,23 @@ export default {
 }
 
 .simulation-hand-card-virtual {
-    outline: 2px solid #f79009;
+    outline: 2px solid #7a5af8;
     outline-offset: 1px;
+}
+
+.simulation-card-source-graveyard {
+    outline-color: #7a5af8;
+}
+
+.simulation-card-source-exile {
+    outline-color: #f04438;
+}
+
+.simulation-card-actionable {
+    box-shadow:
+        0 0 0 2px #1570ef,
+        0 0 0 5px rgb(21 112 239 / 22%);
+    z-index: 2;
 }
 
 .simulation-hand-card-image,
@@ -4197,6 +4326,14 @@ export default {
     bottom: 0.18rem;
     left: 0.18rem;
     text-transform: uppercase;
+}
+
+.simulation-card-source-graveyard .simulation-source-zone {
+    background: #5925dc;
+}
+
+.simulation-card-source-exile .simulation-source-zone {
+    background: #b42318;
 }
 
 .simulation-state-badge {
@@ -4339,6 +4476,10 @@ export default {
 
 @media (max-width: 720px) {
     .simulation-toolbar {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .simulation-phase-bar {
         grid-template-columns: minmax(0, 1fr);
     }
 

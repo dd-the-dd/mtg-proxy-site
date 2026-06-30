@@ -120,6 +120,127 @@ describe('GameSimulator', () => {
         }));
     });
 
+    test('Feature: Game simulation phase snapshots start with seven cards and mark legal actions.', () => {
+        const currentDeck = [
+            card('mountain', 4, { typeLine: 'Basic Land - Mountain' }),
+            card('burst lightning', 4, {
+                manaValue: 1,
+                manaCost: '{R}',
+                typeLine: 'Instant',
+                oracleText: 'Burst Lightning deals 2 damage to any target.',
+            }),
+        ];
+        const metaDeck = [
+            card('island', 4, { typeLine: 'Basic Land - Island' }),
+            card('opt', 4, { manaValue: 1, manaCost: '{U}', typeLine: 'Instant' }),
+        ];
+
+        const simulation = buildGameSimulation(currentDeck, metaDeck, {
+            seed: 1,
+            shuffle: false,
+            turnCount: 1,
+        });
+        const firstStep = simulation.phaseSteps[0];
+        const mainStep = simulation.phaseSteps.find(step => {
+            return step.turn === 1 && step.playerKey === 'you' && step.phase === 'main';
+        });
+        const firstMainPlayer = mainStep.players.find(player => player.key === 'you');
+
+        expect(firstStep).toMatchObject({
+            turn: 1,
+            playerKey: 'you',
+            phase: 'upkeep',
+        });
+        expect(firstStep.players.find(player => player.key === 'you').zones.handCount).toBe(7);
+        expect(simulation.phaseSteps.map(step => step.phase)).toEqual(
+            expect.arrayContaining(['upkeep', 'draw', 'main', 'attack', 'blockers', 'damageOrder', 'secondMain', 'end']),
+        );
+        expect(firstMainPlayer.zones.playableHand).toContainEqual(expect.objectContaining({
+            name: 'mountain',
+            actionState: expect.objectContaining({
+                actionable: true,
+                color: 'blue',
+            }),
+        }));
+        expect(firstMainPlayer.zones.playableHand).toContainEqual(expect.objectContaining({
+            name: 'burst lightning',
+            actionState: expect.objectContaining({
+                actionable: true,
+                color: 'blue',
+            }),
+        }));
+    });
+
+    test('Feature: Game simulation phase snapshots surface recoverable graveyard and exile actions.', () => {
+        const recoverableFromGraveyard = [
+            card('mountain', 2, { typeLine: 'Basic Land - Mountain' }),
+            card('grave spark', 1, {
+                manaValue: 1,
+                manaCost: '{R}',
+                typeLine: 'Instant',
+                oracleText: 'Grave Spark deals 1 damage to any target. You may cast this card from your graveyard.',
+            }),
+            card('festival hopeful', 5, {
+                manaValue: 1,
+                typeLine: 'Creature - Human',
+            }),
+        ];
+        const recoverableFromExile = [
+            card('mountain', 2, { typeLine: 'Basic Land - Mountain' }),
+            card('exile spark', 1, {
+                manaValue: 1,
+                manaCost: '{R}',
+                typeLine: 'Instant',
+                oracleText: 'Exile Spark deals 1 damage to any target. Exile this card. You may cast this card from exile.',
+            }),
+            card('festival hopeful', 5, {
+                manaValue: 1,
+                typeLine: 'Creature - Human',
+            }),
+        ];
+        const metaDeck = [
+            card('island', 8, { typeLine: 'Basic Land - Island' }),
+        ];
+
+        const graveyardSimulation = buildGameSimulation(recoverableFromGraveyard, metaDeck, {
+            autoPlayActions: true,
+            seed: 1,
+            shuffle: false,
+            turnCount: 2,
+        });
+        const exileSimulation = buildGameSimulation(recoverableFromExile, metaDeck, {
+            autoPlayActions: true,
+            seed: 1,
+            shuffle: false,
+            turnCount: 2,
+        });
+        const graveyardMain = graveyardSimulation.phaseSteps.find(step => {
+            return step.turn === 2 && step.playerKey === 'you' && step.phase === 'main';
+        });
+        const exileMain = exileSimulation.phaseSteps.find(step => {
+            return step.turn === 2 && step.playerKey === 'you' && step.phase === 'main';
+        });
+        const graveyardPlayer = graveyardMain.players.find(player => player.key === 'you');
+        const exilePlayer = exileMain.players.find(player => player.key === 'you');
+
+        expect(graveyardPlayer.zones.playableHand).toContainEqual(expect.objectContaining({
+            name: 'grave spark',
+            sourceZone: 'graveyard',
+            actionState: expect.objectContaining({
+                actionable: true,
+                color: 'blue',
+            }),
+        }));
+        expect(exilePlayer.zones.playableHand).toContainEqual(expect.objectContaining({
+            name: 'exile spark',
+            sourceZone: 'exile',
+            actionState: expect.objectContaining({
+                actionable: true,
+                color: 'blue',
+            }),
+        }));
+    });
+
     test('Feature: Game simulation builds configurable players and visible board zones.', () => {
         const currentDeck = [
             card('mountain', 2, { typeLine: 'Basic Land - Mountain', urlFront: 'mountain-front' }),

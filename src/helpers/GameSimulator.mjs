@@ -52,6 +52,17 @@ function isPermanent(card) {
     return !isInstant(card) && !isSorcery(card);
 }
 
+const phaseSequence = [
+    'upkeep',
+    'draw',
+    'main',
+    'attack',
+    'blockers',
+    'damageOrder',
+    'secondMain',
+    'end',
+];
+
 function canUseFromGraveyard(card) {
     return /\b(?:cast|play|return)\b[^.]*\bfrom your graveyard\b/i.test(oracleTextOf(card)) ||
         /\b(?:flashback|jump-start|escape|disturb|aftermath)\b/i.test(oracleTextOf(card));
@@ -119,6 +130,7 @@ function groupCards(cards) {
             card.manaCost,
             card.typeLine,
             card.sourceZone ?? '',
+            JSON.stringify(card.actionState ?? null),
             stateKey(card),
         ].join(':');
         const current = groups.get(key);
@@ -162,16 +174,111 @@ function createMutableZones() {
     };
 }
 
-function zoneSummary(cards, sourceZone) {
+function isMainPhase(phase) {
+    return phase === 'main' || phase === 'secondMain';
+}
+
+function hasActivatedAbility(card) {
+    return /(?:^|\n)\s*(?:\{[^}]+}|[A-Z0-9, ]+)?[^.\n]*:\s+/i.test(oracleTextOf(card));
+}
+
+function buildActionContext(playerState, phase) {
+    const landOptions = playerState.hand.filter(isLand);
+    const landPlaysAvailable = playerState.landPlaysAvailable ?? 1;
+    const canPlayLand = isMainPhase(phase) && landPlaysAvailable > 0 && landOptions.length > 0;
+    const availableMana = playerState.zones.battlefield.lands.length;
+
+    return {
+        availableMana,
+        canPlayLand,
+        landPlaysAvailable,
+        manaForActions: availableMana + (canPlayLand ? 1 : 0),
+        phase,
+    };
+}
+
+function canCastInPhase(card, context) {
+    if (!context) {
+        return false;
+    }
+
+    if (isInstant(card)) {
+        return card.manaValue <= context.manaForActions;
+    }
+
+    if (!isMainPhase(context.phase)) {
+        return false;
+    }
+
+    return card.manaValue <= context.manaForActions;
+}
+
+function cardActionState(card, context, zone) {
+    if (!context) {
+        return null;
+    }
+
+    const actions = [];
+    if (zone === 'hand') {
+        if (isLand(card) && context.canPlayLand) {
+            actions.push('Play land');
+        } else if (!isLand(card) && canCastInPhase(card, context)) {
+            actions.push(isInstant(card) ? 'Cast instant' : 'Cast');
+        }
+    }
+
+    if (zone === 'graveyard' && canUseFromGraveyard(card) && canCastInPhase(card, context)) {
+        actions.push('Use from graveyard');
+    }
+
+    if (zone === 'exile' && canUseFromExile(card) && canCastInPhase(card, context)) {
+        actions.push('Use from exile');
+    }
+
+    if (zone === 'battlefield') {
+        if (
+            context.phase === 'attack' &&
+            isCreature(card) &&
+            !card.state?.tapped &&
+            !card.state?.summoningSick
+        ) {
+            actions.push('Attack');
+        }
+
+        if (hasActivatedAbility(card)) {
+            actions.push('Activate');
+        }
+    }
+
+    return actions.length > 0
+        ? {
+            actionable: true,
+            actions,
+            color: 'blue',
+        }
+        : null;
+}
+
+function withActionState(card, context, zone) {
+    const actionState = cardActionState(card, context, zone);
+    return actionState
+        ? {
+            ...card,
+            actionState,
+        }
+        : card;
+}
+
+function zoneSummary(cards, sourceZone, actionContext = null) {
     const recoverable = cards
         .filter(card => {
             return sourceZone === 'graveyard' ? canUseFromGraveyard(card) : canUseFromExile(card);
         })
         .map(card => {
-            return {
+            return withActionState({
                 ...card,
                 sourceZone,
-            };
+            }, actionContext, sourceZone);
         });
 
     return {
@@ -182,23 +289,33 @@ function zoneSummary(cards, sourceZone) {
     };
 }
 
-function finalizeZones(hand, library, mutableZones) {
-    const graveyard = zoneSummary(mutableZones.graveyard, 'graveyard');
-    const exile = zoneSummary(mutableZones.exile, 'exile');
+function finalizeZones(hand, library, mutableZones, actionContext = null) {
+    const graveyard = zoneSummary(mutableZones.graveyard, 'graveyard', actionContext);
+    const exile = zoneSummary(mutableZones.exile, 'exile', actionContext);
+    const actionableHand = hand.map(card => withActionState(card, actionContext, 'hand'));
+    const actionableCreatures = mutableZones.battlefield.creatures.map(card => {
+        return withActionState(card, actionContext, 'battlefield');
+    });
+    const actionableLands = mutableZones.battlefield.lands.map(card => {
+        return withActionState(card, actionContext, 'battlefield');
+    });
+    const actionableNonCreatures = mutableZones.battlefield.nonCreaturePermanents.map(card => {
+        return withActionState(card, actionContext, 'battlefield');
+    });
 
     return {
         battlefield: {
-            creatures: groupCards(mutableZones.battlefield.creatures),
-            lands: groupCards(mutableZones.battlefield.lands),
-            nonCreaturePermanents: groupCards(mutableZones.battlefield.nonCreaturePermanents),
+            creatures: groupCards(actionableCreatures),
+            lands: groupCards(actionableLands),
+            nonCreaturePermanents: groupCards(actionableNonCreatures),
         },
         exile,
         graveyard,
-        hand: groupCards(hand),
+        hand: groupCards(actionableHand),
         handCount: hand.length,
         libraryCount: library.length,
         playableHand: groupCards([
-            ...hand,
+            ...actionableHand,
             ...graveyard.recoverable,
             ...exile.recoverable,
         ]),
@@ -234,6 +351,44 @@ function buildMainPhaseStep(player, turn, playerState) {
         manaAfterLandPlay,
         castOptions: groupCards(playableCards),
         holdUpOptions: groupCards(playableCards.filter(isInstant)),
+    };
+}
+
+function buildPlayerSummary(player, playerState, actionContext = null) {
+    return {
+        key: player.key,
+        library: player.library,
+        libraryCount: Math.max(0, playerState.library.length - playerState.libraryIndex),
+        name: player.name,
+        openingHand: groupCards(player.openingHand),
+        role: player.role,
+        zones: finalizeZones(
+            playerState.hand,
+            playerState.library.slice(playerState.libraryIndex),
+            playerState.zones,
+            actionContext,
+        ),
+    };
+}
+
+function buildPhaseStep(basePlayers, playerStates, activePlayer, turn, phase) {
+    const activeState = playerStates.get(activePlayer.key);
+    const actionContext = buildActionContext(activeState, phase);
+
+    return {
+        actionContext,
+        phase,
+        playerKey: activePlayer.key,
+        playerName: activePlayer.name,
+        players: basePlayers.map(player => {
+            const playerState = playerStates.get(player.key);
+            return buildPlayerSummary(
+                player,
+                playerState,
+                player.key === activePlayer.key ? actionContext : null,
+            );
+        }),
+        turn,
     };
 }
 
@@ -393,6 +548,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
         ];
     }));
     const timeline = [];
+    const phaseSteps = [];
 
     for (let turn = 1; turn <= turnCount; turn += 1) {
         for (const player of basePlayers) {
@@ -405,6 +561,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
                 phase: 'upkeep',
                 note: 'No automatic upkeep actions in this first simulation pass.',
             });
+            phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'upkeep'));
 
             const skipsFirstDraw = turn === 1 && player.key === basePlayers[0].key;
             const drawnCard = skipsFirstDraw ? null : drawCard(playerState);
@@ -417,13 +574,16 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
                 drawnCard,
                 note: skipsFirstDraw ? 'Skipped first draw.' : '',
             });
+            phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'draw'));
 
             const mainStep = buildMainPhaseStep(player, turn, playerState);
+            phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'main'));
             const mainActions = applySimpleMainPhase(playerState, options);
             timeline.push({
                 ...mainStep,
                 ...mainActions,
             });
+            phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'attack'));
             timeline.push({
                 turn,
                 playerKey: player.key,
@@ -431,6 +591,9 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
                 phase: 'combat',
                 note: 'Combat choices are not resolved yet.',
             });
+            phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'blockers'));
+            phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'damageOrder'));
+            phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'secondMain'));
             timeline.push({
                 turn,
                 playerKey: player.key,
@@ -438,26 +601,13 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
                 phase: 'end',
                 holdUpOptions: buildMainPhaseStep(player, turn, playerState).holdUpOptions,
             });
+            phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'end'));
         }
     }
 
     const playerList = basePlayers.map(player => {
         const state = playerStates.get(player.key);
-        const libraryCount = Math.max(0, state.library.length - state.libraryIndex);
-
-        return {
-            key: player.key,
-            library: player.library,
-            libraryCount,
-            name: player.name,
-            openingHand: groupCards(player.openingHand),
-            role: player.role,
-            zones: finalizeZones(
-                state.hand,
-                state.library.slice(state.libraryIndex),
-                state.zones,
-            ),
-        };
+        return buildPlayerSummary(player, state);
     });
     const logLines = timeline.map(logLine);
 
@@ -470,6 +620,8 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
             seed,
             turnCount,
         },
+        phaseSequence,
+        phaseSteps,
         playerList,
         playerSeeds,
         seed,
