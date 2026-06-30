@@ -382,6 +382,10 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.simulation-zone-stack-graveyard').exists()).toBe(true);
         expect(wrapper.find('.simulation-zone-stack-exile').exists()).toBe(true);
         expect(wrapper.find('.simulation-zone-stack-empty').exists()).toBe(true);
+        expect(wrapper.find('.simulation-zone-stack-graveyard .simulation-zone-empty-card').exists()).toBe(true);
+        expect(wrapper.find('.simulation-zone-stack-exile .simulation-zone-empty-card').exists()).toBe(true);
+        expect(wrapper.find('.simulation-zone-stack-graveyard .simulation-zone-image').exists()).toBe(false);
+        expect(wrapper.find('.simulation-zone-stack-exile .simulation-zone-image').exists()).toBe(false);
         expect(wrapper.find('.simulation-zone-drawer').exists()).toBe(false);
         await wrapper.find('.simulation-zone-stack-graveyard').trigger('click');
         expect(wrapper.find('.simulation-zone-drawer').exists()).toBe(true);

@@ -747,12 +747,18 @@
                           @click="toggleSimulationZone(seat.player, 'graveyard')"
                         >
                           <ImageLoader
+                            v-if="seat.player.zones.graveyard.top"
                             class="simulation-zone-image"
                             :src="simulationCardImage(seat.player.zones.graveyard.top)"
                             placeholder="./card_back_border_crop.jpg"
                             alt="Graveyard"
                             @mouseenter="scheduleCardPreview(seat.player.zones.graveyard.top)"
                             @mouseleave="hideCardPreview"
+                          />
+                          <div
+                            v-else
+                            class="simulation-zone-empty-card"
+                            aria-label="Empty graveyard"
                           />
                           <span>GY {{ seat.player.zones.graveyard.count }}</span>
                         </button>
@@ -763,12 +769,18 @@
                           @click="toggleSimulationZone(seat.player, 'exile')"
                         >
                           <ImageLoader
+                            v-if="seat.player.zones.exile.top"
                             class="simulation-zone-image simulation-zone-image-exile"
                             :src="simulationCardImage(seat.player.zones.exile.top)"
                             placeholder="./card_back_border_crop.jpg"
                             alt="Exile"
                             @mouseenter="scheduleCardPreview(seat.player.zones.exile.top)"
                             @mouseleave="hideCardPreview"
+                          />
+                          <div
+                            v-else
+                            class="simulation-zone-empty-card"
+                            aria-label="Empty exile"
                           />
                           <span>EX {{ seat.player.zones.exile.count }}</span>
                         </button>
@@ -4002,6 +4014,19 @@ export default {
     aspect-ratio: 63 / 88;
     border-radius: 3px;
     object-fit: cover;
+    width: 2.5rem;
+}
+
+.simulation-zone-empty-card {
+    align-items: center;
+    aspect-ratio: 63 / 88;
+    background:
+        linear-gradient(135deg, rgb(255 255 255 / 0%) 45%, #e4e7ec 45%, #e4e7ec 55%, rgb(255 255 255 / 0%) 55%),
+        #f8f9fa;
+    border: 1px dashed #98a2b3;
+    border-radius: 3px;
+    display: flex;
+    justify-content: center;
     width: 2.5rem;
 }
 
