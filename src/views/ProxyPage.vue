@@ -716,6 +716,8 @@
                               :src="simulationCardImage(card)"
                               placeholder="./card_back_border_crop.jpg"
                               :alt="card.name"
+                              @mouseenter="scheduleCardPreview(card)"
+                              @mouseleave="hideCardPreview"
                             />
                             <span class="simulation-card-count">{{ card.quantity }}x</span>
                             <span v-if="card.sourceZone" class="simulation-source-zone">{{ card.sourceZone }}</span>
@@ -749,6 +751,8 @@
                             :src="simulationCardImage(seat.player.zones.graveyard.top)"
                             placeholder="./card_back_border_crop.jpg"
                             alt="Graveyard"
+                            @mouseenter="scheduleCardPreview(seat.player.zones.graveyard.top)"
+                            @mouseleave="hideCardPreview"
                           />
                           <span>GY {{ seat.player.zones.graveyard.count }}</span>
                         </button>
@@ -763,6 +767,8 @@
                             :src="simulationCardImage(seat.player.zones.exile.top)"
                             placeholder="./card_back_border_crop.jpg"
                             alt="Exile"
+                            @mouseenter="scheduleCardPreview(seat.player.zones.exile.top)"
+                            @mouseleave="hideCardPreview"
                           />
                           <span>EX {{ seat.player.zones.exile.count }}</span>
                         </button>
@@ -791,6 +797,8 @@
                               :src="simulationCardImage(card)"
                               placeholder="./card_back_border_crop.jpg"
                               :alt="card.name"
+                              @mouseenter="scheduleCardPreview(card)"
+                              @mouseleave="hideCardPreview"
                             />
                             <span>{{ card.quantity }}x {{ card.name }}</span>
                           </div>
@@ -815,6 +823,8 @@
                             :src="simulationCardImage(card)"
                             placeholder="./card_back_border_crop.jpg"
                             :alt="card.name"
+                            @mouseenter="scheduleCardPreview(card)"
+                            @mouseleave="hideCardPreview"
                           />
                           <span class="simulation-card-count">{{ card.quantity }}x</span>
                           <span v-if="card.state?.summoningSick" class="simulation-state-badge">SS</span>
@@ -837,6 +847,8 @@
                               :src="simulationCardImage(card)"
                               placeholder="./card_back_border_crop.jpg"
                               :alt="card.name"
+                              @mouseenter="scheduleCardPreview(card)"
+                              @mouseleave="hideCardPreview"
                             />
                             <span class="simulation-card-count">{{ card.quantity }}x</span>
                           </div>
@@ -857,6 +869,8 @@
                               :src="simulationCardImage(card)"
                               placeholder="./card_back_border_crop.jpg"
                               :alt="card.name"
+                              @mouseenter="scheduleCardPreview(card)"
+                              @mouseleave="hideCardPreview"
                             />
                             <span class="simulation-card-count">{{ card.quantity }}x</span>
                           </div>
@@ -953,6 +967,8 @@
                 :src="resolveCardImage(card)"
                 placeholder="./card_back_border_crop.jpg"
                 :alt="card.name"
+                @mouseenter="scheduleCardPreview(card)"
+                @mouseleave="hideCardPreview"
               />
               <div class="analysis-card-details">
                 <div class="analysis-card-name">
@@ -1530,6 +1546,8 @@
                 :src="resolveCardImage(card)"
                 placeholder="./card_back_border_crop.jpg"
                 :alt="card.name"
+                @mouseenter="scheduleCardPreview(card)"
+                @mouseleave="hideCardPreview"
               />
               <span
                 class="card-quantity bg-primary text-light docs-shape s-rounded centered"
@@ -1617,6 +1635,8 @@
                       :src="resolveCardImage(slot.card, slot.face)"
                       placeholder="./card_back_border_crop.jpg"
                       :alt="slot.card.name"
+                      @mouseenter="scheduleCardPreview(slot.card, slot.face)"
+                      @mouseleave="hideCardPreview"
                     />
                     <span class="print-order-index">{{ slot.index + 1 }}</span>
                   </template>
@@ -1641,6 +1661,19 @@
           </button>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="cardPreview.visible"
+      id="card-hover-preview"
+      class="card-hover-preview"
+      aria-live="polite"
+    >
+      <img
+        class="card-hover-preview-image"
+        :src="cardPreview.src"
+        :alt="cardPreview.alt"
+      >
     </div>
   </div>
 
@@ -1745,6 +1778,8 @@ const analysisCategories = [
     { key: "synergy.creatureDeathValue.feeders", label: "Feeds death", targetGroup: "cards" },
 ];
 
+const cardPreviewDelayMs = 2500;
+
 function createDefaultConfig() {
     return {
         includeDigital: false,
@@ -1848,6 +1883,12 @@ export default {
             collapsedAnalysisDeckIds: {},
             expandedValueRemovalDeckIds: {},
             expandedSimulationZones: {},
+            cardPreview: {
+                visible: false,
+                src: '',
+                alt: '',
+            },
+            cardPreviewTimer: null,
             simulationHistory: [],
             analysisQueueTimer: null,
             analysisGeneration: 0,
@@ -2218,6 +2259,8 @@ export default {
         this.analysisClient = createAnalysisWorkerClient();
         this.initConfig();
         await this.initLocalSessions();
+        window.addEventListener('blur', this.hideCardPreview);
+        window.addEventListener('scroll', this.hideCardPreview, true);
         window.setTimeout(() => {
             this.loadSetList();
         }, 0);
@@ -2225,6 +2268,9 @@ export default {
     beforeUnmount() {
         clearTimeout(this.sessionSaveTimer);
         clearTimeout(this.analysisQueueTimer);
+        this.hideCardPreview();
+        window.removeEventListener('blur', this.hideCardPreview);
+        window.removeEventListener('scroll', this.hideCardPreview, true);
         this.analysisClient?.terminate();
     },
     methods: {
@@ -2311,6 +2357,49 @@ export default {
         },
         simulationCardImage(card) {
             return card?.faceDown ? './card_back_border_crop.jpg' : (card?.imageUrl || './card_back_border_crop.jpg');
+        },
+        resolveCardPreviewImage(card, face = "front") {
+            if (!card) {
+                return '';
+            }
+
+            if (card.faceDown) {
+                return './card_back_border_crop.jpg';
+            }
+
+            const imageUrl = card.imageUrl ?? this.resolveCardImage(card, face);
+            return imageUrl ? setImageVersion(imageUrl, "large") : '';
+        },
+        scheduleCardPreview(card, face = "front") {
+            this.hideCardPreview();
+
+            const src = this.resolveCardPreviewImage(card, face);
+            if (!src) {
+                return;
+            }
+
+            const alt = card?.name ?? 'Card preview';
+            this.cardPreviewTimer = window.setTimeout(() => {
+                this.cardPreview = {
+                    visible: true,
+                    src,
+                    alt,
+                };
+                this.cardPreviewTimer = null;
+            }, cardPreviewDelayMs);
+        },
+        hideCardPreview() {
+            if (this.cardPreviewTimer) {
+                window.clearTimeout(this.cardPreviewTimer);
+                this.cardPreviewTimer = null;
+            }
+
+            if (this.cardPreview.visible) {
+                this.cardPreview = {
+                    ...this.cardPreview,
+                    visible: false,
+                };
+            }
         },
         simulationLaneSeats(lane) {
             return [
@@ -4670,6 +4759,28 @@ html.dark-theme {
     left: 0.6rem;
     padding: 0.2rem;
     line-height: 1rem;
+}
+
+.card-hover-preview {
+    align-items: center;
+    background: rgb(16 24 40 / 46%);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: clamp(0.75rem, 3vw, 2rem);
+    pointer-events: none;
+    position: fixed;
+    z-index: 2200;
+}
+
+.card-hover-preview-image {
+    aspect-ratio: 63 / 88;
+    background: #111827;
+    border-radius: 8px;
+    box-shadow: 0 1.1rem 3rem rgb(16 24 40 / 38%);
+    max-height: min(88vh, 42rem);
+    object-fit: contain;
+    width: min(92vw, 30rem);
 }
 
 .print-order-modal-container {

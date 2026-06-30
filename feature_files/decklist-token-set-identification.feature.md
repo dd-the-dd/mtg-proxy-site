@@ -81,6 +81,7 @@
 - Loading UI uses compact circular spinners or image skeletons, not rotating text labels.
 - Deck imports publish card shells from the parsed text before the Scryfall dataset finishes loading, then hydrate each card's printing data independently.
 - Analysis card rows show a small loading indicator beside each card name while that specific card is hydrating or waiting for queued analysis.
+- Hovering a visible card image for 2.5 seconds opens a large centered card preview so the card text can be read, and leaving the card hides or cancels the preview.
 - Analysis grids and value rows are prepared through a per-card queue and cache so template rendering reads prepared rows instead of recomputing every cell repeatedly.
 - Value rows nested under a cast option display the full mana cost of that cast option, including colored symbols, while independent zone or activated actions keep their own action cost.
 - Value analysis uses the current deck's cards for internal synergies and mana sources; meta decks only feed the against-meta interaction grid.

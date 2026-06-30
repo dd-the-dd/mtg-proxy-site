@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
 import ProxyPage from './ProxyPage.vue';
-import { describe, expect, test, beforeAll } from 'vitest';
+import { describe, expect, test, beforeAll, vi } from 'vitest';
 
 const wrapper = mount(ProxyPage, {
     mocks: {
@@ -44,6 +44,53 @@ describe('Core Rendering', async () => {
 
         await wrapper.find('#toggle-left-menu').trigger('click');
         expect(wrapper.find('.app-layout-sidebar-collapsed').exists()).toBe(false);
+    });
+
+    test('Feature: Hovering a card image opens a large delayed card preview.', async () => {
+        const component = wrapper.getCurrentComponent();
+        vi.useFakeTimers();
+
+        try {
+            component.data.config.activeWorkspaceTab = 'cards';
+            component.data.config.analysisMode = false;
+            component.data.cards = [
+                {
+                    quantity: 1,
+                    name: 'opt',
+                    selectedOption: {
+                        urlFront: 'https://cards.scryfall.io/border_crop/front/a/b/opt.jpg',
+                    },
+                    setOptions: [],
+                },
+            ];
+
+            await wrapper.vm.$nextTick();
+
+            const cardImage = wrapper.find('.card-image');
+            expect(wrapper.find('#card-hover-preview').exists()).toBe(false);
+
+            await cardImage.trigger('mouseenter');
+            await vi.advanceTimersByTimeAsync(2499);
+            await wrapper.vm.$nextTick();
+            expect(wrapper.find('#card-hover-preview').exists()).toBe(false);
+
+            await vi.advanceTimersByTimeAsync(1);
+            await wrapper.vm.$nextTick();
+
+            const preview = wrapper.find('#card-hover-preview');
+            expect(preview.exists()).toBe(true);
+            expect(preview.find('.card-hover-preview-image').attributes('src')).toContain('/large/');
+            expect(preview.find('.card-hover-preview-image').attributes('alt')).toBe('opt');
+
+            await cardImage.trigger('mouseleave');
+            await wrapper.vm.$nextTick();
+            expect(wrapper.find('#card-hover-preview').exists()).toBe(false);
+        } finally {
+            vi.useRealTimers();
+            component.data.cards = [];
+            component.data.config.decklist = '';
+            await wrapper.vm.$nextTick();
+        }
     });
 
     test('Feature: Local app sessions restore saved page state.', async () => {
