@@ -4,6 +4,10 @@ import {
     synergyValueCategory,
     summarizeCreatureInteractions
 } from './DeckInteractionAnalyzer.mjs';
+import {
+    damageActionAmountValue,
+    parseDamageActions
+} from './OracleParser.mjs';
 
 function selected(card) {
     return card.selectedOption ?? card;
@@ -902,13 +906,18 @@ function damageValueFromText(text, kicked = false) {
         return `Damage ${kickedDamage[1]}`;
     }
 
-    const sweepDamage = /deals? (X|\d+) damage to each creature/i.exec(text);
-    if (sweepDamage) {
-        return `Damage ${sweepDamage[1].toUpperCase()} to each creature`;
+    const [damageAction] = parseDamageActions(text);
+    if (!damageAction) {
+        return '';
     }
 
-    const baseDamage = /deals? (X|\d+) damage to (?:any target|up to one target (?:creature|creature or planeswalker)|target (?:creature|artifact creature|creature or planeswalker|player or planeswalker|opponent|player))/i.exec(text);
-    return baseDamage ? `Damage ${baseDamage[1].toUpperCase()}` : '';
+    const amount = damageActionAmountValue(damageAction) ?? damageAction.amount.raw;
+    const eachCreature = damageAction.targets.some(target => {
+        return target.selector === 'each' && target.candidates.some(candidate => {
+            return candidate.entity === 'permanent' && candidate.cardTypes.includes('creature');
+        });
+    });
+    return eachCreature ? `Damage ${amount} to each creature` : `Damage ${amount}`;
 }
 
 function debuffValueFromText(text, kicked = false) {

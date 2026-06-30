@@ -7,6 +7,11 @@ import {
     synergyActionCost,
     synergyInteractionDetail
 } from './DeckInteractionAnalyzer.mjs';
+import {
+    damageActionAmountValue,
+    oracleActionTargetsCard,
+    parseDamageActions
+} from './OracleParser.mjs';
 
 export function countCards(cards) {
     return cards.reduce((total, card) => total + (card.quantity ?? 1), 0);
@@ -164,9 +169,9 @@ function damageAmountFromText(text) {
         return /^X$/i.test(explicit[1]) ? null : parseInt(explicit[1], 10);
     }
 
-    const dealt = /\bdeals? (X|\d+) damage\b/i.exec(text);
-    if (dealt) {
-        return /^X$/i.test(dealt[1]) ? null : parseInt(dealt[1], 10);
+    const [damageAction] = parseDamageActions(text);
+    if (damageAction) {
+        return damageActionAmountValue(damageAction);
     }
 
     return 0;
@@ -227,6 +232,10 @@ function canTargetBySimpleShield(sourceCard, effectText, targetCard) {
 function targetScopeMatches(effectText, targetCard) {
     if (!isPermanentCard(targetCard)) {
         return false;
+    }
+
+    if (parseDamageActions(effectText).some(action => oracleActionTargetsCard(action, targetCard))) {
+        return true;
     }
 
     if (/\btarget nonland permanent\b/i.test(effectText)) {

@@ -1,3 +1,8 @@
+import {
+    damageActionAmountValue,
+    parseDamageActions
+} from './OracleParser.mjs';
+
 const characteristicCache = new WeakMap();
 
 function selected(card) {
@@ -151,9 +156,10 @@ export function spellSpeed(card) {
 }
 
 export function damageAmount(card) {
-    const oracleText = textOf(card);
-    const match = /deals? (\d+) damage to (?:any target|target (?:creature|creature or planeswalker|player or planeswalker|opponent|player)|each creature|each creature and each player|each opponent)/i.exec(oracleText);
-    return match ? parseInt(match[1], 10) : 0;
+    const amounts = parseDamageActions(textOf(card))
+        .map(damageActionAmountValue)
+        .filter(amount => Number.isFinite(amount));
+    return amounts.length > 0 ? Math.max(...amounts) : 0;
 }
 
 function numberWordValue(value) {
@@ -208,7 +214,14 @@ function sourceColors(card) {
 }
 
 function targetsCreature(card) {
-    return /\b(?:any target|target (?:nonland )?(?:creature|permanent)|target creature or planeswalker)\b/i.test(textOf(card));
+    return parseDamageActions(textOf(card)).some(action => {
+        return action.targets.some(target => {
+            return ['anyTarget', 'target'].includes(target.selector) && target.candidates.some(candidate => {
+                return candidate.entity === 'permanent' && candidate.cardTypes.includes('creature');
+            });
+        });
+    }) ||
+        /\b(?:target (?:nonland )?(?:creature|permanent)|target creature or planeswalker)\b/i.test(textOf(card));
 }
 
 function preventsTargeting(source, creature) {
