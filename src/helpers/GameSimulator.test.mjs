@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
     buildGameSimulation,
-    expandDeckCards
+    expandDeckCards,
+    findNextInteractiveStepIndex
 } from './GameSimulator.mjs';
 
 const card = (name, quantity, selectedOption = {}) => {
@@ -177,6 +178,78 @@ describe('GameSimulator', () => {
                 ]),
             }),
         }));
+    });
+
+    test('Feature: Game simulation automatically advances past no-decision and dependent phase steps.', () => {
+        const currentDeck = [
+            card('mountain', 4, { typeLine: 'Basic Land - Mountain' }),
+            card('burst lightning', 4, {
+                manaValue: 1,
+                manaCost: '{R}',
+                typeLine: 'Instant',
+                oracleText: 'Burst Lightning deals 2 damage to any target.',
+            }),
+        ];
+        const metaDeck = [
+            card('expensive spell', 8, {
+                manaValue: 9,
+                manaCost: '{9}',
+                typeLine: 'Sorcery',
+            }),
+        ];
+
+        const simulation = buildGameSimulation(currentDeck, metaDeck, {
+            seed: 1,
+            shuffle: false,
+            turnCount: 1,
+        });
+        const upkeepIndex = simulation.phaseSteps.findIndex(step => {
+            return step.turn === 1 && step.playerKey === 'you' && step.phase === 'upkeep';
+        });
+        const mainIndex = simulation.phaseSteps.findIndex(step => {
+            return step.turn === 1 && step.playerKey === 'you' && step.phase === 'main';
+        });
+        const blockersStep = simulation.phaseSteps.find(step => {
+            return step.turn === 1 && step.playerKey === 'you' && step.phase === 'blockers';
+        });
+        const attackIndex = simulation.phaseSteps.findIndex(step => {
+            return step.turn === 1 && step.playerKey === 'you' && step.phase === 'attack';
+        });
+        const blockersIndex = simulation.phaseSteps.findIndex(step => {
+            return step.turn === 1 && step.playerKey === 'you' && step.phase === 'blockers';
+        });
+        const secondMainIndex = simulation.phaseSteps.findIndex(step => {
+            return step.turn === 1 && step.playerKey === 'you' && step.phase === 'secondMain';
+        });
+        const discardSteps = simulation.phaseSteps.filter(step => {
+            return step.phase === 'discard';
+        });
+
+        expect(simulation.phaseSteps[upkeepIndex]).toMatchObject({
+            availableActionCount: 0,
+            autoAdvance: true,
+        });
+        expect(simulation.phaseSteps[mainIndex].availableActionCount).toBeGreaterThan(0);
+        expect(findNextInteractiveStepIndex(simulation.phaseSteps, upkeepIndex, [])).toBe(mainIndex);
+        expect(blockersStep).toMatchObject({
+            autoAdvance: true,
+            dependsOnAttackers: true,
+        });
+        expect(findNextInteractiveStepIndex(simulation.phaseSteps, attackIndex, [])).toBe(secondMainIndex);
+        expect(findNextInteractiveStepIndex(simulation.phaseSteps, attackIndex, [
+            {
+                option: { kind: 'attack' },
+                playerKey: 'you',
+                stepIndex: attackIndex,
+            },
+        ])).toBe(blockersIndex);
+        expect(discardSteps).toEqual([
+            expect.objectContaining({
+                discardRequired: true,
+                handCount: 8,
+                playerKey: 'opponent',
+            }),
+        ]);
     });
 
     test('Feature: Game simulation phase snapshots surface recoverable graveyard and exile actions.', () => {

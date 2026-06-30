@@ -546,9 +546,6 @@ describe('Core Rendering', async () => {
         expect(component.proxy.activeSimulationStep.players.find(player => player.key === 'you').zones.handCount).toBe(7);
 
         await wrapper.find('#simulation-next-step').trigger('click');
-        expect(wrapper.find('#simulation-current-step').text()).toContain('Draw');
-
-        await wrapper.find('#simulation-next-step').trigger('click');
         expect(wrapper.find('#simulation-current-step').text()).toContain('Main');
         expect(wrapper.find('.simulation-card-actionable').exists()).toBe(true);
 
@@ -678,6 +675,65 @@ describe('Core Rendering', async () => {
             'simulation-card-targetable': true,
         });
         component.data.simulationPendingAction = null;
+    });
+
+    test('Feature: Simulation attack actions mark a battlefield creature without moving zones.', () => {
+        const component = wrapper.getCurrentComponent();
+        const player = {
+            key: 'you',
+            zones: {
+                battlefield: {
+                    creatures: [
+                        {
+                            name: 'otter token',
+                            quantity: 2,
+                            state: {
+                                summoningSick: false,
+                                tapped: false,
+                            },
+                            typeLine: 'Token Creature - Otter',
+                        },
+                    ],
+                    lands: [],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, top: null },
+                graveyard: { cards: [], count: 0, top: null },
+                hand: [],
+                handCount: 0,
+                playableHand: [],
+            },
+        };
+
+        component.ctx.applyResolvedSimulationAction([player], {
+            card: {
+                name: 'otter token',
+                typeLine: 'Token Creature - Otter',
+            },
+            option: {
+                kind: 'attack',
+                sourceZone: 'battlefield',
+            },
+            playerKey: 'you',
+            stepIndex: 3,
+        });
+
+        expect(player.zones.battlefield.creatures).toContainEqual(expect.objectContaining({
+            name: 'otter token',
+            quantity: 1,
+            state: expect.objectContaining({
+                attacking: true,
+                tapped: true,
+            }),
+        }));
+        expect(player.zones.battlefield.creatures).toContainEqual(expect.objectContaining({
+            name: 'otter token',
+            quantity: 1,
+            state: expect.objectContaining({
+                tapped: false,
+            }),
+        }));
+        expect(player.zones.battlefield.count).toBeUndefined();
     });
 
     test('Feature: Analysis mode exposes meta removal action rows for damage and blocked targets.', async () => {

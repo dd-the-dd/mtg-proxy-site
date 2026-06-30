@@ -61,7 +61,15 @@ const phaseSequence = [
     'damageOrder',
     'secondMain',
     'end',
+    'discard',
 ];
+
+const defaultMaxHandSize = 7;
+
+function normalizeMaxHandSize(value) {
+    const maxHandSize = Number(value ?? defaultMaxHandSize);
+    return Number.isFinite(maxHandSize) ? maxHandSize : defaultMaxHandSize;
+}
 
 function canUseFromGraveyard(card) {
     return /\b(?:cast|play|return)\b[^.]*\bfrom your graveyard\b/i.test(oracleTextOf(card)) ||
@@ -237,15 +245,17 @@ function actionOption(card, label, kind, sourceZone, extra = {}) {
     };
 }
 
-function buildActionContext(playerState, phase) {
+function buildActionContext(playerState, phase, options = {}) {
+    const isActivePlayer = options.isActivePlayer ?? true;
     const landOptions = playerState.hand.filter(isLand);
     const landPlaysAvailable = playerState.landPlaysAvailable ?? 1;
-    const canPlayLand = isMainPhase(phase) && landPlaysAvailable > 0 && landOptions.length > 0;
+    const canPlayLand = isActivePlayer && isMainPhase(phase) && landPlaysAvailable > 0 && landOptions.length > 0;
     const availableMana = playerState.zones.battlefield.lands.length;
 
     return {
         availableMana,
         canPlayLand,
+        canCastSorcerySpeed: isActivePlayer && isMainPhase(phase),
         landPlaysAvailable,
         manaForActions: availableMana + (canPlayLand ? 1 : 0),
         phase,
@@ -261,7 +271,7 @@ function canCastInPhase(card, context) {
         return card.manaValue <= context.manaForActions;
     }
 
-    if (!isMainPhase(context.phase)) {
+    if (!context.canCastSorcerySpeed) {
         return false;
     }
 
@@ -436,25 +446,146 @@ function buildPlayerSummary(player, playerState, actionContext = null) {
     };
 }
 
-function buildPhaseStep(basePlayers, playerStates, activePlayer, turn, phase) {
-    const activeState = playerStates.get(activePlayer.key);
-    const actionContext = buildActionContext(activeState, phase);
+function countActionableCards(value) {
+    if (!value) {
+        return 0;
+    }
+
+    if (Array.isArray(value)) {
+        return value.reduce((total, entry) => {
+            return total + countActionableCards(entry);
+        }, 0);
+    }
+
+    if (typeof value !== 'object') {
+        return 0;
+    }
+
+    const current = value.actionState?.actionable ? Number(value.quantity ?? 1) || 1 : 0;
+    return current + Object.entries(value).reduce((total, [key, entry]) => {
+        if (key === 'actionState') {
+            return total;
+        }
+
+        return total + countActionableCards(entry);
+    }, 0);
+}
+
+function activePlayerHandCount(step) {
+    return step.players.find(player => player.key === step.playerKey)?.zones.handCount ?? 0;
+}
+
+function withStepMetadata(step, playerState) {
+    const handCount = activePlayerHandCount(step);
+    const maxHandSize = normalizeMaxHandSize(playerState.maxHandSize);
+    const availableActionCount = countActionableCards(step.players);
+    const metadata = {
+        availableActionCount,
+        autoAdvance: availableActionCount === 0,
+        handCount,
+        maxHandSize,
+    };
+
+    if (step.phase === 'blockers' || step.phase === 'damageOrder') {
+        metadata.autoAdvance = true;
+        metadata.dependsOnAttackers = true;
+    }
+
+    if (step.phase === 'discard') {
+        metadata.discardRequired = handCount > maxHandSize;
+        metadata.autoAdvance = !metadata.discardRequired;
+    }
 
     return {
+        ...step,
+        ...metadata,
+    };
+}
+
+function buildPhaseStep(basePlayers, playerStates, activePlayer, turn, phase) {
+    const activeState = playerStates.get(activePlayer.key);
+    const actionContext = buildActionContext(activeState, phase, { isActivePlayer: true });
+
+    const step = {
         actionContext,
         phase,
         playerKey: activePlayer.key,
         playerName: activePlayer.name,
         players: basePlayers.map(player => {
             const playerState = playerStates.get(player.key);
+            const playerActionContext = buildActionContext(playerState, phase, {
+                isActivePlayer: player.key === activePlayer.key,
+            });
             return buildPlayerSummary(
                 player,
                 playerState,
-                player.key === activePlayer.key ? actionContext : null,
+                playerActionContext,
             );
         }),
         turn,
     };
+
+    return withStepMetadata(step, activeState);
+}
+
+function combatAttackStepIndex(phaseSteps, step, stepIndex) {
+    for (let index = stepIndex - 1; index >= 0; index -= 1) {
+        const candidate = phaseSteps[index];
+        if (
+            candidate.turn === step.turn &&
+            candidate.playerKey === step.playerKey &&
+            candidate.phase === 'attack'
+        ) {
+            return index;
+        }
+    }
+
+    return -1;
+}
+
+function hasDeclaredAttackers(phaseSteps, step, stepIndex, resolvedActions = []) {
+    const attackStepIndex = combatAttackStepIndex(phaseSteps, step, stepIndex);
+    if (attackStepIndex === -1) {
+        return false;
+    }
+
+    return resolvedActions.some(action => {
+        return action.stepIndex === attackStepIndex &&
+            action.playerKey === step.playerKey &&
+            action.option?.kind === 'attack';
+    });
+}
+
+export function shouldAutoAdvanceStep(step, phaseSteps = [], stepIndex = -1, resolvedActions = []) {
+    if (!step) {
+        return true;
+    }
+
+    if (step.phase === 'blockers' || step.phase === 'damageOrder') {
+        return !hasDeclaredAttackers(phaseSteps, step, stepIndex, resolvedActions);
+    }
+
+    if (step.phase === 'discard') {
+        return !step.discardRequired;
+    }
+
+    return (step.availableActionCount ?? countActionableCards(step.players)) === 0;
+}
+
+export function findNextInteractiveStepIndex(phaseSteps = [], currentIndex = 0, resolvedActions = []) {
+    if (phaseSteps.length === 0) {
+        return 0;
+    }
+
+    let nextIndex = Math.min(currentIndex + 1, phaseSteps.length - 1);
+    while (
+        nextIndex < phaseSteps.length - 1 &&
+        shouldAutoAdvanceStep(phaseSteps[nextIndex], phaseSteps, nextIndex, resolvedActions)
+    ) {
+        nextIndex += 1;
+    }
+
+    return nextIndex;
 }
 
 function playFirstLand(playerState) {
@@ -608,6 +739,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
                 landPlaysAvailable: 1,
                 library: player.library,
                 libraryIndex: 7,
+                maxHandSize: normalizeMaxHandSize(options.maxHandSize),
                 zones: createMutableZones(),
             },
         ];
@@ -667,6 +799,17 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
                 holdUpOptions: buildMainPhaseStep(player, turn, playerState).holdUpOptions,
             });
             phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'end'));
+
+            if (playerState.hand.length > normalizeMaxHandSize(playerState.maxHandSize)) {
+                timeline.push({
+                    turn,
+                    playerKey: player.key,
+                    playerName: player.name,
+                    phase: 'discard',
+                    note: `Discard down to ${normalizeMaxHandSize(playerState.maxHandSize)}.`,
+                });
+                phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'discard'));
+            }
         }
     }
 

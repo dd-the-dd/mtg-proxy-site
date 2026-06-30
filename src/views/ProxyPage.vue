@@ -895,6 +895,7 @@
                           />
                           <span class="simulation-card-count">{{ card.quantity }}x</span>
                           <span v-if="card.state?.summoningSick" class="simulation-state-badge">SS</span>
+                          <span v-else-if="card.state?.attacking" class="simulation-state-badge simulation-state-badge-attack">ATK</span>
                         </div>
                       </div>
                     </div>
@@ -1818,7 +1819,10 @@ import {
     isSynergyCategory
 } from "../helpers/AnalysisModel.mjs";
 import { createAnalysisWorkerClient } from "../helpers/AnalysisWorkerClient.mjs";
-import { buildGameSimulation } from "../helpers/GameSimulator.mjs";
+import {
+    buildGameSimulation,
+    findNextInteractiveStepIndex
+} from "../helpers/GameSimulator.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
 import { bindStorage } from "../helpers/VueLocalStorage.mjs";
 import ImageLoader from "../components/ImageLoader.vue";
@@ -2592,7 +2596,11 @@ export default {
             if (!this.isLastSimulationStep) {
                 this.simulationActionMenu = null;
                 this.simulationPendingAction = null;
-                this.config.simulationStepIndex = this.activeSimulationStepIndex + 1;
+                this.config.simulationStepIndex = findNextInteractiveStepIndex(
+                    this.gameSimulation?.phaseSteps ?? [],
+                    this.activeSimulationStepIndex,
+                    this.simulationResolvedActions,
+                );
             }
         },
         phaseLabel(phase) {
@@ -2601,6 +2609,7 @@ export default {
                 blockers: 'Declare blockers',
                 combat: 'Combat',
                 damageOrder: 'Damage order',
+                discard: 'Discard',
                 draw: 'Draw',
                 end: 'End phase',
                 main: 'Main',
@@ -2804,6 +2813,33 @@ export default {
 
             cards.push(normalizedCard);
         },
+        markSimulationCardGroupAttacking(cards = [], card) {
+            const index = cards.findIndex(entry => {
+                return entry.name === card.name &&
+                    (entry.typeLine ?? '') === (card.typeLine ?? '');
+            });
+            if (index === -1) {
+                return;
+            }
+
+            const attackingCard = {
+                ...cards[index],
+                actionState: undefined,
+                quantity: 1,
+                state: {
+                    ...(cards[index].state ?? {}),
+                    attacking: true,
+                    tapped: true,
+                },
+            };
+            if ((cards[index].quantity ?? 1) > 1) {
+                cards[index].quantity -= 1;
+                cards.push(attackingCard);
+                return;
+            }
+
+            cards.splice(index, 1, attackingCard);
+        },
         simulationCastDestination(card) {
             if (/\bcreature\b/i.test(card.typeLine ?? '')) {
                 return 'creatures';
@@ -2843,6 +2879,15 @@ export default {
         applyResolvedSimulationAction(players, action) {
             const player = players.find(candidate => candidate.key === action.playerKey);
             if (!player) {
+                return;
+            }
+
+            if (action.option.kind === 'attack') {
+                this.markSimulationCardGroupAttacking(player.zones.battlefield.creatures, action.card);
+                return;
+            }
+
+            if (action.option.kind === 'activate') {
                 return;
             }
 
@@ -4737,6 +4782,10 @@ export default {
     background: #027a48;
     bottom: 0.18rem;
     right: 0.18rem;
+}
+
+.simulation-state-badge-attack {
+    background: #b54708;
 }
 
 .simulation-battlefield {
