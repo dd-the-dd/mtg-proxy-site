@@ -75,4 +75,70 @@ describe('GameSimulator', () => {
             expect.arrayContaining(['opt', 'stormchaser talent']),
         );
     });
+
+    test('Feature: Game simulation builds configurable players and visible board zones.', () => {
+        const currentDeck = [
+            card('mountain', 2, { typeLine: 'Basic Land - Mountain', urlFront: 'mountain-front' }),
+            card('grave spark', 1, {
+                manaValue: 1,
+                manaCost: '{R}',
+                typeLine: 'Instant',
+                oracleText: 'Grave Spark deals 1 damage to any target. You may cast this card from your graveyard.',
+                urlFront: 'spark-front',
+            }),
+            card('festival hopeful', 2, {
+                manaValue: 1,
+                manaCost: '{R}',
+                typeLine: 'Creature - Human',
+                power: '1',
+                toughness: '1',
+                urlFront: 'hopeful-front',
+            }),
+            card('tablet', 1, {
+                manaValue: 1,
+                manaCost: '{1}',
+                typeLine: 'Artifact',
+                urlFront: 'tablet-front',
+            }),
+        ];
+        const metaDeck = [
+            card('island', 6, { typeLine: 'Basic Land - Island' }),
+            card('opt', 2, { manaValue: 1, manaCost: '{U}', typeLine: 'Instant' }),
+        ];
+
+        const simulation = buildGameSimulation(currentDeck, metaDeck, {
+            playerCount: 3,
+            playerRoles: ['human', 'ai', 'human'],
+            opponentName: 'Izzet Mirror',
+            seed: 1,
+            shuffle: false,
+            turnCount: 2,
+        });
+        const you = simulation.playerList[0];
+
+        expect(simulation.playerList.map(player => player.role)).toEqual(['human', 'ai', 'human']);
+        expect(simulation.playerList[2].name).toBe('Izzet Mirror 2');
+        expect(you.zones.battlefield.lands[0]).toMatchObject({
+            quantity: 2,
+            name: 'mountain',
+        });
+        expect(you.zones.battlefield.creatures[0]).toMatchObject({
+            quantity: 2,
+            name: 'festival hopeful',
+            state: {
+                tapped: false,
+                summoningSick: true,
+            },
+        });
+        expect(you.zones.graveyard.top.name).toBe('grave spark');
+        expect(you.zones.playableHand).toContainEqual(expect.objectContaining({
+            name: 'grave spark',
+            sourceZone: 'graveyard',
+        }));
+        expect(simulation.historyEntry).toMatchObject({
+            seed: 1,
+            playerCount: 3,
+            matchupName: 'Izzet Mirror',
+        });
+    });
 });

@@ -250,12 +250,18 @@ describe('Core Rendering', async () => {
         component.data.config.simulationMatchupSessionId = 'izzet-meta';
         component.data.config.simulationSeed = 2;
         component.data.config.simulationTurnCount = 2;
+        component.data.config.simulationPlayerCount = 3;
+        component.data.config.simulationPlayerRoles = ['human', 'ai', 'human'];
+        component.data.config.simulationShowOpponentHands = false;
+        component.data.config.simulationSpeed = 'fast';
+        component.data.config.simulationBoardZoom = 1.1;
         component.data.cards = [
             {
                 quantity: 8,
                 name: 'mountain',
                 selectedOption: {
                     typeLine: 'Basic Land - Mountain',
+                    urlFront: 'mountain-front',
                 },
             },
             {
@@ -266,6 +272,7 @@ describe('Core Rendering', async () => {
                     manaCost: '{R}',
                     typeLine: 'Instant',
                     oracleText: 'Burst Lightning deals 2 damage to any target.',
+                    urlFront: 'burst-front',
                 },
             },
         ];
@@ -309,12 +316,32 @@ describe('Core Rendering', async () => {
 
         expect(wrapper.find('#game-simulation-tab').exists()).toBe(true);
         expect(wrapper.find('#simulation-matchup').element.value).toBe('izzet-meta');
+        expect(wrapper.find('#simulation-player-count').element.value).toBe('3');
+        expect(wrapper.findAll('.simulation-player-role')).toHaveLength(3);
+        expect(wrapper.find('#simulation-show-opponent-hands').element.checked).toBe(false);
+        expect(wrapper.find('#simulation-speed').element.value).toBe('fast');
+        expect(wrapper.find('#simulation-board-zoom').element.value).toBe('1.1');
+        expect(wrapper.findAll('.simulation-player-board')).toHaveLength(3);
+        expect(wrapper.find('.simulation-hand-card-image').exists()).toBe(true);
+        expect(wrapper.find('.simulation-board-area').attributes('style')).toContain('scale(1.1)');
+        expect(wrapper.find('.simulation-battlefield-creatures').exists()).toBe(true);
+        expect(wrapper.find('.simulation-battlefield-lands').exists()).toBe(true);
+        expect(wrapper.find('.simulation-battlefield-noncreatures').exists()).toBe(true);
+        expect(wrapper.find('.simulation-zone-stack-graveyard').exists()).toBe(true);
+        expect(wrapper.find('.simulation-zone-stack-exile').exists()).toBe(true);
+        expect(wrapper.find('.simulation-zone-drawer').exists()).toBe(false);
+        await wrapper.find('.simulation-zone-stack-graveyard').trigger('click');
+        expect(wrapper.find('.simulation-zone-drawer').exists()).toBe(true);
+        expect(wrapper.find('.simulation-log-panel').exists()).toBe(true);
         expect(wrapper.text()).toContain('Izzet Mirror');
         expect(wrapper.text()).toContain('mountain');
         expect(wrapper.text()).toContain('T1 You');
 
         await wrapper.find('#simulation-reroll').trigger('click');
         expect(component.data.config.simulationSeed).toBe(3);
+        expect(component.data.simulationHistory).toHaveLength(1);
+        expect(wrapper.find('.simulation-history-entry').text()).toContain('Izzet Mirror');
+        expect(component.ctx.captureSessionState().simulationHistory).toHaveLength(1);
 
         component.data.config.activeWorkspaceTab = 'cards';
         component.data.metaDeckStates = [];

@@ -592,6 +592,52 @@
                 <option :value="5">5</option>
               </select>
             </label>
+            <label class="form-label simulation-control simulation-control-compact">
+              Players
+              <select
+                id="simulation-player-count"
+                class="form-select select"
+                v-model.number="config.simulationPlayerCount"
+              >
+                <option :value="2">2</option>
+                <option :value="3">3</option>
+                <option :value="4">4</option>
+                <option :value="5">5</option>
+                <option :value="6">6</option>
+              </select>
+            </label>
+            <label class="form-label simulation-control simulation-control-compact">
+              Speed
+              <select
+                id="simulation-speed"
+                class="form-select select"
+                v-model="config.simulationSpeed"
+              >
+                <option value="slow">Slow</option>
+                <option value="normal">Normal</option>
+                <option value="fast">Fast</option>
+              </select>
+            </label>
+            <label class="form-label simulation-control simulation-control-compact">
+              Zoom
+              <input
+                id="simulation-board-zoom"
+                class="form-input"
+                type="range"
+                min="0.6"
+                max="1.4"
+                step="0.1"
+                v-model.number="config.simulationBoardZoom"
+              >
+            </label>
+            <label class="form-switch simulation-switch">
+              <input
+                id="simulation-show-opponent-hands"
+                type="checkbox"
+                v-model="config.simulationShowOpponentHands"
+              >
+              <i class="form-icon" /> Opponent hands
+            </label>
             <button
               id="simulation-reroll"
               type="button"
@@ -601,6 +647,22 @@
             >
               Simulate
             </button>
+            <div class="simulation-player-settings">
+              <label
+                v-for="index in simulationPlayerSlots"
+                :key="`simulation-player-role-${index}`"
+                class="form-label simulation-player-role-label"
+              >
+                P{{ index + 1 }}
+                <select
+                  class="form-select select simulation-player-role"
+                  v-model="config.simulationPlayerRoles[index]"
+                >
+                  <option value="human">Human</option>
+                  <option value="ai">AI</option>
+                </select>
+              </label>
+            </div>
           </div>
 
           <div
@@ -613,66 +675,238 @@
           </div>
 
           <div v-else-if="gameSimulation" class="simulation-board">
-            <div class="simulation-hands">
-              <section class="simulation-hand">
-                <div class="simulation-section-title">
-                  You opening hand
-                </div>
-                <div class="simulation-card-list">
-                  <div
-                    v-for="card in gameSimulation.players.you.openingHand"
-                    :key="`you-hand-${card.name}-${card.manaCost}`"
-                    class="simulation-card-line"
-                  >
-                    <span class="simulation-quantity">{{ card.quantity }}x</span>
-                    <span>{{ card.name }}</span>
-                    <span class="simulation-card-meta">{{ card.manaCost || card.typeLine }}</span>
+            <div class="simulation-board-viewport">
+              <div
+                class="simulation-board-area"
+                :style="simulationBoardStyle()"
+              >
+                <section
+                  v-for="player in gameSimulation.playerList"
+                  :key="`simulation-player-${player.key}`"
+                  class="simulation-player-board"
+                >
+                  <div class="simulation-player-header">
+                    <span>{{ player.name }}</span>
+                    <span class="label">{{ player.role }}</span>
                   </div>
-                </div>
-              </section>
-              <section class="simulation-hand">
-                <div class="simulation-section-title">
-                  {{ gameSimulation.players.opponent.name }} opening hand
-                </div>
-                <div class="simulation-card-list">
-                  <div
-                    v-for="card in gameSimulation.players.opponent.openingHand"
-                    :key="`opponent-hand-${card.name}-${card.manaCost}`"
-                    class="simulation-card-line"
-                  >
-                    <span class="simulation-quantity">{{ card.quantity }}x</span>
-                    <span>{{ card.name }}</span>
-                    <span class="simulation-card-meta">{{ card.manaCost || card.typeLine }}</span>
+                  <div class="simulation-zone-stacks">
+                    <button
+                      type="button"
+                      class="simulation-zone-stack simulation-zone-stack-library"
+                    >
+                      <ImageLoader
+                        class="simulation-zone-image"
+                        src="./card_back_border_crop.jpg"
+                        placeholder="./card_back_border_crop.jpg"
+                        alt="Library"
+                      />
+                      <span>{{ player.zones.libraryCount }}</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="simulation-zone-stack simulation-zone-stack-graveyard"
+                      @click="toggleSimulationZone(player, 'graveyard')"
+                    >
+                      <ImageLoader
+                        class="simulation-zone-image"
+                        :src="simulationCardImage(player.zones.graveyard.top)"
+                        placeholder="./card_back_border_crop.jpg"
+                        alt="Graveyard"
+                      />
+                      <span>GY {{ player.zones.graveyard.count }}</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="simulation-zone-stack simulation-zone-stack-exile"
+                      @click="toggleSimulationZone(player, 'exile')"
+                    >
+                      <ImageLoader
+                        class="simulation-zone-image simulation-zone-image-exile"
+                        :src="simulationCardImage(player.zones.exile.top)"
+                        placeholder="./card_back_border_crop.jpg"
+                        alt="Exile"
+                      />
+                      <span>EX {{ player.zones.exile.count }}</span>
+                    </button>
                   </div>
-                </div>
-              </section>
+                  <div
+                    v-if="isSimulationZoneExpanded(player, 'graveyard') || isSimulationZoneExpanded(player, 'exile')"
+                    class="simulation-zone-drawer"
+                  >
+                    <div
+                      v-for="zone in ['graveyard', 'exile']"
+                      :key="`simulation-zone-drawer-${player.key}-${zone}`"
+                      v-show="isSimulationZoneExpanded(player, zone)"
+                    >
+                      <div class="simulation-section-title">
+                        {{ zone }}
+                      </div>
+                      <div v-if="player.zones[zone].cards.length" class="simulation-mini-card-grid">
+                        <div
+                          v-for="card in player.zones[zone].cards"
+                          :key="`simulation-zone-card-${player.key}-${zone}-${card.name}`"
+                          class="simulation-mini-card"
+                        >
+                          <ImageLoader
+                            class="simulation-mini-card-image"
+                            :src="simulationCardImage(card)"
+                            placeholder="./card_back_border_crop.jpg"
+                            :alt="card.name"
+                          />
+                          <span>{{ card.quantity }}x {{ card.name }}</span>
+                        </div>
+                      </div>
+                      <div v-else class="simulation-zone-empty">
+                        Empty
+                      </div>
+                    </div>
+                  </div>
+                  <div class="simulation-hand-zone">
+                    <div class="simulation-section-title">
+                      Hand
+                    </div>
+                    <div class="simulation-hand-card-row">
+                      <div
+                        v-for="card in visibleSimulationHandCards(player)"
+                        :key="`simulation-hand-${player.key}-${card.name}-${card.sourceZone ?? 'hand'}`"
+                        class="simulation-hand-card"
+                        :class="{ 'simulation-hand-card-virtual': card.sourceZone }"
+                      >
+                        <ImageLoader
+                          class="simulation-hand-card-image"
+                          :src="simulationCardImage(card)"
+                          placeholder="./card_back_border_crop.jpg"
+                          :alt="card.name"
+                        />
+                        <span class="simulation-card-count">{{ card.quantity }}x</span>
+                        <span v-if="card.sourceZone" class="simulation-source-zone">{{ card.sourceZone }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="simulation-battlefield">
+                    <div class="simulation-battlefield-row simulation-battlefield-creatures">
+                      <div class="simulation-section-title">
+                        Creatures
+                      </div>
+                      <div class="simulation-permanent-row">
+                        <div
+                          v-for="card in player.zones.battlefield.creatures"
+                          :key="`simulation-creature-${player.key}-${card.name}`"
+                          class="simulation-permanent-card"
+                        >
+                          <ImageLoader
+                            class="simulation-permanent-image"
+                            :src="simulationCardImage(card)"
+                            placeholder="./card_back_border_crop.jpg"
+                            :alt="card.name"
+                          />
+                          <span class="simulation-card-count">{{ card.quantity }}x</span>
+                          <span v-if="card.state?.summoningSick" class="simulation-state-badge">SS</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="simulation-battlefield-bottom">
+                      <div class="simulation-battlefield-row simulation-battlefield-lands">
+                        <div class="simulation-section-title">
+                          Lands
+                        </div>
+                        <div class="simulation-permanent-row">
+                          <div
+                            v-for="card in player.zones.battlefield.lands"
+                            :key="`simulation-land-${player.key}-${card.name}`"
+                            class="simulation-permanent-card simulation-permanent-card-land"
+                          >
+                            <ImageLoader
+                              class="simulation-permanent-image"
+                              :src="simulationCardImage(card)"
+                              placeholder="./card_back_border_crop.jpg"
+                              :alt="card.name"
+                            />
+                            <span class="simulation-card-count">{{ card.quantity }}x</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="simulation-battlefield-row simulation-battlefield-noncreatures">
+                        <div class="simulation-section-title">
+                          Noncreature permanents
+                        </div>
+                        <div class="simulation-permanent-row">
+                          <div
+                            v-for="card in player.zones.battlefield.nonCreaturePermanents"
+                            :key="`simulation-noncreature-${player.key}-${card.name}`"
+                            class="simulation-permanent-card simulation-permanent-card-noncreature"
+                          >
+                            <ImageLoader
+                              class="simulation-permanent-image"
+                              :src="simulationCardImage(card)"
+                              placeholder="./card_back_border_crop.jpg"
+                              :alt="card.name"
+                            />
+                            <span class="simulation-card-count">{{ card.quantity }}x</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
             </div>
 
-            <div class="simulation-timeline">
+            <div class="simulation-log-panel">
+              <div class="simulation-section-title">
+                Logs
+              </div>
+              <div class="simulation-timeline">
+                <div
+                  v-for="(step, stepIndex) in gameSimulation.timeline"
+                  :key="`simulation-step-${stepIndex}`"
+                  class="simulation-step"
+                  :class="`simulation-step-${step.playerKey}`"
+                >
+                  <div class="simulation-step-header">
+                    T{{ step.turn }} {{ step.playerName }} / {{ phaseLabel(step.phase) }}
+                  </div>
+                  <div v-if="step.drawnCard" class="simulation-step-line">
+                    Draw: {{ step.drawnCard.name }}
+                  </div>
+                  <div v-if="step.landOptions?.length" class="simulation-step-line">
+                    Land: {{ formatSimulationOptions(step.landOptions) }}
+                  </div>
+                  <div v-if="step.castOptions?.length" class="simulation-step-line">
+                    Cast: {{ formatSimulationOptions(step.castOptions) }}
+                  </div>
+                  <div v-if="step.holdUpOptions?.length" class="simulation-step-line">
+                    Hold: {{ formatSimulationOptions(step.holdUpOptions) }}
+                  </div>
+                  <div v-if="step.playedLand" class="simulation-step-line">
+                    Played: {{ step.playedLand.name }}
+                  </div>
+                  <div v-if="step.castCards?.length" class="simulation-step-line">
+                    Resolved: {{ formatSimulationCastActions(step.castCards) }}
+                  </div>
+                  <div v-if="step.note" class="simulation-step-note">
+                    {{ step.note }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="simulation-history">
+              <div class="simulation-section-title">
+                History
+              </div>
               <div
-                v-for="(step, stepIndex) in gameSimulation.timeline"
-                :key="`simulation-step-${stepIndex}`"
-                class="simulation-step"
-                :class="`simulation-step-${step.playerKey}`"
+                v-if="simulationHistory.length === 0"
+                class="simulation-zone-empty"
               >
-                <div class="simulation-step-header">
-                  T{{ step.turn }} {{ step.playerName }} / {{ phaseLabel(step.phase) }}
-                </div>
-                <div v-if="step.drawnCard" class="simulation-step-line">
-                  Draw: {{ step.drawnCard.name }}
-                </div>
-                <div v-if="step.landOptions?.length" class="simulation-step-line">
-                  Land: {{ formatSimulationOptions(step.landOptions) }}
-                </div>
-                <div v-if="step.castOptions?.length" class="simulation-step-line">
-                  Cast: {{ formatSimulationOptions(step.castOptions) }}
-                </div>
-                <div v-if="step.holdUpOptions?.length" class="simulation-step-line">
-                  Hold: {{ formatSimulationOptions(step.holdUpOptions) }}
-                </div>
-                <div v-if="step.note" class="simulation-step-note">
-                  {{ step.note }}
-                </div>
+                No saved games yet.
+              </div>
+              <div
+                v-for="entry in simulationHistory"
+                :key="entry.id"
+                class="simulation-history-entry"
+              >
+                Seed {{ entry.seed }} / {{ entry.matchupName }} / {{ entry.playerCount }} players
               </div>
             </div>
           </div>
@@ -1514,8 +1748,13 @@ function createDefaultConfig() {
         analysisMatchupSessionId: "all",
         activeWorkspaceTab: "cards",
         simulationMatchupSessionId: "",
+        simulationPlayerCount: 2,
+        simulationPlayerRoles: ["human", "ai", "ai", "ai", "ai", "ai"],
+        simulationShowOpponentHands: false,
         simulationSeed: 1,
+        simulationSpeed: "normal",
         simulationTurnCount: 2,
+        simulationBoardZoom: 1,
         comboPieceConfigOpen: false,
         comboPieceTypes: {
             token: true,
@@ -1588,6 +1827,8 @@ export default {
             valueAnalysisByCardId: {},
             collapsedAnalysisDeckIds: {},
             expandedValueRemovalDeckIds: {},
+            expandedSimulationZones: {},
+            simulationHistory: [],
             analysisQueueTimer: null,
             analysisGeneration: 0,
             analysisClient: null,
@@ -1626,6 +1867,12 @@ export default {
             },
         },
         customPrintOrderCards: {
+            deep: true,
+            handler() {
+                this.scheduleSessionSave();
+            },
+        },
+        simulationHistory: {
             deep: true,
             handler() {
                 this.scheduleSessionSave();
@@ -1847,6 +2094,10 @@ export default {
                 this.config.simulationMatchupSessionId = value;
             },
         },
+        simulationPlayerSlots() {
+            const count = Math.max(2, Math.min(Number(this.config.simulationPlayerCount ?? 2), 6));
+            return Array.from({ length: count }, (_, index) => index);
+        },
         gameSimulation() {
             if (this.cards.length === 0 || !this.selectedSimulationMetaDeck) {
                 return null;
@@ -1857,6 +2108,8 @@ export default {
                 this.selectedSimulationMetaDeck.state?.cards ?? [],
                 {
                     opponentName: this.selectedSimulationMetaDeck.name,
+                    playerCount: this.config.simulationPlayerCount,
+                    playerRoles: this.config.simulationPlayerRoles,
                     seed: this.config.simulationSeed,
                     turnCount: this.config.simulationTurnCount,
                 },
@@ -2012,9 +2265,69 @@ export default {
         countCards(cards) {
             return countCards(cards);
         },
+        simulationBoardStyle() {
+            const zoom = Number(this.config.simulationBoardZoom);
+            const scale = Number.isFinite(zoom) ? zoom : 1;
+
+            return {
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
+            };
+        },
+        simulationCardImage(card) {
+            return card?.faceDown ? './card_back_border_crop.jpg' : (card?.imageUrl || './card_back_border_crop.jpg');
+        },
+        simulationZoneKey(player, zone) {
+            return `${player.key}:${zone}`;
+        },
+        isSimulationZoneExpanded(player, zone) {
+            return Boolean(this.expandedSimulationZones[this.simulationZoneKey(player, zone)]);
+        },
+        toggleSimulationZone(player, zone) {
+            const key = this.simulationZoneKey(player, zone);
+            this.expandedSimulationZones = {
+                ...this.expandedSimulationZones,
+                [key]: !this.expandedSimulationZones[key],
+            };
+        },
+        visibleSimulationHandCards(player) {
+            const canSeeHand = player.key === 'you' || this.config.simulationShowOpponentHands;
+            if (!canSeeHand) {
+                return player.zones.handCount > 0
+                    ? [
+                        {
+                            faceDown: true,
+                            name: 'Hidden hand',
+                            quantity: player.zones.handCount,
+                        },
+                    ]
+                    : [];
+            }
+
+            return player.zones.playableHand;
+        },
+        formatSimulationCastActions(actions = []) {
+            return actions.map(action => {
+                return `${action.card.name} -> ${action.destination}`;
+            }).join(', ');
+        },
+        recordSimulationHistory() {
+            if (!this.gameSimulation) {
+                return;
+            }
+
+            this.simulationHistory = [
+                {
+                    ...this.gameSimulation.historyEntry,
+                    createdAt: new Date().toISOString(),
+                },
+                ...this.simulationHistory,
+            ].slice(0, 20);
+        },
         rerollSimulation() {
             const currentSeed = Number(this.config.simulationSeed);
             this.config.simulationSeed = Number.isFinite(currentSeed) ? currentSeed + 1 : 1;
+            this.recordSimulationHistory();
         },
         phaseLabel(phase) {
             const labels = {
@@ -2373,6 +2686,7 @@ export default {
                 cards,
                 errors: this.cloneForStorage(this.errors),
                 sessionSetSelections: this.cloneForStorage(this.sessionSetSelections),
+                simulationHistory: this.cloneForStorage(this.simulationHistory),
                 printOrderIndexes: this.capturePrintOrderIndexes(),
                 nextTokenBackIndex: this.nextTokenBackIndex,
             };
@@ -2396,6 +2710,8 @@ export default {
             this.cards = this.cloneForStorage(state?.cards ?? []);
             this.errors = this.cloneForStorage(state?.errors ?? []);
             this.sessionSetSelections = this.cloneForStorage(state?.sessionSetSelections ?? {});
+            this.simulationHistory = this.cloneForStorage(state?.simulationHistory ?? []);
+            this.expandedSimulationZones = {};
             this.nextTokenBackIndex = state?.nextTokenBackIndex ?? 0;
             this.printOrderDraftCards = [];
             this.selectedPrintOrderSlotIndex = null;
@@ -2915,13 +3231,24 @@ export default {
             this.config.analysisMatchupSessionId = bindStorage('analysisMatchupSessionId', (v) => v ?? "all");
             this.config.activeWorkspaceTab = bindStorage('activeWorkspaceTab', (v) => v ?? "cards");
             this.config.simulationMatchupSessionId = bindStorage('simulationMatchupSessionId', (v) => v ?? "");
+            this.config.simulationPlayerCount = bindStorage('simulationPlayerCount', (v) => {
+                const count = Number(v);
+                return Number.isFinite(count) && count >= 2 ? count : 2;
+            });
+            this.config.simulationPlayerRoles = createDefaultConfig().simulationPlayerRoles;
+            this.config.simulationShowOpponentHands = bindStorage('simulationShowOpponentHands', (v) => v === "true");
             this.config.simulationSeed = bindStorage('simulationSeed', (v) => {
                 const seed = Number(v);
                 return Number.isFinite(seed) && seed > 0 ? seed : 1;
             });
+            this.config.simulationSpeed = bindStorage('simulationSpeed', (v) => v ?? "normal");
             this.config.simulationTurnCount = bindStorage('simulationTurnCount', (v) => {
                 const count = Number(v);
                 return Number.isFinite(count) && count > 0 ? count : 2;
+            });
+            this.config.simulationBoardZoom = bindStorage('simulationBoardZoom', (v) => {
+                const zoom = Number(v);
+                return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
             });
             this.config.comboPieceConfigOpen = bindStorage('comboPieceConfigOpen', (v) => v === "true");
             this.config.comboPieceTypes.token = bindStorage('comboPieceToken', (v) => v !== "false");
@@ -3387,7 +3714,7 @@ export default {
     border-radius: 4px;
     display: grid;
     gap: 0.5rem;
-    grid-template-columns: minmax(12rem, 1fr) minmax(4.5rem, 6rem) minmax(4.5rem, 6rem) auto;
+    grid-template-columns: minmax(11rem, 1fr) repeat(5, minmax(4.4rem, 6rem)) minmax(7.5rem, auto) auto;
     padding: 0.55rem;
 }
 
@@ -3403,6 +3730,21 @@ export default {
     white-space: nowrap;
 }
 
+.simulation-switch {
+    margin-bottom: 0.25rem;
+}
+
+.simulation-player-settings {
+    display: grid;
+    gap: 0.35rem;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(auto-fit, minmax(5.6rem, 1fr));
+}
+
+.simulation-player-role-label {
+    margin: 0;
+}
+
 .simulation-empty {
     margin-top: 0;
 }
@@ -3412,10 +3754,41 @@ export default {
     gap: 0.75rem;
 }
 
-.simulation-hands {
+.simulation-board-viewport {
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    max-width: 100%;
+    min-height: 28rem;
+    overflow: auto;
+    padding: 0.6rem;
+}
+
+.simulation-board-area {
     display: grid;
-    gap: 0.65rem;
+    gap: 0.75rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 42rem;
+    transition: transform 0.15s ease;
+    width: max-content;
+}
+
+.simulation-player-board {
+    background: #f8f9fa;
+    border: 1px solid #d0d5dd;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.5rem;
+    min-width: 20rem;
+    padding: 0.5rem;
+}
+
+.simulation-player-header {
+    align-items: center;
+    display: flex;
+    font-size: 0.8rem;
+    font-weight: 800;
+    gap: 0.35rem;
+    justify-content: space-between;
 }
 
 .simulation-hand {
@@ -3425,11 +3798,162 @@ export default {
     padding: 0.55rem;
 }
 
+.simulation-zone-stacks {
+    align-items: end;
+    display: flex;
+    gap: 0.35rem;
+}
+
+.simulation-zone-stack {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    color: #344054;
+    display: grid;
+    font-size: 0.62rem;
+    font-weight: 700;
+    gap: 0.12rem;
+    justify-items: center;
+    min-height: 4.9rem;
+    padding: 0.18rem;
+    width: 3.4rem;
+}
+
+.simulation-zone-image {
+    aspect-ratio: 63 / 88;
+    border-radius: 3px;
+    object-fit: cover;
+    width: 2.5rem;
+}
+
+.simulation-zone-image-exile {
+    transform: rotate(90deg);
+}
+
+.simulation-zone-drawer {
+    background: #fff;
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    padding: 0.4rem;
+}
+
+.simulation-mini-card-grid,
+.simulation-hand-card-row,
+.simulation-permanent-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.simulation-mini-card {
+    align-items: center;
+    display: grid;
+    font-size: 0.62rem;
+    gap: 0.18rem;
+    grid-template-columns: 2.2rem minmax(0, 1fr);
+}
+
+.simulation-mini-card-image {
+    aspect-ratio: 63 / 88;
+    border-radius: 3px;
+    object-fit: cover;
+    width: 2.2rem;
+}
+
+.simulation-zone-empty {
+    color: #667085;
+    font-size: 0.68rem;
+}
+
 .simulation-section-title {
     color: #475467;
     font-size: 0.75rem;
     font-weight: 700;
     margin-bottom: 0.35rem;
+}
+
+.simulation-hand-zone {
+    background: #fff;
+    border: 1px solid #eef0f3;
+    border-radius: 4px;
+    padding: 0.4rem;
+}
+
+.simulation-hand-card,
+.simulation-permanent-card {
+    aspect-ratio: 63 / 88;
+    border-radius: 4px;
+    position: relative;
+    width: 4.2rem;
+}
+
+.simulation-hand-card-virtual {
+    outline: 2px solid #f79009;
+    outline-offset: 1px;
+}
+
+.simulation-hand-card-image,
+.simulation-permanent-image {
+    aspect-ratio: 63 / 88;
+    border-radius: 4px;
+    object-fit: cover;
+    width: 100%;
+}
+
+.simulation-card-count,
+.simulation-source-zone,
+.simulation-state-badge {
+    border-radius: 999px;
+    color: #fff;
+    font-size: 0.56rem;
+    font-weight: 800;
+    line-height: 1;
+    padding: 0.14rem 0.22rem;
+    position: absolute;
+}
+
+.simulation-card-count {
+    background: #5755d9;
+    left: 0.18rem;
+    top: 0.18rem;
+}
+
+.simulation-source-zone {
+    background: #b54708;
+    bottom: 0.18rem;
+    left: 0.18rem;
+    text-transform: uppercase;
+}
+
+.simulation-state-badge {
+    background: #027a48;
+    bottom: 0.18rem;
+    right: 0.18rem;
+}
+
+.simulation-battlefield {
+    display: grid;
+    gap: 0.45rem;
+    min-height: 13rem;
+}
+
+.simulation-battlefield-row {
+    background: #fff;
+    border: 1px dashed #d0d5dd;
+    border-radius: 4px;
+    min-height: 6.6rem;
+    padding: 0.4rem;
+}
+
+.simulation-battlefield-creatures {
+    min-height: 8rem;
+}
+
+.simulation-battlefield-bottom {
+    display: grid;
+    gap: 0.45rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .simulation-card-list {
@@ -3506,9 +4030,28 @@ export default {
     color: #667085;
 }
 
+.simulation-log-panel,
+.simulation-history {
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    padding: 0.5rem;
+}
+
+.simulation-history {
+    display: grid;
+    gap: 0.3rem;
+}
+
+.simulation-history-entry {
+    background: #f8f9fa;
+    border: 1px solid #eef0f3;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    padding: 0.3rem 0.4rem;
+}
+
 @media (max-width: 720px) {
-    .simulation-toolbar,
-    .simulation-hands {
+    .simulation-toolbar {
         grid-template-columns: minmax(0, 1fr);
     }
 
