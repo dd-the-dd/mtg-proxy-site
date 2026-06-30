@@ -182,6 +182,61 @@ function hasActivatedAbility(card) {
     return /(?:^|\n)\s*(?:\{[^}]+}|[A-Z0-9, ]+)?[^.\n]*:\s+/i.test(oracleTextOf(card));
 }
 
+function damageTargetProfile(card) {
+    const oracleText = oracleTextOf(card);
+    const anyTarget = /\bdeals? (\d+) damage to any target\b/i.exec(oracleText);
+    if (anyTarget) {
+        return {
+            damageAmount: Number(anyTarget[1]),
+            requiresTarget: true,
+            targetTypes: ['player', 'creature', 'planeswalker', 'battle'],
+        };
+    }
+
+    const targetCreatureOrPlaneswalker = /\bdeals? (\d+) damage to target creature or planeswalker\b/i.exec(oracleText);
+    if (targetCreatureOrPlaneswalker) {
+        return {
+            damageAmount: Number(targetCreatureOrPlaneswalker[1]),
+            requiresTarget: true,
+            targetTypes: ['creature', 'planeswalker'],
+        };
+    }
+
+    const targetCreature = /\bdeals? (\d+) damage to target creature\b/i.exec(oracleText);
+    if (targetCreature) {
+        return {
+            damageAmount: Number(targetCreature[1]),
+            requiresTarget: true,
+            targetTypes: ['creature'],
+        };
+    }
+
+    const targetPlayer = /\btarget player loses (\d+) life\b/i.exec(oracleText);
+    if (targetPlayer) {
+        return {
+            damageAmount: Number(targetPlayer[1]),
+            requiresTarget: true,
+            targetTypes: ['player'],
+        };
+    }
+
+    return {
+        damageAmount: 0,
+        requiresTarget: false,
+        targetTypes: [],
+    };
+}
+
+function actionOption(card, label, kind, sourceZone, extra = {}) {
+    return {
+        id: `${kind}:${sourceZone}:${card.id ?? card.name}`,
+        kind,
+        label,
+        sourceZone,
+        ...extra,
+    };
+}
+
 function buildActionContext(playerState, phase) {
     const landOptions = playerState.hand.filter(isLand);
     const landPlaysAvailable = playerState.landPlaysAvailable ?? 1;
@@ -219,20 +274,27 @@ function cardActionState(card, context, zone) {
     }
 
     const actions = [];
+    const options = [];
     if (zone === 'hand') {
         if (isLand(card) && context.canPlayLand) {
             actions.push('Play land');
+            options.push(actionOption(card, 'Play land', 'playLand', 'hand'));
         } else if (!isLand(card) && canCastInPhase(card, context)) {
-            actions.push(isInstant(card) ? 'Cast instant' : 'Cast');
+            const label = isInstant(card) ? 'Cast instant' : 'Cast';
+            const targetProfile = damageTargetProfile(card);
+            actions.push(label);
+            options.push(actionOption(card, label, 'cast', 'hand', targetProfile));
         }
     }
 
     if (zone === 'graveyard' && canUseFromGraveyard(card) && canCastInPhase(card, context)) {
         actions.push('Use from graveyard');
+        options.push(actionOption(card, 'Use from graveyard', 'cast', 'graveyard', damageTargetProfile(card)));
     }
 
     if (zone === 'exile' && canUseFromExile(card) && canCastInPhase(card, context)) {
         actions.push('Use from exile');
+        options.push(actionOption(card, 'Use from exile', 'cast', 'exile', damageTargetProfile(card)));
     }
 
     if (zone === 'battlefield') {
@@ -243,10 +305,12 @@ function cardActionState(card, context, zone) {
             !card.state?.summoningSick
         ) {
             actions.push('Attack');
+            options.push(actionOption(card, 'Attack', 'attack', 'battlefield'));
         }
 
         if (hasActivatedAbility(card)) {
             actions.push('Activate');
+            options.push(actionOption(card, 'Activate', 'activate', 'battlefield'));
         }
     }
 
@@ -255,6 +319,7 @@ function cardActionState(card, context, zone) {
             actionable: true,
             actions,
             color: 'blue',
+            options,
         }
         : null;
 }

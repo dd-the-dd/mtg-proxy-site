@@ -49,6 +49,8 @@
 - Simulation keeps lands in hand until a land play is chosen, exposes the normal one land play per turn as a tracked resource, and separates mana available now from mana available after using that land play.
 - Simulation phase play starts on turn one with a seven-card hand, exposes a Next step control for upkeep, draw, main, attack, blockers, damage order, second main, and end, and renders the board from the selected phase snapshot.
 - Simulation phase snapshots mark cards with currently available actions in blue; recoverable graveyard cards appear with a graveyard source marker, and recoverable exile cards appear with an exile source marker in the hand row.
+- Double-clicking an action-ready simulation card plays or starts that card action; cards with several legal actions open an action picker, and targeted actions highlight valid card or player-life targets in orange until a target is selected.
+- Simulation players show life totals centered on their board edge, and player-targeting actions resolve by clicking the target player's life total.
 - Simulation board layout shows empty graveyard and exile placeholders without using a Magic card back, places two-player games face-to-face with the opponent hand/zones/resources/creatures above the current player's creatures/resources/hand/zones, compacts two-player games so the defined zones fit in the main viewport, and places additional player pairs in horizontally scrollable lanes that alternate the resource mirror side.
 - Simulation board zones rely on card position, card images, and count badges instead of visible zone-title text, while keeping accessible zone labels for screen readers.
 - Local app sessions persist saved simulation history entries alongside the deck, print, and analysis state.

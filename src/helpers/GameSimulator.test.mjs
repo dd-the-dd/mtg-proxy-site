@@ -167,6 +167,14 @@ describe('GameSimulator', () => {
             actionState: expect.objectContaining({
                 actionable: true,
                 color: 'blue',
+                options: expect.arrayContaining([
+                    expect.objectContaining({
+                        damageAmount: 2,
+                        kind: 'cast',
+                        requiresTarget: true,
+                        targetTypes: expect.arrayContaining(['player', 'creature']),
+                    }),
+                ]),
             }),
         }));
     });

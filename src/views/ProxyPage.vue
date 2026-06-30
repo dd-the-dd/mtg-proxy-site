@@ -695,6 +695,13 @@
           </div>
 
           <div
+            v-if="simulationPendingAction"
+            class="simulation-targeting-banner"
+          >
+            Choose target for {{ simulationDisplayCardName(simulationPendingAction.card) }}
+          </div>
+
+          <div
             v-if="!selectedSimulationMetaDeck"
             class="empty simulation-empty"
           >
@@ -727,6 +734,14 @@
                   >
                     <div class="simulation-player-header">
                       <span>{{ seat.player.name }}</span>
+                      <button
+                        type="button"
+                        class="simulation-life-total"
+                        :class="{ 'simulation-life-total-targetable': isSimulationPlayerTargetable(seat.player) }"
+                        @click.stop="selectSimulationPlayerTarget(seat.player)"
+                      >
+                        {{ simulationPlayerLife(seat.player) }}
+                      </button>
                       <span class="label">{{ seat.player.role }}</span>
                     </div>
                     <div class="simulation-hand-and-stacks">
@@ -741,6 +756,7 @@
                             class="simulation-hand-card"
                             :class="simulationCardClasses(card)"
                             :title="simulationCardActionTitle(card)"
+                            @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
                           >
                             <ImageLoader
                               class="simulation-hand-card-image"
@@ -837,6 +853,7 @@
                             class="simulation-mini-card"
                             :class="simulationCardClasses(card)"
                             :title="simulationCardActionTitle(card)"
+                            @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
                           >
                             <ImageLoader
                               class="simulation-mini-card-image"
@@ -863,8 +880,10 @@
                           v-for="card in seat.player.zones.battlefield.creatures"
                           :key="`simulation-creature-${seat.player.key}-${card.name}`"
                           class="simulation-permanent-card"
-                          :class="simulationCardClasses(card)"
+                          :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
                           :title="simulationCardActionTitle(card)"
+                          @click.stop="selectSimulationCardTarget(card, seat.player)"
+                          @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
                         >
                           <ImageLoader
                             class="simulation-permanent-image"
@@ -889,8 +908,10 @@
                             v-for="card in seat.player.zones.battlefield.lands"
                             :key="`simulation-land-${seat.player.key}-${card.name}`"
                             class="simulation-permanent-card simulation-permanent-card-land"
-                            :class="simulationCardClasses(card)"
+                            :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
                             :title="simulationCardActionTitle(card)"
+                            @click.stop="selectSimulationCardTarget(card, seat.player)"
+                            @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
                           >
                             <ImageLoader
                               class="simulation-permanent-image"
@@ -913,8 +934,10 @@
                             v-for="card in seat.player.zones.battlefield.nonCreaturePermanents"
                             :key="`simulation-noncreature-${seat.player.key}-${card.name}`"
                             class="simulation-permanent-card simulation-permanent-card-noncreature"
-                            :class="simulationCardClasses(card)"
+                            :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
                             :title="simulationCardActionTitle(card)"
+                            @click.stop="selectSimulationCardTarget(card, seat.player)"
+                            @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
                           >
                             <ImageLoader
                               class="simulation-permanent-image"
@@ -1727,6 +1750,32 @@
         :alt="cardPreview.alt"
       >
     </div>
+
+    <div
+      v-if="simulationActionMenu"
+      id="simulation-action-menu"
+      class="simulation-action-menu"
+    >
+      <div class="simulation-action-menu-title">
+        {{ simulationDisplayCardName(simulationActionMenu.card) }}
+      </div>
+      <button
+        v-for="option in simulationActionMenu.options"
+        :key="option.id"
+        type="button"
+        class="btn simulation-action-choice"
+        @click="chooseSimulationAction(option)"
+      >
+        {{ option.label }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-link simulation-action-close"
+        @click="closeSimulationActionMenu"
+      >
+        Cancel
+      </button>
+    </div>
   </div>
 
   <div
@@ -1936,6 +1985,10 @@ export default {
             collapsedAnalysisDeckIds: {},
             expandedValueRemovalDeckIds: {},
             expandedSimulationZones: {},
+            simulationActionMenu: null,
+            simulationLifeTotals: {},
+            simulationPendingAction: null,
+            simulationResolvedActions: [],
             cardPreview: {
                 visible: false,
                 src: '',
@@ -2246,7 +2299,9 @@ export default {
             return steps.length === 0 || this.activeSimulationStepIndex >= steps.length - 1;
         },
         simulationPlayerList() {
-            return this.activeSimulationStep?.players ?? this.gameSimulation?.playerList ?? [];
+            return this.applySimulationResolvedActions(
+                this.activeSimulationStep?.players ?? this.gameSimulation?.playerList ?? [],
+            );
         },
         simulationPlayerLanes() {
             const players = this.simulationPlayerList;
@@ -2530,10 +2585,13 @@ export default {
             const currentSeed = Number(this.config.simulationSeed);
             this.config.simulationSeed = Number.isFinite(currentSeed) ? currentSeed + 1 : 1;
             this.config.simulationStepIndex = 0;
+            this.resetSimulationRuntime();
             this.recordSimulationHistory();
         },
         advanceSimulationStep() {
             if (!this.isLastSimulationStep) {
+                this.simulationActionMenu = null;
+                this.simulationPendingAction = null;
                 this.config.simulationStepIndex = this.activeSimulationStepIndex + 1;
             }
         },
@@ -2552,9 +2610,20 @@ export default {
 
             return labels[phase] ?? phase;
         },
-        simulationCardClasses(card) {
+        simulationDisplayCardName(card) {
+            return String(card?.name ?? '')
+                .split(' ')
+                .filter(Boolean)
+                .map(part => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+                .join(' ');
+        },
+        simulationPlayerLife(player) {
+            return this.simulationLifeTotals[player.key] ?? 20;
+        },
+        simulationCardClasses(card, targetable = false) {
             return {
                 'simulation-card-actionable': Boolean(card?.actionState?.actionable),
+                'simulation-card-targetable': targetable,
                 'simulation-card-source-exile': card?.sourceZone === 'exile',
                 'simulation-card-source-graveyard': card?.sourceZone === 'graveyard',
                 'simulation-hand-card-virtual': Boolean(card?.sourceZone),
@@ -2569,6 +2638,254 @@ export default {
                 : sourceZone === 'exile'
                     ? 'EX'
                     : sourceZone;
+        },
+        normalizedSimulationActionOptions(card) {
+            const options = card?.actionState?.options ?? [];
+            if (options.length > 0) {
+                return options;
+            }
+
+            return (card?.actionState?.actions ?? []).map((label, index) => {
+                return {
+                    id: `${card.name}:${label}:${index}`,
+                    kind: 'generic',
+                    label,
+                    sourceZone: card.sourceZone ?? 'hand',
+                };
+            });
+        },
+        handleSimulationCardDoubleClick(card, player) {
+            const options = this.normalizedSimulationActionOptions(card);
+            if (options.length === 0) {
+                return;
+            }
+
+            if (options.length > 1) {
+                this.simulationActionMenu = {
+                    card,
+                    options,
+                    player,
+                };
+                return;
+            }
+
+            this.startSimulationAction(card, player, options[0]);
+        },
+        chooseSimulationAction(option) {
+            if (!this.simulationActionMenu) {
+                return;
+            }
+
+            const { card, player } = this.simulationActionMenu;
+            this.simulationActionMenu = null;
+            this.startSimulationAction(card, player, option);
+        },
+        closeSimulationActionMenu() {
+            this.simulationActionMenu = null;
+        },
+        startSimulationAction(card, player, option) {
+            const action = {
+                card,
+                option,
+                playerKey: player.key,
+                playerName: player.name,
+                stepIndex: this.activeSimulationStepIndex,
+            };
+
+            if (option.requiresTarget) {
+                this.simulationPendingAction = action;
+                return;
+            }
+
+            this.resolveSimulationAction(action, null);
+        },
+        isSimulationTargetType(option, type) {
+            return (option?.targetTypes ?? []).includes(type);
+        },
+        isSimulationPlayerTargetable(player) {
+            return Boolean(this.simulationPendingAction) &&
+                this.isSimulationTargetType(this.simulationPendingAction.option, 'player') &&
+                !this.simulationActionTargetsOwnPlayerOnly(this.simulationPendingAction, player);
+        },
+        simulationActionTargetsOwnPlayerOnly() {
+            return false;
+        },
+        isSimulationCardTargetable(card) {
+            if (!this.simulationPendingAction) {
+                return false;
+            }
+
+            const targetTypes = this.simulationPendingAction.option.targetTypes ?? [];
+            const typeLine = String(card?.typeLine ?? '');
+            return (targetTypes.includes('creature') && /\bcreature\b/i.test(typeLine)) ||
+                (targetTypes.includes('artifact') && /\bartifact\b/i.test(typeLine)) ||
+                (targetTypes.includes('planeswalker') && /\bplaneswalker\b/i.test(typeLine)) ||
+                (targetTypes.includes('battle') && /\bbattle\b/i.test(typeLine)) ||
+                targetTypes.includes('permanent');
+        },
+        selectSimulationPlayerTarget(player) {
+            if (!this.isSimulationPlayerTargetable(player)) {
+                return;
+            }
+
+            this.resolveSimulationAction(this.simulationPendingAction, {
+                playerKey: player.key,
+                type: 'player',
+            });
+        },
+        selectSimulationCardTarget(card, player) {
+            if (!this.isSimulationCardTargetable(card)) {
+                return;
+            }
+
+            this.resolveSimulationAction(this.simulationPendingAction, {
+                card,
+                playerKey: player.key,
+                type: 'card',
+            });
+        },
+        resolveSimulationAction(action, target) {
+            if (!action) {
+                return;
+            }
+
+            if (target?.type === 'player' && action.option.damageAmount) {
+                const life = this.simulationLifeTotals[target.playerKey] ?? 20;
+                this.simulationLifeTotals = {
+                    ...this.simulationLifeTotals,
+                    [target.playerKey]: life - action.option.damageAmount,
+                };
+            }
+
+            this.simulationResolvedActions = [
+                ...this.simulationResolvedActions,
+                {
+                    card: this.cloneForStorage(action.card),
+                    option: this.cloneForStorage(action.option),
+                    playerKey: action.playerKey,
+                    stepIndex: action.stepIndex,
+                    target: target ? this.cloneForStorage(target) : null,
+                },
+            ];
+            this.simulationPendingAction = null;
+            this.simulationActionMenu = null;
+        },
+        decrementSimulationCardGroup(cards = [], card) {
+            const index = cards.findIndex(entry => {
+                return entry.name === card.name &&
+                    (entry.sourceZone ?? '') === (card.sourceZone ?? '');
+            });
+            if (index === -1) {
+                return;
+            }
+
+            if ((cards[index].quantity ?? 1) > 1) {
+                cards[index].quantity -= 1;
+                return;
+            }
+
+            cards.splice(index, 1);
+        },
+        addSimulationCardGroup(cards = [], card) {
+            const normalizedCard = {
+                ...card,
+                actionState: undefined,
+                quantity: 1,
+                sourceZone: undefined,
+            };
+            const existing = cards.find(entry => {
+                return entry.name === normalizedCard.name &&
+                    (entry.typeLine ?? '') === (normalizedCard.typeLine ?? '');
+            });
+            if (existing) {
+                existing.quantity = (existing.quantity ?? 1) + 1;
+                return;
+            }
+
+            cards.push(normalizedCard);
+        },
+        simulationCastDestination(card) {
+            if (/\bcreature\b/i.test(card.typeLine ?? '')) {
+                return 'creatures';
+            }
+
+            if (!/\binstant\b|\bsorcery\b/i.test(card.typeLine ?? '')) {
+                return 'nonCreaturePermanents';
+            }
+
+            return /\bexile (?:this card|it)\b/i.test(card.oracleText ?? '') ? 'exile' : 'graveyard';
+        },
+        removeResolvedSimulationSource(player, action) {
+            const sourceZone = action.option.sourceZone ?? action.card.sourceZone ?? 'hand';
+            const sourceCard = {
+                ...action.card,
+                sourceZone: sourceZone === 'hand' ? undefined : sourceZone,
+            };
+
+            this.decrementSimulationCardGroup(player.zones.playableHand, sourceCard);
+
+            if (sourceZone === 'hand') {
+                this.decrementSimulationCardGroup(player.zones.hand, sourceCard);
+                player.zones.handCount = Math.max(0, (player.zones.handCount ?? 0) - 1);
+                return;
+            }
+
+            const zone = player.zones[sourceZone];
+            if (zone) {
+                this.decrementSimulationCardGroup(zone.cards, {
+                    ...sourceCard,
+                    sourceZone: undefined,
+                });
+                zone.count = Math.max(0, (zone.count ?? 0) - 1);
+                zone.top = zone.cards.at(-1) ?? null;
+            }
+        },
+        applyResolvedSimulationAction(players, action) {
+            const player = players.find(candidate => candidate.key === action.playerKey);
+            if (!player) {
+                return;
+            }
+
+            this.removeResolvedSimulationSource(player, action);
+
+            if (action.option.kind === 'playLand') {
+                this.addSimulationCardGroup(player.zones.battlefield.lands, action.card);
+                return;
+            }
+
+            if (action.option.kind === 'cast') {
+                const destination = this.simulationCastDestination(action.card);
+                if (destination === 'creatures') {
+                    this.addSimulationCardGroup(player.zones.battlefield.creatures, action.card);
+                } else if (destination === 'nonCreaturePermanents') {
+                    this.addSimulationCardGroup(player.zones.battlefield.nonCreaturePermanents, action.card);
+                } else {
+                    const zone = player.zones[destination];
+                    this.addSimulationCardGroup(zone.cards, action.card);
+                    zone.count = (zone.count ?? 0) + 1;
+                    zone.top = zone.cards.at(-1) ?? null;
+                }
+            }
+        },
+        applySimulationResolvedActions(players) {
+            if (players.length === 0) {
+                return [];
+            }
+
+            const clonedPlayers = this.cloneForStorage(players);
+            for (const action of this.simulationResolvedActions) {
+                if (action.stepIndex <= this.activeSimulationStepIndex) {
+                    this.applyResolvedSimulationAction(clonedPlayers, action);
+                }
+            }
+
+            return clonedPlayers;
+        },
+        resetSimulationRuntime() {
+            this.simulationActionMenu = null;
+            this.simulationLifeTotals = {};
+            this.simulationPendingAction = null;
+            this.simulationResolvedActions = [];
         },
         formatSimulationOptions(options = []) {
             return options.map(option => {
@@ -4007,6 +4324,48 @@ export default {
     white-space: nowrap;
 }
 
+.simulation-targeting-banner {
+    background: #fff7ed;
+    border: 1px solid #fd853a;
+    border-radius: 4px;
+    color: #9c2a10;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 0.35rem 0.5rem;
+}
+
+.simulation-action-menu {
+    background: #fff;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    box-shadow: 0 1rem 2.5rem rgb(16 24 40 / 24%);
+    display: grid;
+    gap: 0.35rem;
+    left: 50%;
+    min-width: 13rem;
+    padding: 0.55rem;
+    position: fixed;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2300;
+}
+
+.simulation-action-menu-title {
+    color: #101828;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.simulation-action-choice {
+    text-align: left;
+}
+
+.simulation-action-close {
+    height: auto;
+    justify-self: start;
+    padding: 0;
+}
+
 .simulation-board {
     display: grid;
     gap: 0.75rem;
@@ -4082,13 +4441,42 @@ export default {
 
 .simulation-player-header {
     align-items: center;
-    display: flex;
+    display: grid;
     font-size: 0.68rem;
     font-weight: 800;
     gap: 0.35rem;
     grid-area: header;
-    justify-content: space-between;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     line-height: 1;
+
+    .label {
+        justify-self: end;
+    }
+}
+
+.simulation-life-total {
+    align-items: center;
+    background: #101828;
+    border: 2px solid #101828;
+    border-radius: 999px;
+    color: #fff;
+    cursor: default;
+    display: inline-flex;
+    font-size: 0.78rem;
+    font-weight: 900;
+    height: 1.7rem;
+    justify-content: center;
+    line-height: 1;
+    min-width: 1.7rem;
+    padding: 0 0.34rem;
+}
+
+.simulation-life-total-targetable {
+    background: #fff7ed;
+    border-color: #f97316;
+    box-shadow: 0 0 0 4px rgb(249 115 22 / 22%);
+    color: #9a3412;
+    cursor: pointer;
 }
 
 .simulation-hand {
@@ -4292,7 +4680,16 @@ export default {
     box-shadow:
         0 0 0 2px #1570ef,
         0 0 0 5px rgb(21 112 239 / 22%);
+    cursor: pointer;
     z-index: 2;
+}
+
+.simulation-card-targetable {
+    box-shadow:
+        0 0 0 2px #f97316,
+        0 0 0 5px rgb(249 115 22 / 28%);
+    cursor: pointer;
+    z-index: 4;
 }
 
 .simulation-hand-card-image,

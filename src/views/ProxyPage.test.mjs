@@ -559,6 +559,127 @@ describe('Core Rendering', async () => {
         component.data.config.simulationStepIndex = 0;
     });
 
+    test('Feature: Simulation double click starts targeted card actions and resolves player life targets.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationMatchupSessionId = 'target-meta';
+        component.data.config.simulationSeed = 1;
+        component.data.config.simulationTurnCount = 1;
+        component.data.config.simulationPlayerCount = 2;
+        component.data.config.simulationPlayerRoles = ['human', 'ai'];
+        component.data.config.simulationStepIndex = 0;
+        component.data.simulationLifeTotals = {};
+        component.data.simulationResolvedActions = [];
+        component.data.cards = [
+            {
+                quantity: 4,
+                name: 'mountain',
+                selectedOption: {
+                    typeLine: 'Basic Land - Mountain',
+                    urlFront: 'mountain-front',
+                },
+            },
+            {
+                quantity: 4,
+                name: 'burst lightning',
+                selectedOption: {
+                    manaValue: 1,
+                    manaCost: '{R}',
+                    typeLine: 'Instant',
+                    oracleText: 'Burst Lightning deals 2 damage to any target.',
+                    urlFront: 'burst-front',
+                },
+            },
+        ];
+        component.data.metaDeckStates = [
+            {
+                id: 'target-meta',
+                name: 'Izzet Mirror',
+                state: {
+                    cards: [
+                        {
+                            quantity: 8,
+                            name: 'island',
+                            selectedOption: {
+                                typeLine: 'Basic Land - Island',
+                            },
+                        },
+                    ],
+                },
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+        await wrapper.find('#simulation-next-step').trigger('click');
+        await wrapper.find('#simulation-next-step').trigger('click');
+
+        const burstCard = wrapper.findAll('.simulation-hand-card').find(cardWrapper => {
+            return cardWrapper.find('img[alt="burst lightning"]').exists();
+        });
+        expect(burstCard).toBeTruthy();
+
+        await burstCard.trigger('dblclick');
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('.simulation-life-total-targetable').exists()).toBe(true);
+        expect(wrapper.find('.simulation-targeting-banner').text()).toContain('Burst Lightning');
+
+        const opponentLife = wrapper.find('.simulation-player-board-top .simulation-life-total');
+        expect(opponentLife.text()).toBe('20');
+
+        await opponentLife.trigger('click');
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('.simulation-player-board-top .simulation-life-total').text()).toBe('18');
+        expect(wrapper.find('.simulation-targeting-banner').exists()).toBe(false);
+        expect(component.data.simulationResolvedActions).toHaveLength(1);
+
+        component.data.config.activeWorkspaceTab = 'cards';
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.config.decklist = '';
+        component.data.config.simulationStepIndex = 0;
+        component.data.simulationLifeTotals = {};
+        component.data.simulationResolvedActions = [];
+    });
+
+    test('Feature: Simulation double click opens a chooser when a card has multiple legal actions.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const modalCard = {
+            name: 'modal spell',
+            actionState: {
+                actionable: true,
+                actions: ['First mode', 'Second mode'],
+                options: [
+                    { id: 'first-mode', kind: 'cast', label: 'First mode', sourceZone: 'hand' },
+                    { id: 'second-mode', kind: 'cast', label: 'Second mode', sourceZone: 'hand' },
+                ],
+            },
+        };
+
+        component.ctx.handleSimulationCardDoubleClick(modalCard, { key: 'you', name: 'You' });
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('#simulation-action-menu').exists()).toBe(true);
+        expect(wrapper.findAll('.simulation-action-choice')).toHaveLength(2);
+
+        component.ctx.closeSimulationActionMenu();
+        await wrapper.vm.$nextTick();
+        expect(wrapper.find('#simulation-action-menu').exists()).toBe(false);
+
+        component.data.simulationPendingAction = {
+            card: modalCard,
+            option: { targetTypes: ['creature'] },
+        };
+        const targetableCard = { name: 'otter token', typeLine: 'Token Creature - Otter' };
+        expect(component.ctx.isSimulationCardTargetable(targetableCard)).toBe(true);
+        expect(component.ctx.simulationCardClasses(targetableCard, true)).toMatchObject({
+            'simulation-card-targetable': true,
+        });
+        component.data.simulationPendingAction = null;
+    });
+
     test('Feature: Analysis mode exposes meta removal action rows for damage and blocked targets.', async () => {
         const component = wrapper.getCurrentComponent();
         const shock = {
