@@ -44,6 +44,7 @@
 - Local app sessions store the deck text, loaded cards, selected printings, print settings, errors, and chosen print order under a user-visible session name.
 - Local app sessions persist deck text quantity edits by synchronizing loaded card quantities from the current deck text before saving.
 - Local app sessions can be tagged as meta decks, and analysis mode renders loaded cards one per row with a matchup grid beside each card.
+- The main workspace includes a simulation tab that can choose a tagged meta deck as opponent, generate a deterministic opening simulation from a seed, and show both opening hands plus early turn phase options.
 - Analysis mode can show current-card interaction categories against all tagged meta decks or one selected matchup, with columns grouped by meta deck or by meta-creature mana value.
 - Analysis mode can switch between interaction grid view and a visual value view that shows cast options, mana symbols, base value, synergy bonuses, permanent-provided options, and zone-change opportunities, each with distinct visual treatment.
 - Visual value rows are structured as condition, cost, effect, and value columns; costs use Mana symbol glyphs, instant or flash-speed costs show a small speed marker, zero card-state changes are hidden, permanent-provided rows use the enabling card name as the condition, and the value column names the value category such as card quality improvement or creature improvement.

@@ -243,6 +243,85 @@ describe('Core Rendering', async () => {
         await component.ctx.loadCardList();
     });
 
+    test('Feature: Simulation tab renders a deterministic matchup timeline against a meta deck.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationMatchupSessionId = 'izzet-meta';
+        component.data.config.simulationSeed = 2;
+        component.data.config.simulationTurnCount = 2;
+        component.data.cards = [
+            {
+                quantity: 8,
+                name: 'mountain',
+                selectedOption: {
+                    typeLine: 'Basic Land - Mountain',
+                },
+            },
+            {
+                quantity: 4,
+                name: 'burst lightning',
+                selectedOption: {
+                    manaValue: 1,
+                    manaCost: '{R}',
+                    typeLine: 'Instant',
+                    oracleText: 'Burst Lightning deals 2 damage to any target.',
+                },
+            },
+        ];
+        component.data.metaDeckStates = [
+            {
+                id: 'izzet-meta',
+                name: 'Izzet Mirror',
+                state: {
+                    cards: [
+                        {
+                            quantity: 8,
+                            name: 'island',
+                            selectedOption: {
+                                typeLine: 'Basic Land - Island',
+                            },
+                        },
+                        {
+                            quantity: 4,
+                            name: 'opt',
+                            selectedOption: {
+                                manaValue: 1,
+                                manaCost: '{U}',
+                                typeLine: 'Instant',
+                            },
+                        },
+                        {
+                            quantity: 4,
+                            name: 'stormchaser talent',
+                            selectedOption: {
+                                manaValue: 1,
+                                manaCost: '{U}',
+                                typeLine: 'Enchantment - Class',
+                            },
+                        },
+                    ],
+                },
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('#game-simulation-tab').exists()).toBe(true);
+        expect(wrapper.find('#simulation-matchup').element.value).toBe('izzet-meta');
+        expect(wrapper.text()).toContain('Izzet Mirror');
+        expect(wrapper.text()).toContain('mountain');
+        expect(wrapper.text()).toContain('T1 You');
+
+        await wrapper.find('#simulation-reroll').trigger('click');
+        expect(component.data.config.simulationSeed).toBe(3);
+
+        component.data.config.activeWorkspaceTab = 'cards';
+        component.data.metaDeckStates = [];
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
+
     test('Feature: Analysis mode exposes meta removal action rows for damage and blocked targets.', async () => {
         const component = wrapper.getCurrentComponent();
         const shock = {

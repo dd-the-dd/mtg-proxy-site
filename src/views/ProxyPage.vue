@@ -518,7 +518,167 @@
           </ul>
         </div>
 
-        <div v-if="config.analysisMode" id="analysis-card-list" class="analysis-card-list">
+        <div v-if="cards.length" id="workspace-tabs" class="workspace-tabs">
+          <button
+            id="workspace-tab-cards"
+            type="button"
+            class="btn"
+            :class="{ active: config.activeWorkspaceTab === 'cards' }"
+            @click="config.activeWorkspaceTab = 'cards'"
+          >
+            Cards
+          </button>
+          <button
+            id="workspace-tab-simulation"
+            type="button"
+            class="btn"
+            :class="{ active: config.activeWorkspaceTab === 'simulation' }"
+            @click="config.activeWorkspaceTab = 'simulation'"
+          >
+            Simulation
+          </button>
+        </div>
+
+        <div
+          v-if="config.activeWorkspaceTab === 'simulation'"
+          id="game-simulation-tab"
+          class="game-simulation"
+        >
+          <div class="simulation-toolbar">
+            <label class="form-label simulation-control">
+              Matchup
+              <select
+                id="simulation-matchup"
+                class="form-select select"
+                v-model="effectiveSimulationMatchupSessionId"
+                :disabled="simulationMetaDeckStates.length === 0"
+              >
+                <option
+                  v-if="simulationMetaDeckStates.length === 0"
+                  value=""
+                >
+                  No meta deck
+                </option>
+                <option
+                  v-for="session in simulationMetaDeckStates"
+                  :key="session.id"
+                  :value="session.id"
+                >
+                  {{ session.name }}
+                </option>
+              </select>
+            </label>
+            <label class="form-label simulation-control simulation-control-compact">
+              Seed
+              <input
+                id="simulation-seed"
+                class="form-input"
+                type="number"
+                min="1"
+                v-model.number="config.simulationSeed"
+              >
+            </label>
+            <label class="form-label simulation-control simulation-control-compact">
+              Turns
+              <select
+                id="simulation-turn-count"
+                class="form-select select"
+                v-model.number="config.simulationTurnCount"
+              >
+                <option :value="1">1</option>
+                <option :value="2">2</option>
+                <option :value="3">3</option>
+                <option :value="4">4</option>
+                <option :value="5">5</option>
+              </select>
+            </label>
+            <button
+              id="simulation-reroll"
+              type="button"
+              class="btn btn-primary simulation-reroll"
+              :disabled="cards.length === 0 || simulationMetaDeckStates.length === 0"
+              @click="rerollSimulation"
+            >
+              Simulate
+            </button>
+          </div>
+
+          <div
+            v-if="!selectedSimulationMetaDeck"
+            class="empty simulation-empty"
+          >
+            <p class="empty-title h5">
+              Tag a local session as a meta deck to run a matchup simulation.
+            </p>
+          </div>
+
+          <div v-else-if="gameSimulation" class="simulation-board">
+            <div class="simulation-hands">
+              <section class="simulation-hand">
+                <div class="simulation-section-title">
+                  You opening hand
+                </div>
+                <div class="simulation-card-list">
+                  <div
+                    v-for="card in gameSimulation.players.you.openingHand"
+                    :key="`you-hand-${card.name}-${card.manaCost}`"
+                    class="simulation-card-line"
+                  >
+                    <span class="simulation-quantity">{{ card.quantity }}x</span>
+                    <span>{{ card.name }}</span>
+                    <span class="simulation-card-meta">{{ card.manaCost || card.typeLine }}</span>
+                  </div>
+                </div>
+              </section>
+              <section class="simulation-hand">
+                <div class="simulation-section-title">
+                  {{ gameSimulation.players.opponent.name }} opening hand
+                </div>
+                <div class="simulation-card-list">
+                  <div
+                    v-for="card in gameSimulation.players.opponent.openingHand"
+                    :key="`opponent-hand-${card.name}-${card.manaCost}`"
+                    class="simulation-card-line"
+                  >
+                    <span class="simulation-quantity">{{ card.quantity }}x</span>
+                    <span>{{ card.name }}</span>
+                    <span class="simulation-card-meta">{{ card.manaCost || card.typeLine }}</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="simulation-timeline">
+              <div
+                v-for="(step, stepIndex) in gameSimulation.timeline"
+                :key="`simulation-step-${stepIndex}`"
+                class="simulation-step"
+                :class="`simulation-step-${step.playerKey}`"
+              >
+                <div class="simulation-step-header">
+                  T{{ step.turn }} {{ step.playerName }} / {{ phaseLabel(step.phase) }}
+                </div>
+                <div v-if="step.drawnCard" class="simulation-step-line">
+                  Draw: {{ step.drawnCard.name }}
+                </div>
+                <div v-if="step.landOptions?.length" class="simulation-step-line">
+                  Land: {{ formatSimulationOptions(step.landOptions) }}
+                </div>
+                <div v-if="step.castOptions?.length" class="simulation-step-line">
+                  Cast: {{ formatSimulationOptions(step.castOptions) }}
+                </div>
+                <div v-if="step.holdUpOptions?.length" class="simulation-step-line">
+                  Hold: {{ formatSimulationOptions(step.holdUpOptions) }}
+                </div>
+                <div v-if="step.note" class="simulation-step-note">
+                  {{ step.note }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="config.analysisMode" id="analysis-card-list" class="analysis-card-list">
           <div
             v-if="analysisColumns.length === 0"
             class="empty"
@@ -1270,6 +1430,7 @@ import {
     isSynergyCategory
 } from "../helpers/AnalysisModel.mjs";
 import { createAnalysisWorkerClient } from "../helpers/AnalysisWorkerClient.mjs";
+import { buildGameSimulation } from "../helpers/GameSimulator.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
 import { bindStorage } from "../helpers/VueLocalStorage.mjs";
 import ImageLoader from "../components/ImageLoader.vue";
@@ -1351,6 +1512,10 @@ function createDefaultConfig() {
         analysisMetric: "count",
         analysisColumnMode: "metaDeck",
         analysisMatchupSessionId: "all",
+        activeWorkspaceTab: "cards",
+        simulationMatchupSessionId: "",
+        simulationSeed: 1,
+        simulationTurnCount: 2,
         comboPieceConfigOpen: false,
         comboPieceTypes: {
             token: true,
@@ -1666,6 +1831,37 @@ export default {
 
             return this.metaDeckStates.filter(session => session.id === this.config.analysisMatchupSessionId);
         },
+        simulationMetaDeckStates() {
+            return this.metaDeckStates.filter(session => (session.state?.cards ?? []).length > 0);
+        },
+        selectedSimulationMetaDeck() {
+            return this.simulationMetaDeckStates.find(session => {
+                return session.id === this.config.simulationMatchupSessionId;
+            }) ?? this.simulationMetaDeckStates[0] ?? null;
+        },
+        effectiveSimulationMatchupSessionId: {
+            get() {
+                return this.selectedSimulationMetaDeck?.id ?? "";
+            },
+            set(value) {
+                this.config.simulationMatchupSessionId = value;
+            },
+        },
+        gameSimulation() {
+            if (this.cards.length === 0 || !this.selectedSimulationMetaDeck) {
+                return null;
+            }
+
+            return buildGameSimulation(
+                this.cards,
+                this.selectedSimulationMetaDeck.state?.cards ?? [],
+                {
+                    opponentName: this.selectedSimulationMetaDeck.name,
+                    seed: this.config.simulationSeed,
+                    turnCount: this.config.simulationTurnCount,
+                },
+            );
+        },
         analysisCategories() {
             return analysisCategories;
         },
@@ -1815,6 +2011,26 @@ export default {
         },
         countCards(cards) {
             return countCards(cards);
+        },
+        rerollSimulation() {
+            const currentSeed = Number(this.config.simulationSeed);
+            this.config.simulationSeed = Number.isFinite(currentSeed) ? currentSeed + 1 : 1;
+        },
+        phaseLabel(phase) {
+            const labels = {
+                upkeep: 'Upkeep',
+                draw: 'Draw',
+                main: 'Main',
+                combat: 'Combat',
+                end: 'End',
+            };
+
+            return labels[phase] ?? phase;
+        },
+        formatSimulationOptions(options = []) {
+            return options.map(option => {
+                return `${option.quantity}x ${option.name}`;
+            }).join(', ');
         },
         countInteractionSummary(summary) {
             const countCombat = combat => {
@@ -2697,6 +2913,16 @@ export default {
             this.config.analysisMetric = bindStorage('analysisMetric', (v) => v ?? "count");
             this.config.analysisColumnMode = bindStorage('analysisColumnMode', (v) => v ?? "metaDeck");
             this.config.analysisMatchupSessionId = bindStorage('analysisMatchupSessionId', (v) => v ?? "all");
+            this.config.activeWorkspaceTab = bindStorage('activeWorkspaceTab', (v) => v ?? "cards");
+            this.config.simulationMatchupSessionId = bindStorage('simulationMatchupSessionId', (v) => v ?? "");
+            this.config.simulationSeed = bindStorage('simulationSeed', (v) => {
+                const seed = Number(v);
+                return Number.isFinite(seed) && seed > 0 ? seed : 1;
+            });
+            this.config.simulationTurnCount = bindStorage('simulationTurnCount', (v) => {
+                const count = Number(v);
+                return Number.isFinite(count) && count > 0 ? count : 2;
+            });
             this.config.comboPieceConfigOpen = bindStorage('comboPieceConfigOpen', (v) => v === "true");
             this.config.comboPieceTypes.token = bindStorage('comboPieceToken', (v) => v !== "false");
             this.config.comboPieceTypes.emblem = bindStorage('comboPieceEmblem', (v) => v !== "false");
@@ -3134,6 +3360,160 @@ export default {
         background: #f1f1fc;
         color: #5755d9;
         font-weight: 600;
+    }
+}
+
+.workspace-tabs {
+    display: inline-flex;
+    gap: 0.25rem;
+    margin-bottom: 0.6rem;
+
+    .btn.active {
+        background: #5755d9;
+        border-color: #5755d9;
+        color: #fff;
+    }
+}
+
+.game-simulation {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.simulation-toolbar {
+    align-items: end;
+    background: #f8f9fa;
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: minmax(12rem, 1fr) minmax(4.5rem, 6rem) minmax(4.5rem, 6rem) auto;
+    padding: 0.55rem;
+}
+
+.simulation-control {
+    margin: 0;
+}
+
+.simulation-control-compact {
+    min-width: 0;
+}
+
+.simulation-reroll {
+    white-space: nowrap;
+}
+
+.simulation-empty {
+    margin-top: 0;
+}
+
+.simulation-board {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.simulation-hands {
+    display: grid;
+    gap: 0.65rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.simulation-hand {
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    min-width: 0;
+    padding: 0.55rem;
+}
+
+.simulation-section-title {
+    color: #475467;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+}
+
+.simulation-card-list {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.simulation-card-line {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #eef0f3;
+    border-radius: 4px;
+    display: grid;
+    font-size: 0.72rem;
+    gap: 0.35rem;
+    grid-template-columns: 2.2rem minmax(0, 1fr) minmax(4rem, auto);
+    line-height: 1.2;
+    min-height: 1.55rem;
+    padding: 0.22rem 0.35rem;
+}
+
+.simulation-quantity {
+    color: #5755d9;
+    font-weight: 700;
+}
+
+.simulation-card-meta {
+    color: #667085;
+    font-size: 0.65rem;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.simulation-timeline {
+    display: grid;
+    gap: 0.4rem;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+
+.simulation-step {
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    display: grid;
+    font-size: 0.68rem;
+    gap: 0.18rem;
+    line-height: 1.2;
+    min-height: 4.1rem;
+    padding: 0.45rem;
+}
+
+.simulation-step-you {
+    background: #eef4ff;
+    border-color: #84adff;
+}
+
+.simulation-step-opponent {
+    background: #fff7ed;
+    border-color: #fed7aa;
+}
+
+.simulation-step-header {
+    color: #344054;
+    font-weight: 800;
+}
+
+.simulation-step-line {
+    color: #101828;
+    overflow-wrap: anywhere;
+}
+
+.simulation-step-note {
+    color: #667085;
+}
+
+@media (max-width: 720px) {
+    .simulation-toolbar,
+    .simulation-hands {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .simulation-reroll {
+        width: 100%;
     }
 }
 
