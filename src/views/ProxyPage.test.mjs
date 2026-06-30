@@ -370,8 +370,9 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#simulation-board-zoom').element.value).toBe('1.1');
         expect(wrapper.findAll('.simulation-player-board')).toHaveLength(4);
         expect(wrapper.findAll('.simulation-player-lane')).toHaveLength(2);
-        expect(wrapper.findAll('.simulation-player-lane')[0].classes()).toContain('simulation-lane-land-left');
-        expect(wrapper.findAll('.simulation-player-lane')[1].classes()).toContain('simulation-lane-land-right');
+        expect(wrapper.findAll('.simulation-battlefield-lands').every(zone => {
+            return zone.classes().includes('simulation-battlefield-column-left');
+        })).toBe(true);
         expect(wrapper.findAll('.simulation-player-seat-top')[0].text()).toContain('Izzet Mirror');
         expect(wrapper.findAll('.simulation-player-seat-bottom')[0].text()).toContain('You');
         expect(wrapper.find('.simulation-hand-card-image').exists()).toBe(true);
@@ -468,11 +469,17 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.simulation-board-area-two-player').exists()).toBe(true);
         expect(wrapper.findAll('.simulation-player-board')).toHaveLength(2);
         expect(wrapper.find('.simulation-hand-zone .simulation-section-title').exists()).toBe(false);
+        expect(wrapper.find('.simulation-battlefield-zone').exists()).toBe(true);
+        expect(wrapper.find('.simulation-battlefield-support').exists()).toBe(false);
         expect(wrapper.find('.simulation-battlefield-creatures .simulation-section-title').exists()).toBe(false);
         expect(wrapper.find('.simulation-battlefield-lands .simulation-section-title').exists()).toBe(false);
         expect(wrapper.find('.simulation-battlefield-noncreatures .simulation-section-title').exists()).toBe(false);
         expect(wrapper.find('.simulation-hand-zone').attributes('aria-label')).toContain('hand');
+        expect(wrapper.find('.simulation-battlefield-zone').attributes('aria-label')).toContain('battlefield');
         expect(wrapper.find('.simulation-battlefield-creatures').attributes('aria-label')).toContain('creatures');
+        expect(wrapper.find('.simulation-battlefield-lands').classes()).toContain('simulation-battlefield-column-left');
+        expect(wrapper.find('.simulation-battlefield-creatures').classes()).toContain('simulation-battlefield-column-center');
+        expect(wrapper.find('.simulation-battlefield-noncreatures').classes()).toContain('simulation-battlefield-column-right');
         expect(wrapper.find('.simulation-zone-stack-library .simulation-zone-count').text()).toMatch(/\d+/);
         expect(wrapper.find('.simulation-zone-stack-graveyard .simulation-zone-count').text()).toContain('0');
         expect(wrapper.find('.simulation-zone-stack-exile .simulation-zone-count').text()).toContain('0');

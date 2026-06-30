@@ -724,7 +724,6 @@
                   v-for="lane in simulationPlayerLanes"
                   :key="`simulation-lane-${lane.index}`"
                   class="simulation-player-lane"
-                  :class="`simulation-lane-land-${lane.landSide}`"
                 >
                   <section
                     v-for="seat in simulationLaneSeats(lane)"
@@ -875,36 +874,11 @@
                       </div>
                     </div>
                     <div
-                      class="simulation-battlefield-row simulation-battlefield-creatures"
-                      :aria-label="`${seat.player.name} creatures`"
+                      class="simulation-battlefield-zone"
+                      :aria-label="`${seat.player.name} battlefield`"
                     >
-                      <div class="simulation-permanent-row">
-                        <div
-                          v-for="card in seat.player.zones.battlefield.creatures"
-                          :key="`simulation-creature-${seat.player.key}-${card.name}`"
-                          class="simulation-permanent-card"
-                          :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
-                          :title="simulationCardActionTitle(card)"
-                          @click.stop="selectSimulationCardTarget(card, seat.player)"
-                          @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
-                        >
-                          <ImageLoader
-                            class="simulation-permanent-image"
-                            :src="simulationCardImage(card)"
-                            placeholder="./card_back_border_crop.jpg"
-                            :alt="card.name"
-                            @mouseenter="scheduleCardPreview(card)"
-                            @mouseleave="hideCardPreview"
-                          />
-                          <span class="simulation-card-count">{{ card.quantity }}x</span>
-                          <span v-if="card.state?.summoningSick" class="simulation-state-badge">SS</span>
-                          <span v-else-if="card.state?.attacking" class="simulation-state-badge simulation-state-badge-attack">ATK</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="simulation-battlefield-support">
                       <div
-                        class="simulation-battlefield-row simulation-battlefield-lands"
+                        class="simulation-battlefield-row simulation-battlefield-lands simulation-battlefield-column-left"
                         :aria-label="`${seat.player.name} lands`"
                       >
                         <div class="simulation-permanent-row">
@@ -930,7 +904,35 @@
                         </div>
                       </div>
                       <div
-                        class="simulation-battlefield-row simulation-battlefield-noncreatures"
+                        class="simulation-battlefield-row simulation-battlefield-creatures simulation-battlefield-column-center"
+                        :aria-label="`${seat.player.name} creatures`"
+                      >
+                        <div class="simulation-permanent-row">
+                          <div
+                            v-for="card in seat.player.zones.battlefield.creatures"
+                            :key="`simulation-creature-${seat.player.key}-${card.name}`"
+                            class="simulation-permanent-card"
+                            :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
+                            :title="simulationCardActionTitle(card)"
+                            @click.stop="selectSimulationCardTarget(card, seat.player)"
+                            @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                          >
+                            <ImageLoader
+                              class="simulation-permanent-image"
+                              :src="simulationCardImage(card)"
+                              placeholder="./card_back_border_crop.jpg"
+                              :alt="card.name"
+                              @mouseenter="scheduleCardPreview(card)"
+                              @mouseleave="hideCardPreview"
+                            />
+                            <span class="simulation-card-count">{{ card.quantity }}x</span>
+                            <span v-if="card.state?.summoningSick" class="simulation-state-badge">SS</span>
+                            <span v-else-if="card.state?.attacking" class="simulation-state-badge simulation-state-badge-attack">ATK</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        class="simulation-battlefield-row simulation-battlefield-noncreatures simulation-battlefield-column-right"
                         :aria-label="`${seat.player.name} noncreature permanents`"
                       >
                         <div class="simulation-permanent-row">
@@ -2324,7 +2326,6 @@ export default {
                 lanes.push({
                     bottomPlayer: players[index] ?? null,
                     index: laneIndex,
-                    landSide: laneIndex % 2 === 0 ? 'left' : 'right',
                     topPlayer: players[index + 1] ?? null,
                 });
             }
@@ -4571,7 +4572,7 @@ export default {
 }
 
 .simulation-board-area {
-    --simulation-card-width: 4.2rem;
+    --simulation-card-width: 4.6rem;
     --simulation-zone-card-width: 2.5rem;
 
     align-items: stretch;
@@ -4583,7 +4584,7 @@ export default {
 }
 
 .simulation-board-area-two-player {
-    --simulation-card-width: clamp(3.2rem, 4.6vw, 4rem);
+    --simulation-card-width: clamp(3.85rem, 5.35vw, 5.2rem);
     --simulation-zone-card-width: clamp(2rem, 2.7vw, 2.45rem);
 
     min-width: 0;
@@ -4611,9 +4612,8 @@ export default {
     grid-template-areas:
         "header"
         "hand"
-        "support"
-        "creatures";
-    grid-template-rows: auto minmax(0, auto) minmax(0, auto) minmax(0, 1fr);
+        "battlefield";
+    grid-template-rows: auto minmax(0, auto) minmax(0, 1fr);
     min-height: 12.4rem;
     min-width: 0;
     padding: 0.36rem;
@@ -4621,11 +4621,10 @@ export default {
 
 .simulation-player-board-bottom {
     grid-template-areas:
-        "creatures"
-        "support"
+        "battlefield"
         "hand"
         "header";
-    grid-template-rows: minmax(0, 1fr) minmax(0, auto) minmax(0, auto) auto;
+    grid-template-rows: minmax(0, 1fr) minmax(0, auto) auto;
 }
 
 .simulation-player-header {
@@ -4932,42 +4931,29 @@ export default {
     background: #b54708;
 }
 
-.simulation-battlefield {
-    display: grid;
-    gap: 0.45rem;
-    min-height: 13rem;
-}
-
-.simulation-battlefield-row {
+.simulation-battlefield-zone {
     background: #fcfcfd;
     border: 1px dashed #d0d5dd;
     border-radius: 4px;
-    min-height: calc(var(--simulation-card-width) * 1.397 + 0.52rem);
+    display: grid;
+    gap: 0.28rem;
+    grid-area: battlefield;
+    grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.44fr) minmax(0, 0.78fr);
+    min-height: calc(var(--simulation-card-width) * 1.397 + 0.6rem);
     padding: 0.24rem;
 }
 
-.simulation-battlefield-creatures {
-    grid-area: creatures;
+.simulation-battlefield-row {
     min-height: calc(var(--simulation-card-width) * 1.397 + 0.52rem);
+    min-width: 0;
 }
 
-.simulation-battlefield-support {
-    display: grid;
-    gap: 0.28rem;
-    grid-area: support;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+.simulation-battlefield-column-center .simulation-permanent-row {
+    justify-content: center;
 }
 
-.simulation-lane-land-right {
-    .simulation-battlefield-support {
-        .simulation-battlefield-lands {
-            order: 2;
-        }
-
-        .simulation-battlefield-noncreatures {
-            order: 1;
-        }
-    }
+.simulation-battlefield-column-right .simulation-permanent-row {
+    justify-content: flex-end;
 }
 
 .simulation-card-list {
