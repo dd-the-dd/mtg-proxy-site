@@ -816,6 +816,128 @@ describe('Core Rendering', async () => {
         expect(nextStepPlayer.zones.battlefield.lands[0].state.tapped).toBe(true);
     });
 
+    test('Feature: Simulation resolved actions update logs, life payments, and tapped land state.', async () => {
+        const component = wrapper.getCurrentComponent();
+        const shockLand = {
+            name: 'shock land',
+            quantity: 1,
+            typeLine: 'Land',
+        };
+        const player = {
+            key: 'you',
+            name: 'You',
+            zones: {
+                battlefield: {
+                    creatures: [],
+                    lands: [],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, top: null },
+                graveyard: { cards: [], count: 0, top: null },
+                hand: [shockLand],
+                handCount: 1,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [shockLand],
+            },
+        };
+
+        component.data.simulationLifeTotals = { you: 20 };
+        component.data.simulationResolvedActions = [];
+        component.ctx.resolveSimulationAction({
+            card: shockLand,
+            option: {
+                kind: 'playLand',
+                label: 'Play untapped, pay 2 life',
+                lifePayment: 2,
+            },
+            playerKey: 'you',
+            playerName: 'You',
+            stepIndex: 0,
+        }, null);
+
+        expect(component.data.simulationLifeTotals.you).toBe(18);
+        expect(component.ctx.simulationActionLogLines.join('\n')).toContain('Play untapped, pay 2 life: shock land');
+
+        component.ctx.applyResolvedSimulationAction([player], {
+            card: shockLand,
+            option: {
+                entersTapped: true,
+                kind: 'playLand',
+                label: 'Play tapped',
+            },
+            playerKey: 'you',
+            stepIndex: 0,
+        });
+        expect(player.zones.battlefield.lands[0].state.tapped).toBe(true);
+
+        component.data.simulationLifeTotals = {};
+        component.data.simulationResolvedActions = [];
+        await wrapper.vm.$nextTick();
+    });
+
+    test('Feature: Simulation AI always plays an available land before advancing.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationMatchupSessionId = 'ai-meta';
+        component.data.config.simulationSeed = 1;
+        component.data.config.simulationTurnCount = 1;
+        component.data.config.simulationPlayerCount = 2;
+        component.data.config.simulationPlayerRoles = ['human', 'ai'];
+        component.data.config.simulationStepIndex = 0;
+        component.data.simulationResolvedActions = [];
+        component.data.cards = [
+            {
+                quantity: 8,
+                name: 'mountain',
+                selectedOption: {
+                    typeLine: 'Basic Land - Mountain',
+                    urlFront: 'mountain-front',
+                },
+            },
+        ];
+        component.data.metaDeckStates = [
+            {
+                id: 'ai-meta',
+                name: 'Izzet Mirror',
+                state: {
+                    cards: [
+                        {
+                            quantity: 8,
+                            name: 'island',
+                            selectedOption: {
+                                typeLine: 'Basic Land - Island',
+                            },
+                        },
+                    ],
+                },
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+        const opponentUpkeepIndex = component.ctx.gameSimulation.phaseSteps.findIndex(step => {
+            return step.playerKey === 'opponent' && step.phase === 'upkeep';
+        });
+        component.data.config.simulationStepIndex = opponentUpkeepIndex;
+
+        component.ctx.advanceSimulationStep();
+        await wrapper.vm.$nextTick();
+
+        expect(component.data.simulationResolvedActions).toContainEqual(expect.objectContaining({
+            card: expect.objectContaining({ name: 'island' }),
+            option: expect.objectContaining({ kind: 'playLand' }),
+            playerKey: 'opponent',
+        }));
+        expect(component.ctx.simulationActionLogLines.join('\n')).toContain('Izzet Mirror / Main - Play land: island');
+
+        component.data.config.activeWorkspaceTab = 'cards';
+        component.data.metaDeckStates = [];
+        component.data.cards = [];
+        component.data.config.decklist = '';
+        component.data.config.simulationStepIndex = 0;
+        component.data.simulationResolvedActions = [];
+    });
+
     test('Feature: Simulation cast actions ask for a payment choice when multiple lands can pay.', async () => {
         const component = wrapper.getCurrentComponent();
         const opt = {

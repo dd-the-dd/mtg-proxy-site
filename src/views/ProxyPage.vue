@@ -1007,6 +1007,21 @@
                     {{ step.note }}
                   </div>
                 </div>
+                <div
+                  v-if="simulationActionLogLines.length"
+                  class="simulation-step simulation-step-actions"
+                >
+                  <div class="simulation-step-header">
+                    Resolved actions
+                  </div>
+                  <div
+                    v-for="(line, lineIndex) in simulationActionLogLines"
+                    :key="`simulation-action-log-${lineIndex}`"
+                    class="simulation-step-line"
+                  >
+                    {{ line }}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2336,6 +2351,11 @@ export default {
 
             return lanes;
         },
+        simulationActionLogLines() {
+            return this.simulationResolvedActions.map(action => {
+                return this.formatSimulationResolvedAction(action);
+            });
+        },
         analysisCategories() {
             return analysisCategories;
         },
@@ -2586,6 +2606,33 @@ export default {
                 return `${action.card.name} -> ${action.destination}`;
             }).join(', ');
         },
+        simulationStepForAction(action) {
+            return this.gameSimulation?.phaseSteps?.[action.stepIndex] ?? {
+                phase: 'upkeep',
+                playerName: action.playerName,
+                turn: 1,
+            };
+        },
+        simulationTargetLabel(target) {
+            if (!target) {
+                return '';
+            }
+
+            if (target.type === 'player') {
+                const player = this.simulationPlayerList.find(candidate => {
+                    return candidate.key === target.playerKey;
+                });
+                return player?.name ?? target.playerKey;
+            }
+
+            return target.card?.name ?? '';
+        },
+        formatSimulationResolvedAction(action) {
+            const step = this.simulationStepForAction(action);
+            const targetLabel = this.simulationTargetLabel(action.target);
+            const targetText = targetLabel ? ` -> ${targetLabel}` : '';
+            return `T${step.turn} ${step.playerName ?? action.playerName} / ${this.phaseLabel(step.phase)} - ${action.option.label ?? action.option.kind}: ${action.card.name}${targetText}`;
+        },
         recordSimulationHistory() {
             if (!this.gameSimulation) {
                 return;
@@ -2615,6 +2662,7 @@ export default {
                     this.activeSimulationStepIndex,
                     this.simulationResolvedActions,
                 );
+                this.resolveSimulationAiSteps();
             }
         },
         phaseLabel(phase) {
@@ -2716,6 +2764,192 @@ export default {
         },
         closeSimulationActionMenu() {
             this.simulationActionMenu = null;
+        },
+        simulationActionCardsForPlayer(player) {
+            return [
+                ...(player?.zones?.playableHand ?? []),
+                ...this.simulationBattlefieldCards(player),
+            ].filter(card => card?.actionState?.actionable);
+        },
+        simulationActionChoicesForPlayer(player) {
+            return this.simulationActionCardsForPlayer(player).flatMap(card => {
+                return this.normalizedSimulationActionOptions(card).map(option => {
+                    return {
+                        card,
+                        option,
+                        player,
+                    };
+                });
+            });
+        },
+        simulationDeterministicNumber(salt) {
+            const text = `${this.config.simulationSeed}:${salt}`;
+            let hash = 2166136261;
+            for (let index = 0; index < text.length; index += 1) {
+                hash ^= text.charCodeAt(index);
+                hash = Math.imul(hash, 16777619);
+            }
+
+            return (hash >>> 0) / 4294967296;
+        },
+        simulationChoose(items = [], salt = '') {
+            if (items.length === 0) {
+                return null;
+            }
+
+            const index = Math.floor(this.simulationDeterministicNumber(salt) * items.length);
+            return items[Math.min(index, items.length - 1)];
+        },
+        simulationAiSupportedChoices(player) {
+            return this.simulationActionChoicesForPlayer(player).filter(choice => {
+                return ['attack', 'cast', 'mana', 'playLand'].includes(choice.option.kind);
+            });
+        },
+        simulationAiShouldContinue(iteration, player) {
+            if (iteration === 0) {
+                return true;
+            }
+
+            return this.simulationDeterministicNumber(
+                `ai:${player.key}:${this.activeSimulationStepIndex}:${iteration}:continue`,
+            ) >= 0.35;
+        },
+        simulationValidCardTargetsForAction(action) {
+            const targetTypes = action?.option?.targetTypes ?? [];
+            return this.simulationPlayerList.flatMap(player => {
+                return this.simulationBattlefieldCards(player)
+                    .filter(card => this.simulationCardMatchesTargetTypes(card, targetTypes))
+                    .map(card => {
+                        return {
+                            card,
+                            playerKey: player.key,
+                            type: 'card',
+                        };
+                    });
+            });
+        },
+        simulationValidPlayerTargetsForAction(action) {
+            if (!this.isSimulationTargetType(action?.option, 'player')) {
+                return [];
+            }
+
+            return this.simulationPlayerList
+                .filter(player => !this.simulationActionTargetsOwnPlayerOnly(action, player))
+                .map(player => {
+                    return {
+                        playerKey: player.key,
+                        type: 'player',
+                    };
+                });
+        },
+        chooseSimulationAiTarget(action, salt) {
+            const cardTargets = this.simulationValidCardTargetsForAction(action);
+            const opponentCardTargets = cardTargets.filter(target => target.playerKey !== action.playerKey);
+            if (opponentCardTargets.length > 0) {
+                return this.simulationChoose(opponentCardTargets, `${salt}:opponent-card-target`);
+            }
+            if (cardTargets.length > 0) {
+                return this.simulationChoose(cardTargets, `${salt}:card-target`);
+            }
+
+            const playerTargets = this.simulationValidPlayerTargetsForAction(action);
+            const opponentPlayerTargets = playerTargets.filter(target => target.playerKey !== action.playerKey);
+            if (opponentPlayerTargets.length > 0) {
+                return this.simulationChoose(opponentPlayerTargets, `${salt}:opponent-player-target`);
+            }
+
+            return this.simulationChoose(playerTargets, `${salt}:player-target`);
+        },
+        resolveSimulationAiChoice(choice, iteration) {
+            if (!choice) {
+                return false;
+            }
+
+            let resolvedOption = choice.option;
+            if (resolvedOption.kind === 'cast' && !resolvedOption.payment) {
+                const paymentOptions = resolvedOption.paymentOptions ?? [];
+                if (paymentOptions.length === 0) {
+                    return false;
+                }
+                resolvedOption = {
+                    ...resolvedOption,
+                    payment: this.simulationChoose(
+                        paymentOptions,
+                        `ai:${choice.player.key}:${this.activeSimulationStepIndex}:${iteration}:payment`,
+                    ),
+                };
+            }
+
+            const action = {
+                card: choice.card,
+                option: resolvedOption,
+                playerKey: choice.player.key,
+                playerName: choice.player.name,
+                stepIndex: this.activeSimulationStepIndex,
+            };
+            const target = resolvedOption.requiresTarget
+                ? this.chooseSimulationAiTarget(
+                    action,
+                    `ai:${choice.player.key}:${this.activeSimulationStepIndex}:${iteration}`,
+                )
+                : null;
+
+            if (resolvedOption.requiresTarget && !target) {
+                return false;
+            }
+
+            this.resolveSimulationAction(action, target);
+            return true;
+        },
+        resolveSimulationAiCurrentStep() {
+            const player = this.activeSimulationPlayer;
+            if (player?.role !== 'ai') {
+                return false;
+            }
+
+            let resolvedAny = false;
+            for (let iteration = 0; iteration < 20; iteration += 1) {
+                const currentPlayer = this.activeSimulationPlayer;
+                const supportedChoices = this.simulationAiSupportedChoices(currentPlayer);
+                const landChoices = supportedChoices.filter(choice => choice.option.kind === 'playLand');
+                const choice = landChoices.length > 0
+                    ? this.simulationChoose(
+                        landChoices,
+                        `ai:${currentPlayer.key}:${this.activeSimulationStepIndex}:${iteration}:land`,
+                    )
+                    : this.simulationAiShouldContinue(iteration, currentPlayer)
+                        ? this.simulationChoose(
+                            supportedChoices,
+                            `ai:${currentPlayer.key}:${this.activeSimulationStepIndex}:${iteration}:action`,
+                        )
+                        : null;
+
+                if (!choice || !this.resolveSimulationAiChoice(choice, iteration)) {
+                    break;
+                }
+                resolvedAny = true;
+            }
+
+            return resolvedAny;
+        },
+        resolveSimulationAiSteps() {
+            for (let guard = 0; guard < 24; guard += 1) {
+                if (this.activeSimulationPlayer?.role !== 'ai' || this.isLastSimulationStep) {
+                    return;
+                }
+
+                this.resolveSimulationAiCurrentStep();
+                const currentIndex = this.activeSimulationStepIndex;
+                const nextIndex = findNextInteractiveStepIndex(
+                    this.gameSimulation?.phaseSteps ?? [],
+                    currentIndex,
+                    this.simulationResolvedActions,
+                );
+                if (nextIndex === currentIndex) {
+                    return;
+                }
+                this.config.simulationStepIndex = nextIndex;
+            }
         },
         startSimulationAction(card, player, option) {
             let resolvedOption = option;
@@ -2845,6 +3079,14 @@ export default {
         resolveSimulationAction(action, target) {
             if (!action) {
                 return;
+            }
+
+            if (action.option.lifePayment) {
+                const life = this.simulationLifeTotals[action.playerKey] ?? 20;
+                this.simulationLifeTotals = {
+                    ...this.simulationLifeTotals,
+                    [action.playerKey]: life - Number(action.option.lifePayment),
+                };
             }
 
             if (target?.type === 'player' && action.option.damageAmount) {
@@ -3069,7 +3311,7 @@ export default {
                     ...action.card,
                     state: {
                         ...(action.card.state ?? {}),
-                        tapped: false,
+                        tapped: Boolean(action.option.entersTapped),
                     },
                 });
                 return;

@@ -615,6 +615,33 @@ function actionOption(card, label, kind, sourceZone, extra = {}) {
     };
 }
 
+function landEnterTappedChoice(card) {
+    const oracleText = oracleTextOf(card);
+    if (!/\bpay 2 life\b/i.test(oracleText) || !/\benters? tapped\b/i.test(oracleText)) {
+        return null;
+    }
+
+    return [
+        actionOption(card, 'Play untapped, pay 2 life', 'playLand', 'hand', {
+            id: `playLand:hand:${card.id ?? card.name}:pay-life`,
+            entersTapped: false,
+            lifePayment: 2,
+        }),
+        actionOption(card, 'Play tapped', 'playLand', 'hand', {
+            id: `playLand:hand:${card.id ?? card.name}:tapped`,
+            entersTapped: true,
+        }),
+    ];
+}
+
+function landPlayActionOptions(card) {
+    return landEnterTappedChoice(card) ?? [
+        actionOption(card, 'Play land', 'playLand', 'hand', {
+            entersTapped: false,
+        }),
+    ];
+}
+
 function buildActionContext(playerState, phase, options = {}) {
     const isActivePlayer = options.isActivePlayer ?? true;
     const landOptions = playerState.hand.filter(isLand);
@@ -664,8 +691,9 @@ function cardActionState(card, context, zone) {
     const options = [];
     if (zone === 'hand') {
         if (isLand(card) && context.canPlayLand) {
-            actions.push('Play land');
-            options.push(actionOption(card, 'Play land', 'playLand', 'hand'));
+            const landOptions = landPlayActionOptions(card);
+            actions.push(...landOptions.map(option => option.label));
+            options.push(...landOptions);
         } else if (!isLand(card) && canCastInPhase(card, context)) {
             const label = isInstant(card) ? 'Cast instant' : 'Cast';
             const targetProfile = damageTargetProfile(card);
@@ -807,7 +835,7 @@ function finalizeZones(hand, library, mutableZones, actionContext = null, resour
         hand: groupCards(actionableHand),
         handCount: hand.length,
         landPlaysAvailable: resources.landPlaysAvailable ?? 0,
-        libraryCount: library.length,
+        libraryCount: resources.libraryCount ?? library.length,
         manaPool: normalizeManaPool(resources.manaPool),
         playableHand: groupCards([
             ...actionableHand,
@@ -907,6 +935,7 @@ export function annotateSimulationPlayerActions(player, phase, options = {}) {
             actionContext,
             {
                 landPlaysAvailable: state.landPlaysAvailable,
+                libraryCount: player.zones?.libraryCount ?? player.libraryCount ?? 0,
                 manaPool: state.manaPool,
             },
         ),

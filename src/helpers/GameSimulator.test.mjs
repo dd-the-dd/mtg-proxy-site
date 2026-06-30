@@ -172,6 +172,54 @@ describe('GameSimulator', () => {
         expect(burstLightning.actionState).toBeUndefined();
     });
 
+    test('Feature: Simulation action annotation preserves library counts and land enter choices.', () => {
+        const shockLand = {
+            id: 'shock land:0',
+            name: 'shock land',
+            oracleText: "As Shock Land enters, you may pay 2 life. If you don't, it enters tapped.",
+            quantity: 1,
+            typeLine: 'Land',
+        };
+        const player = {
+            key: 'you',
+            name: 'You',
+            role: 'human',
+            zones: {
+                battlefield: {
+                    creatures: [],
+                    lands: [],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, recoverable: [], top: null },
+                graveyard: { cards: [], count: 0, recoverable: [], top: null },
+                hand: [shockLand],
+                handCount: 7,
+                landPlaysAvailable: 1,
+                libraryCount: 53,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [shockLand],
+            },
+        };
+
+        const annotated = annotateSimulationPlayerActions(player, 'main', { isActivePlayer: true });
+        const annotatedLand = annotated.zones.hand.find(cardInHand => {
+            return cardInHand.name === 'shock land';
+        });
+
+        expect(annotated.zones.libraryCount).toBe(53);
+        expect(annotatedLand.actionState.options).toEqual([
+            expect.objectContaining({
+                entersTapped: false,
+                label: 'Play untapped, pay 2 life',
+                lifePayment: 2,
+            }),
+            expect.objectContaining({
+                entersTapped: true,
+                label: 'Play tapped',
+            }),
+        ]);
+    });
+
     test('Feature: Game simulation automatically advances past no-decision and dependent phase steps.', () => {
         const currentDeck = [
             card('mountain', 4, { typeLine: 'Basic Land - Mountain' }),
