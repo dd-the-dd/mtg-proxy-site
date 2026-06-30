@@ -466,6 +466,7 @@ describe('Core Rendering', async () => {
         await wrapper.vm.$nextTick();
 
         expect(wrapper.findAll('.simulation-player-lane')).toHaveLength(1);
+        expect(wrapper.find('.simulation-board').classes()).toContain('simulation-board-compact');
         expect(wrapper.find('.simulation-board-area-two-player').exists()).toBe(true);
         expect(wrapper.find('.simulation-play-surface').exists()).toBe(true);
         expect(wrapper.find('.simulation-play-surface').classes()).toContain('simulation-play-surface-compact');

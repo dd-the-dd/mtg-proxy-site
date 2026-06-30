@@ -4734,6 +4734,8 @@ export default {
 .game-simulation {
     display: grid;
     gap: 0.45rem;
+    min-width: 0;
+    width: 100%;
 }
 
 .simulation-toolbar {
@@ -4887,14 +4889,20 @@ export default {
 }
 
 .simulation-board {
+    box-sizing: border-box;
     display: grid;
     gap: 0.45rem;
+    min-width: 0;
+    width: 100%;
 }
 
 .simulation-play-surface {
+    box-sizing: border-box;
     display: grid;
     gap: 0.35rem;
     grid-template-rows: minmax(0, 1fr) auto;
+    min-width: 0;
+    width: 100%;
 }
 
 .simulation-play-surface-compact {
@@ -4906,13 +4914,17 @@ export default {
     background: #f2f4f7;
     border: 1px solid #dadee4;
     border-radius: 4px;
+    box-sizing: border-box;
     max-width: 100%;
     min-height: min(64vh, 34rem);
+    min-width: 0;
     overflow: auto;
     padding: 0.45rem;
+    width: 100%;
 }
 
 .simulation-board-viewport-compact {
+    display: grid;
     height: auto;
     min-height: 0;
     overflow: hidden;
@@ -4925,6 +4937,7 @@ export default {
     --simulation-zone-card-width: 2.5rem;
 
     align-items: stretch;
+    box-sizing: border-box;
     display: flex;
     gap: 0.5rem;
     min-width: min(100%, 44rem);
@@ -4933,9 +4946,9 @@ export default {
 }
 
 .simulation-board-area-two-player {
-    --simulation-card-width: clamp(3.85rem, 4.85vw, 4.8rem);
-    --simulation-hand-card-width: clamp(2.65rem, 3.25vw, 3.2rem);
-    --simulation-zone-card-width: clamp(1.72rem, 2.15vw, 2.05rem);
+    --simulation-card-width: clamp(4.25rem, 5.8vw, 5.9rem);
+    --simulation-hand-card-width: clamp(2.9rem, 3.75vw, 3.7rem);
+    --simulation-zone-card-width: clamp(1.88rem, 2.45vw, 2.28rem);
 
     height: 100%;
     min-width: 0;
