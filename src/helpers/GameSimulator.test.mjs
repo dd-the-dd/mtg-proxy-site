@@ -168,6 +168,40 @@ describe('GameSimulator', () => {
         }));
     });
 
+    test('Feature: Game engine parses mill and scry hooks into library actions.', () => {
+        const tablet = {
+            id: 'tablet:0',
+            name: 'tablet of discovery',
+            oracleText: 'When this artifact enters, mill a card.\nAt the beginning of your upkeep, scry 1.',
+            typeLine: 'Artifact',
+        };
+        const hooks = parseRuleHooksFromCard(tablet, {
+            controllerKey: 'you',
+            sourceZone: 'battlefield',
+        });
+
+        expect(hooks).toContainEqual(expect.objectContaining({
+            event: 'enterBattlefield',
+            action: {
+                name: 'millCards',
+                params: {
+                    amount: 1,
+                    player: 'hookController',
+                },
+            },
+        }));
+        expect(hooks).toContainEqual(expect.objectContaining({
+            event: 'beginningOfUpkeep',
+            action: {
+                name: 'scry',
+                params: {
+                    amount: 1,
+                    player: 'hookController',
+                },
+            },
+        }));
+    });
+
     test('Feature: Game simulation emits rule events, stack entries, and battlefield hooks during phases.', () => {
         const currentDeck = [
             card('mountain', 4, { typeLine: 'Basic Land - Mountain' }),

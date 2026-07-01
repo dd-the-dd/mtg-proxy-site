@@ -884,6 +884,48 @@
             </div>
 
             <div
+              v-if="isActivePlayBoard && simulationScryChoice"
+              id="simulation-scry-panel"
+              class="simulation-mulligan-panel simulation-scry-panel"
+            >
+              <div class="simulation-mulligan-title">
+                {{ simulationScryChoiceInstruction }}
+              </div>
+              <div class="simulation-mulligan-detail">
+                Select cards to put on the bottom. Unselected cards stay on top.
+              </div>
+              <div class="simulation-mulligan-bottom-cards">
+                <button
+                  v-for="card in simulationScryChoiceCards"
+                  :key="`scry-choice-${card.id ?? card.name}`"
+                  type="button"
+                  class="simulation-mulligan-bottom-card"
+                  :class="{ active: isSimulationScryCardSelected(card) }"
+                  @click="toggleSimulationScryBottomCard(card)"
+                >
+                  <img
+                    class="simulation-mulligan-bottom-image"
+                    :src="simulationCardImage(card)"
+                    :alt="simulationDisplayCardName(card)"
+                  >
+                  <span class="simulation-mulligan-bottom-name">
+                    {{ simulationDisplayCardName(card) }}
+                  </span>
+                </button>
+              </div>
+              <div class="simulation-mulligan-actions">
+                <button
+                  id="simulation-scry-confirm"
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  @click="confirmSimulationScryChoice"
+                >
+                  Apply scry
+                </button>
+              </div>
+            </div>
+
+            <div
               v-if="isPlaySetupVisible && !gameSimulation"
               class="empty simulation-empty"
             >
@@ -2342,6 +2384,7 @@ export default {
             simulationMulliganKept: {},
             simulationPendingAction: null,
             simulationResolvedActions: [],
+            simulationScryChoice: null,
             cardPreview: {
                 visible: false,
                 src: '',
@@ -2480,6 +2523,25 @@ export default {
         },
         isSimulationMulliganBottoming() {
             return Boolean(this.simulationMulliganBottomingPlayerKey && this.simulationMulliganPendingPlayer);
+        },
+        simulationScryChoicePlayer() {
+            if (!this.simulationScryChoice) {
+                return null;
+            }
+
+            return this.simulationPlayerList.find(player => {
+                return player.key === this.simulationScryChoice.action?.playerKey;
+            }) ?? null;
+        },
+        simulationScryChoiceCards() {
+            return this.simulationTopLibraryCards(
+                this.simulationScryChoicePlayer,
+                this.simulationActionAmount(this.simulationScryChoice?.action?.option),
+            );
+        },
+        simulationScryChoiceInstruction() {
+            const amount = this.simulationActionAmount(this.simulationScryChoice?.action?.option);
+            return `Scry ${amount}`;
         },
         showSimulationBoardLogs() {
             return false;
@@ -3088,6 +3150,72 @@ export default {
                 }
             });
         },
+        shouldPromptSimulationScryChoice(action) {
+            if (action?.option?.kind !== 'scry' || Array.isArray(action.option.bottomCardIds)) {
+                return false;
+            }
+
+            const player = this.simulationPlayerList.find(candidate => {
+                return candidate.key === action.playerKey;
+            });
+            if (!player || player.role === 'ai') {
+                return false;
+            }
+
+            return this.simulationTopLibraryCards(
+                player,
+                this.simulationActionAmount(action.option),
+            ).length > 0;
+        },
+        openSimulationScryChoice(action, target = null) {
+            this.simulationScryChoice = {
+                action: this.cloneForStorage(action),
+                bottomCardIds: [],
+                target: target ? this.cloneForStorage(target) : null,
+            };
+        },
+        isSimulationScryCardSelected(card) {
+            const key = String(card?.id ?? card?.name ?? '');
+            return Boolean(key && this.simulationScryChoice?.bottomCardIds?.includes(key));
+        },
+        toggleSimulationScryBottomCard(card) {
+            if (!this.simulationScryChoice || !card) {
+                return;
+            }
+
+            const key = String(card.id ?? card.name ?? '');
+            if (!key) {
+                return;
+            }
+
+            const bottomCardIds = [...(this.simulationScryChoice.bottomCardIds ?? [])];
+            const existingIndex = bottomCardIds.indexOf(key);
+            if (existingIndex >= 0) {
+                bottomCardIds.splice(existingIndex, 1);
+            } else {
+                bottomCardIds.push(key);
+            }
+
+            this.simulationScryChoice = {
+                ...this.simulationScryChoice,
+                bottomCardIds,
+            };
+        },
+        confirmSimulationScryChoice() {
+            if (!this.simulationScryChoice) {
+                return;
+            }
+
+            const choice = this.simulationScryChoice;
+            this.simulationScryChoice = null;
+            this.resolveSimulationAction({
+                ...choice.action,
+                option: {
+                    ...choice.action.option,
+                    bottomCardIds: choice.bottomCardIds ?? [],
+                },
+            }, choice.target ?? null);
+        },
         cloneForStorage(value) {
             return JSON.parse(JSON.stringify(value));
         },
@@ -3380,6 +3508,10 @@ export default {
             this.recordSimulationHistory();
         },
         advanceSimulationStep() {
+            if (this.simulationScryChoice) {
+                return;
+            }
+
             if (!this.isLastSimulationStep) {
                 this.simulationActionMenu = null;
                 this.simulationPendingAction = null;
@@ -3872,6 +4004,11 @@ export default {
                 return;
             }
 
+            if (this.shouldPromptSimulationScryChoice(action)) {
+                this.openSimulationScryChoice(action, target);
+                return;
+            }
+
             if (action.option.lifePayment) {
                 const life = this.simulationLifeTotals[action.playerKey] ?? 20;
                 this.simulationLifeTotals = {
@@ -3948,13 +4085,33 @@ export default {
             }
             player.zones.manaPool = nextPool;
         },
+        simulationActionAmount(option, fallback = 1) {
+            const amount = Number(option?.amount ?? option?.params?.amount ?? fallback);
+            return Math.max(1, Number.isFinite(amount) ? Math.floor(amount) : fallback);
+        },
+        simulationLibraryTopIndex(player) {
+            const libraryCount = Number(player?.zones?.libraryCount ?? 0);
+            if (!player?.library || libraryCount <= 0) {
+                return -1;
+            }
+
+            return Math.max(0, player.library.length - libraryCount);
+        },
+        simulationTopLibraryCards(player, amount = 1) {
+            const topIndex = this.simulationLibraryTopIndex(player);
+            if (topIndex < 0) {
+                return [];
+            }
+
+            return player.library.slice(topIndex, topIndex + this.simulationActionAmount({ amount }));
+        },
         drawSimulationTopLibraryCard(player) {
             const libraryCount = Number(player.zones.libraryCount ?? 0);
-            if (!player.library || libraryCount <= 0) {
+            const topIndex = this.simulationLibraryTopIndex(player);
+            if (topIndex < 0) {
                 return null;
             }
 
-            const topIndex = Math.max(0, player.library.length - libraryCount);
             const [drawnCard] = player.library.splice(topIndex, 1);
             if (!drawnCard) {
                 return null;
@@ -3965,6 +4122,50 @@ export default {
             player.zones.handCount = (player.zones.handCount ?? 0) + 1;
             player.zones.libraryCount = Math.max(0, libraryCount - 1);
             return drawnCard;
+        },
+        millSimulationTopLibraryCard(player) {
+            const libraryCount = Number(player.zones.libraryCount ?? 0);
+            const topIndex = this.simulationLibraryTopIndex(player);
+            if (topIndex < 0) {
+                return null;
+            }
+
+            const [milledCard] = player.library.splice(topIndex, 1);
+            if (!milledCard) {
+                return null;
+            }
+
+            const graveyard = player.zones.graveyard ?? { cards: [], count: 0, top: null };
+            this.addSimulationCardGroup(graveyard.cards, milledCard);
+            graveyard.count = (graveyard.count ?? 0) + 1;
+            graveyard.top = graveyard.cards.at(-1) ?? null;
+            player.zones.graveyard = graveyard;
+            player.zones.libraryCount = Math.max(0, libraryCount - 1);
+            return milledCard;
+        },
+        applySimulationScryChoice(player, bottomCardIds = [], amount = 1) {
+            const topCards = this.simulationTopLibraryCards(player, amount);
+            if (topCards.length === 0 || bottomCardIds.length === 0) {
+                return;
+            }
+
+            const bottomIds = new Set(bottomCardIds.map(id => String(id)));
+            const selectedBottomCards = topCards.filter(card => {
+                return bottomIds.has(String(card.id ?? card.name));
+            });
+            if (selectedBottomCards.length === 0) {
+                return;
+            }
+
+            for (const bottomCard of selectedBottomCards) {
+                const currentIndex = player.library.findIndex(card => {
+                    return String(card.id ?? card.name) === String(bottomCard.id ?? bottomCard.name);
+                });
+                if (currentIndex >= 0) {
+                    const [removedCard] = player.library.splice(currentIndex, 1);
+                    player.library.push(removedCard);
+                }
+            }
         },
         markSimulationCardGroupTapped(cards = [], sourceCard = {}) {
             const index = cards.findIndex(entry => {
@@ -4109,10 +4310,27 @@ export default {
             }
 
             if (action.option.kind === 'draw' || action.option.kind === 'drawCards') {
-                const amount = Math.max(1, Number(action.option.amount ?? action.option.params?.amount ?? 1) || 1);
+                const amount = this.simulationActionAmount(action.option);
                 for (let drawIndex = 0; drawIndex < amount; drawIndex += 1) {
                     this.drawSimulationTopLibraryCard(player);
                 }
+                return;
+            }
+
+            if (action.option.kind === 'mill' || action.option.kind === 'millCards') {
+                const amount = this.simulationActionAmount(action.option);
+                for (let millIndex = 0; millIndex < amount; millIndex += 1) {
+                    this.millSimulationTopLibraryCard(player);
+                }
+                return;
+            }
+
+            if (action.option.kind === 'scry') {
+                this.applySimulationScryChoice(
+                    player,
+                    action.option.bottomCardIds ?? [],
+                    this.simulationActionAmount(action.option),
+                );
                 return;
             }
 
@@ -4175,6 +4393,7 @@ export default {
             this.simulationLifeTotals = {};
             this.simulationPendingAction = null;
             this.simulationResolvedActions = [];
+            this.simulationScryChoice = null;
         },
         formatSimulationOptions(options = []) {
             return options.map(option => {

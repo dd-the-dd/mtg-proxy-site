@@ -583,6 +583,28 @@ function parseRuleAction(effectText) {
         };
     }
 
+    const mill = /\bmill (a|one|two|three|four|five|six|seven|eight|nine|ten|\d+) cards?\b/i.exec(effectText);
+    if (mill) {
+        return {
+            name: 'millCards',
+            params: {
+                amount: parseNumberWord(mill[1]),
+                player: 'hookController',
+            },
+        };
+    }
+
+    const scry = /\bscry (one|two|three|four|five|six|seven|eight|nine|ten|\d+)\b/i.exec(effectText);
+    if (scry) {
+        return {
+            name: 'scry',
+            params: {
+                amount: parseNumberWord(scry[1]),
+                player: 'hookController',
+            },
+        };
+    }
+
     const draw = /\bdraw (a|one|two|three|four|five|six|seven|eight|nine|ten|\d+) cards?\b/i.exec(effectText);
     if (draw) {
         return {
