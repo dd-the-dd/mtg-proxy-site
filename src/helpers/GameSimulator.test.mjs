@@ -5,7 +5,9 @@ import {
     expandDeckCards,
     findManaPaymentOptionsForCard,
     findNextInteractiveStepIndex,
-    manaAbilitiesForCard
+    manaAbilitiesForCard,
+    parseRuleHooksFromCard,
+    processGameEngineEvent
 } from './GameSimulator.mjs';
 
 const card = (name, quantity, selectedOption = {}) => {
@@ -19,6 +21,213 @@ const card = (name, quantity, selectedOption = {}) => {
 const quantityTotal = cards => cards.reduce((total, entry) => total + entry.quantity, 0);
 
 describe('GameSimulator', () => {
+    test('Feature: Game engine represents card triggers as calculable condition/action hooks.', () => {
+        const slickshot = {
+            id: 'slickshot:0',
+            manaCost: '{1}{R}',
+            name: 'slickshot show-off',
+            oracleText: 'Flying, haste\nWhenever you cast a noncreature spell, this creature gets +2/+0 until end of turn.',
+            typeLine: 'Creature - Bird Wizard',
+        };
+        const opt = {
+            id: 'opt:0',
+            manaCost: '{U}',
+            name: 'opt',
+            oracleText: 'Scry 1. Draw a card.',
+            typeLine: 'Instant',
+        };
+        const hooks = parseRuleHooksFromCard(slickshot, {
+            controllerKey: 'you',
+            sourceZone: 'battlefield',
+        });
+
+        expect(hooks).toEqual([
+            expect.objectContaining({
+                event: 'cast',
+                condition: {
+                    name: 'spellCastMatches',
+                    params: {
+                        cardTypes: [],
+                        controller: 'hookController',
+                        nonCreature: true,
+                    },
+                },
+                action: {
+                    name: 'modifyPermanent',
+                    params: {
+                        duration: 'untilEndOfTurn',
+                        powerDelta: 2,
+                        target: 'hookSource',
+                        toughnessDelta: 0,
+                    },
+                },
+                sourceController: 'you',
+                sourceZone: 'battlefield',
+            }),
+        ]);
+
+        const engine = {
+            events: [],
+            registeredHooks: hooks,
+            stack: [],
+        };
+        const result = processGameEngineEvent(engine, {
+            card: opt,
+            name: 'cast',
+            phase: 'main',
+            playerKey: 'you',
+            turn: 1,
+        });
+
+        expect(result.stackItems).toEqual([
+            expect.objectContaining({
+                type: 'spell',
+                event: 'cast',
+                sourceCard: expect.objectContaining({ name: 'opt' }),
+                usesStack: true,
+            }),
+            expect.objectContaining({
+                type: 'triggeredAbility',
+                action: hooks[0].action,
+                condition: hooks[0].condition,
+                sourceCard: expect.objectContaining({ name: 'slickshot show-off' }),
+                triggerEvent: 'cast',
+            }),
+        ]);
+        expect(engine.events[0]).toMatchObject({
+            name: 'cast',
+            card: expect.objectContaining({ name: 'opt' }),
+        });
+    });
+
+    test('Feature: Game engine parses life and phase hooks into named conditions and actions.', () => {
+        const cleric = {
+            id: 'cleric:0',
+            name: 'patient cleric',
+            oracleText: 'Whenever you gain life, draw a card.\nAt the beginning of your end step, create a Treasure token.',
+            typeLine: 'Creature - Cleric',
+        };
+        const hooks = parseRuleHooksFromCard(cleric, {
+            controllerKey: 'you',
+            sourceZone: 'battlefield',
+        });
+
+        expect(hooks).toEqual([
+            expect.objectContaining({
+                event: 'gainLife',
+                condition: {
+                    name: 'playerLifeChanged',
+                    params: {
+                        change: 'gain',
+                        player: 'hookController',
+                    },
+                },
+                action: {
+                    name: 'drawCards',
+                    params: {
+                        amount: 1,
+                        player: 'hookController',
+                    },
+                },
+            }),
+            expect.objectContaining({
+                event: 'beginningOfEndStep',
+                condition: {
+                    name: 'phaseBeginsForController',
+                    params: {
+                        player: 'hookController',
+                    },
+                },
+                action: {
+                    name: 'createToken',
+                    params: {
+                        controller: 'hookController',
+                        tokenName: 'Treasure',
+                    },
+                },
+            }),
+        ]);
+
+        const engine = {
+            events: [],
+            registeredHooks: hooks,
+            stack: [],
+        };
+        const result = processGameEngineEvent(engine, {
+            name: 'gainLife',
+            phase: 'main',
+            playerKey: 'you',
+            turn: 1,
+        });
+
+        expect(result.stackItems).toContainEqual(expect.objectContaining({
+            type: 'triggeredAbility',
+            action: hooks[0].action,
+            triggerEvent: 'gainLife',
+        }));
+    });
+
+    test('Feature: Game simulation emits rule events, stack entries, and battlefield hooks during phases.', () => {
+        const currentDeck = [
+            card('mountain', 4, { typeLine: 'Basic Land - Mountain' }),
+            card('slickshot show-off', 1, {
+                manaCost: '{0}',
+                manaValue: 0,
+                oracleText: 'Flying, haste\nWhenever you cast a noncreature spell, this creature gets +2/+0 until end of turn.',
+                typeLine: 'Creature - Bird Wizard',
+            }),
+            card('opt', 1, {
+                manaCost: '{0}',
+                manaValue: 0,
+                oracleText: 'Scry 1. Draw a card.',
+                typeLine: 'Instant',
+            }),
+            card('mountain', 2, { typeLine: 'Basic Land - Mountain' }),
+        ];
+        const metaDeck = [
+            card('island', 8, { typeLine: 'Basic Land - Island' }),
+        ];
+
+        const simulation = buildGameSimulation(currentDeck, metaDeck, {
+            autoPlayActions: true,
+            seed: 1,
+            shuffle: false,
+            turnCount: 1,
+        });
+        const engine = simulation.gameEngine;
+
+        expect(engine.events.map(event => event.name)).toEqual(expect.arrayContaining([
+            'beginningOfUpkeep',
+            'beginningOfDrawStep',
+            'beginningOfFirstMainPhase',
+            'cast',
+            'enterBattlefield',
+        ]));
+        expect(engine.stack).toContainEqual(expect.objectContaining({
+            type: 'specialAction',
+            event: 'enterBattlefield',
+            sourceCard: expect.objectContaining({ name: 'mountain' }),
+            usesStack: false,
+        }));
+        expect(engine.stack).toContainEqual(expect.objectContaining({
+            type: 'spell',
+            sourceCard: expect.objectContaining({ name: 'slickshot show-off' }),
+            usesStack: true,
+        }));
+        expect(engine.stack).toContainEqual(expect.objectContaining({
+            type: 'triggeredAbility',
+            action: expect.objectContaining({
+                name: 'modifyPermanent',
+            }),
+            sourceCard: expect.objectContaining({ name: 'slickshot show-off' }),
+            triggerEvent: 'cast',
+        }));
+        expect(engine.registeredHooks).toContainEqual(expect.objectContaining({
+            event: 'cast',
+            sourceCard: expect.objectContaining({ name: 'slickshot show-off' }),
+        }));
+    });
+
     test('Feature: Game simulation expands card quantities into deterministic opening hands.', () => {
         const deck = [
             card('island', 4, { typeLine: 'Basic Land - Island' }),

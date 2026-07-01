@@ -64,6 +64,40 @@ const phaseSequence = [
     'discard',
 ];
 
+export const ruleEventTypes = [
+    'cast',
+    'enterBattlefield',
+    'leaveBattlefield',
+    'enterGraveyard',
+    'leaveGraveyard',
+    'draw',
+    'mill',
+    'scry',
+    'surveil',
+    'discard',
+    'gainLife',
+    'loseLife',
+    'beginningOfUpkeep',
+    'beginningOfDrawStep',
+    'beginningOfFirstMainPhase',
+    'beginningOfCombat',
+    'beginningOfBlockers',
+    'beginningOfDamageOrder',
+    'beginningOfSecondMainPhase',
+    'beginningOfEndStep',
+];
+
+const beginningEventByPhase = {
+    attack: 'beginningOfCombat',
+    blockers: 'beginningOfBlockers',
+    damageOrder: 'beginningOfDamageOrder',
+    draw: 'beginningOfDrawStep',
+    end: 'beginningOfEndStep',
+    main: 'beginningOfFirstMainPhase',
+    secondMain: 'beginningOfSecondMainPhase',
+    upkeep: 'beginningOfUpkeep',
+};
+
 const defaultMaxHandSize = 7;
 const manaSymbols = ['W', 'U', 'B', 'R', 'G', 'C'];
 const basicLandMana = {
@@ -436,6 +470,467 @@ function compactCard(card, copyIndex = 0) {
         toughness: selected(card).toughness,
         typeLine: typeLineOf(card),
     };
+}
+
+function cardSnapshot(card) {
+    if (!card) {
+        return null;
+    }
+    const compact = compactCard(card);
+
+    return {
+        ...compact,
+        id: card.id ?? compact.id,
+    };
+}
+
+function normalizeRuleText(value) {
+    return String(value ?? '')
+        .replace(/\r/g, '\n')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function splitTriggeredAbilityClauses(text) {
+    const normalized = String(text ?? '').replace(/\r/g, '\n');
+    return [...normalized.matchAll(/\b(?:whenever|when|at)\b[^.]+\./gi)].map(match => {
+        return normalizeRuleText(match[0]);
+    });
+}
+
+function parseNumberWord(value) {
+    const normalized = String(value ?? '').toLowerCase();
+    const words = {
+        a: 1,
+        an: 1,
+        eight: 8,
+        five: 5,
+        four: 4,
+        nine: 9,
+        one: 1,
+        seven: 7,
+        six: 6,
+        ten: 10,
+        three: 3,
+        two: 2,
+    };
+
+    if (/^\d+$/.test(normalized)) {
+        return Number(normalized);
+    }
+
+    return words[normalized] ?? 1;
+}
+
+function cardHasType(card, type) {
+    return new RegExp(`\\b${type}\\b`, 'i').test(typeLineOf(card));
+}
+
+function cardMatchesHookTypes(card, cardTypes = []) {
+    return cardTypes.every(type => cardHasType(card, type));
+}
+
+function deriveTokenName(effectText) {
+    if (/\btreasure token\b/i.test(effectText)) {
+        return 'Treasure';
+    }
+    if (/\bfood token\b/i.test(effectText)) {
+        return 'Food';
+    }
+    if (/\bclue token\b/i.test(effectText)) {
+        return 'Clue';
+    }
+
+    const tokenMatch = /\bcreate (?:a|an|one|\d+)?\s*(?:\d+\/\d+\s+)?(?:[a-z]+\s+)*(?:artifact\s+)?([a-z][a-z -]*?) creature token\b/i.exec(effectText);
+    if (tokenMatch) {
+        const words = tokenMatch[1].trim().split(/\s+/);
+        return words.at(-1)?.replace(/^\w/, letter => letter.toUpperCase()) ?? 'Creature';
+    }
+
+    return 'Token';
+}
+
+function parseRuleAction(effectText) {
+    const pump = /\bthis (?:creature|permanent|card)[^.]*gets \+(\d+)\/\+?(\d+) until end of turn\b/i.exec(effectText);
+    if (pump) {
+        return {
+            name: 'modifyPermanent',
+            params: {
+                duration: 'untilEndOfTurn',
+                powerDelta: Number(pump[1]),
+                target: 'hookSource',
+                toughnessDelta: Number(pump[2]),
+            },
+        };
+    }
+
+    const gainLife = /\byou gain (a|one|two|three|four|five|six|seven|eight|nine|ten|\d+) life\b/i.exec(effectText);
+    if (gainLife) {
+        return {
+            name: 'gainLife',
+            params: {
+                amount: parseNumberWord(gainLife[1]),
+                player: 'hookController',
+            },
+        };
+    }
+
+    const draw = /\bdraw (a|one|two|three|four|five|six|seven|eight|nine|ten|\d+) cards?\b/i.exec(effectText);
+    if (draw) {
+        return {
+            name: 'drawCards',
+            params: {
+                amount: parseNumberWord(draw[1]),
+                player: 'hookController',
+            },
+        };
+    }
+
+    if (/\bcreate\b[^.]*\btoken\b/i.test(effectText)) {
+        return {
+            name: 'createToken',
+            params: {
+                controller: 'hookController',
+                tokenName: deriveTokenName(effectText),
+            },
+        };
+    }
+
+    return {
+        name: 'unsupportedAction',
+        params: {
+            text: normalizeRuleText(effectText),
+        },
+    };
+}
+
+function castTriggerCondition(triggerText) {
+    const cast = /^whenever you cast (?:an? )?(.+?) spell$/i.exec(triggerText);
+    if (!cast) {
+        return null;
+    }
+
+    const scope = cast[1].toLowerCase();
+    if (scope.includes('noncreature')) {
+        return {
+            event: 'cast',
+            condition: {
+                name: 'spellCastMatches',
+                params: {
+                    cardTypes: [],
+                    controller: 'hookController',
+                    nonCreature: true,
+                },
+            },
+        };
+    }
+
+    const cardTypes = [];
+    for (const type of ['artifact', 'creature', 'enchantment', 'instant', 'sorcery']) {
+        if (new RegExp(`\\b${type}\\b`, 'i').test(scope)) {
+            cardTypes.push(type);
+        }
+    }
+
+    return {
+        event: 'cast',
+        condition: {
+            name: 'spellCastMatches',
+            params: {
+                cardTypes,
+                controller: 'hookController',
+                nonCreature: false,
+            },
+        },
+    };
+}
+
+function enterTriggerCondition(triggerText) {
+    if (/^when this .* enters$/i.test(triggerText)) {
+        return {
+            event: 'enterBattlefield',
+            condition: {
+                name: 'sourceEnteredBattlefield',
+                params: {},
+            },
+        };
+    }
+
+    const anotherCreature = /^whenever another (nontoken )?creature you control enters$/i.exec(triggerText);
+    if (anotherCreature) {
+        return {
+            event: 'enterBattlefield',
+            condition: {
+                name: 'permanentEnteredMatches',
+                params: {
+                    cardTypes: ['creature'],
+                    controller: 'hookController',
+                    excludeSource: true,
+                    nontoken: Boolean(anotherCreature[1]),
+                },
+            },
+        };
+    }
+
+    if (/^whenever this creature or another creature you control enters$/i.test(triggerText)) {
+        return {
+            event: 'enterBattlefield',
+            condition: {
+                name: 'permanentEnteredMatches',
+                params: {
+                    cardTypes: ['creature'],
+                    controller: 'hookController',
+                    excludeSource: false,
+                },
+            },
+        };
+    }
+
+    return null;
+}
+
+function deathTriggerCondition(triggerText) {
+    const anotherCreature = /^whenever another (nontoken )?creature you control dies$/i.exec(triggerText);
+    if (!anotherCreature) {
+        return null;
+    }
+
+    return {
+        event: 'enterGraveyard',
+        condition: {
+            name: 'permanentMovedZones',
+            params: {
+                cardTypes: ['creature'],
+                controller: 'hookController',
+                excludeSource: true,
+                fromZone: 'battlefield',
+                nontoken: Boolean(anotherCreature[1]),
+                toZone: 'graveyard',
+            },
+        },
+    };
+}
+
+function lifeTriggerCondition(triggerText) {
+    if (/^whenever you gain life$/i.test(triggerText)) {
+        return {
+            event: 'gainLife',
+            condition: {
+                name: 'playerLifeChanged',
+                params: {
+                    change: 'gain',
+                    player: 'hookController',
+                },
+            },
+        };
+    }
+
+    if (/^whenever you lose life$/i.test(triggerText)) {
+        return {
+            event: 'loseLife',
+            condition: {
+                name: 'playerLifeChanged',
+                params: {
+                    change: 'lose',
+                    player: 'hookController',
+                },
+            },
+        };
+    }
+
+    return null;
+}
+
+function phaseTriggerCondition(triggerText) {
+    const phaseByText = [
+        [/^at the beginning of your upkeep$/i, 'beginningOfUpkeep'],
+        [/^at the beginning of your draw step$/i, 'beginningOfDrawStep'],
+        [/^at the beginning of your first main phase$/i, 'beginningOfFirstMainPhase'],
+        [/^at the beginning of your end step$/i, 'beginningOfEndStep'],
+    ];
+
+    for (const [pattern, event] of phaseByText) {
+        if (pattern.test(triggerText)) {
+            return {
+                event,
+                condition: {
+                    name: 'phaseBeginsForController',
+                    params: {
+                        player: 'hookController',
+                    },
+                },
+            };
+        }
+    }
+
+    return null;
+}
+
+function parseRuleCondition(triggerText) {
+    return castTriggerCondition(triggerText) ??
+        enterTriggerCondition(triggerText) ??
+        deathTriggerCondition(triggerText) ??
+        lifeTriggerCondition(triggerText) ??
+        phaseTriggerCondition(triggerText);
+}
+
+export function parseRuleHooksFromCard(card, options = {}) {
+    const controllerKey = options.controllerKey ?? 'you';
+    const sourceZone = options.sourceZone ?? 'unknown';
+    const sourceCard = cardSnapshot(card);
+    const hooks = [];
+
+    for (const clause of splitTriggeredAbilityClauses(oracleTextOf(card))) {
+        const match = /^(whenever|when|at)\s+([^,]+),\s+(.+)\.$/i.exec(clause);
+        if (!match) {
+            continue;
+        }
+
+        const triggerText = `${match[1]} ${match[2]}`.toLowerCase();
+        const parsedCondition = parseRuleCondition(triggerText);
+        if (!parsedCondition) {
+            continue;
+        }
+
+        const action = parseRuleAction(match[3]);
+        hooks.push({
+            id: `${sourceCard.id}:${parsedCondition.event}:${hooks.length}`,
+            action,
+            condition: parsedCondition.condition,
+            event: parsedCondition.event,
+            sourceCard,
+            sourceController: controllerKey,
+            sourceId: sourceCard.id,
+            sourceZone,
+            triggerText: normalizeRuleText(`${match[1]} ${match[2]}`),
+        });
+    }
+
+    return hooks;
+}
+
+export function createGameEngineState() {
+    return {
+        events: [],
+        registeredHooks: [],
+        stack: [],
+    };
+}
+
+function playerMatchesScope(scope, hook, event) {
+    if (scope === 'hookController') {
+        return event.playerKey === hook.sourceController;
+    }
+
+    return true;
+}
+
+function eventSourceMatchesHookSource(hook, event) {
+    return (event.card?.id ?? '') === hook.sourceId;
+}
+
+function conditionMatchesRuleEvent(hook, event) {
+    if (hook.event !== event.name) {
+        return false;
+    }
+
+    const params = hook.condition?.params ?? {};
+    switch (hook.condition?.name) {
+        case 'spellCastMatches':
+            return playerMatchesScope(params.controller, hook, event) &&
+                !isLand(event.card) &&
+                (!params.nonCreature || !isCreature(event.card)) &&
+                cardMatchesHookTypes(event.card, params.cardTypes ?? []);
+        case 'sourceEnteredBattlefield':
+            return eventSourceMatchesHookSource(hook, event);
+        case 'permanentEnteredMatches':
+            return playerMatchesScope(params.controller, hook, event) &&
+                (!params.excludeSource || !eventSourceMatchesHookSource(hook, event)) &&
+                (!params.nontoken || !event.card?.isToken) &&
+                cardMatchesHookTypes(event.card, params.cardTypes ?? []);
+        case 'permanentMovedZones':
+            return event.fromZone === params.fromZone &&
+                event.toZone === params.toZone &&
+                playerMatchesScope(params.controller, hook, event) &&
+                (!params.excludeSource || !eventSourceMatchesHookSource(hook, event)) &&
+                (!params.nontoken || !event.card?.isToken) &&
+                cardMatchesHookTypes(event.card, params.cardTypes ?? []);
+        case 'phaseBeginsForController':
+            return playerMatchesScope(params.player, hook, event);
+        case 'playerLifeChanged':
+            return playerMatchesScope(params.player, hook, event) &&
+                (
+                    (params.change === 'gain' && event.name === 'gainLife') ||
+                    (params.change === 'lose' && event.name === 'loseLife')
+                );
+        default:
+            return false;
+    }
+}
+
+function normalizeGameEngineEvent(event, id) {
+    return {
+        id: event.id ?? `event:${id}`,
+        card: cardSnapshot(event.card),
+        fromZone: event.fromZone,
+        name: event.name,
+        phase: event.phase,
+        playerKey: event.playerKey,
+        toZone: event.toZone,
+        turn: event.turn,
+    };
+}
+
+function stackItem(type, event, extra = {}) {
+    return {
+        id: `${event.id}:${type}:${extra.hook?.id ?? extra.sourceCard?.id ?? event.card?.id ?? 'item'}`,
+        event: event.name,
+        sourceCard: extra.sourceCard ?? event.card,
+        type,
+        usesStack: type !== 'specialAction',
+        ...(extra.hook ? {
+            action: extra.hook.action,
+            condition: extra.hook.condition,
+            hookId: extra.hook.id,
+            sourceCard: extra.hook.sourceCard,
+            triggerEvent: event.name,
+        } : {}),
+    };
+}
+
+export function processGameEngineEvent(engineState, event) {
+    const normalizedEvent = normalizeGameEngineEvent(event, engineState.events.length);
+    const stackItems = [];
+    engineState.events.push(normalizedEvent);
+
+    if (normalizedEvent.name === 'cast' && normalizedEvent.card && !isLand(normalizedEvent.card)) {
+        stackItems.push(stackItem('spell', normalizedEvent));
+    }
+
+    if (normalizedEvent.name === 'enterBattlefield' && normalizedEvent.card && isLand(normalizedEvent.card)) {
+        stackItems.push(stackItem('specialAction', normalizedEvent));
+    }
+
+    for (const hook of engineState.registeredHooks) {
+        if (conditionMatchesRuleEvent(hook, normalizedEvent)) {
+            stackItems.push(stackItem('triggeredAbility', normalizedEvent, { hook }));
+        }
+    }
+
+    engineState.stack.push(...stackItems);
+    return {
+        event: normalizedEvent,
+        stackItems,
+    };
+}
+
+function registerPermanentHooks(engineState, card, controllerKey) {
+    const hooks = parseRuleHooksFromCard(card, {
+        controllerKey,
+        sourceZone: 'battlefield',
+    });
+    engineState.registeredHooks.push(...hooks);
+    return hooks;
 }
 
 function stringToSeed(value) {
@@ -845,11 +1340,20 @@ function finalizeZones(hand, library, mutableZones, actionContext = null, resour
     };
 }
 
-function drawCard(playerState) {
+function drawCard(playerState, options = {}) {
     const card = playerState.library[playerState.libraryIndex];
     if (card) {
         playerState.hand.push(card);
         playerState.libraryIndex += 1;
+        if (options.engineState) {
+            processGameEngineEvent(options.engineState, {
+                card,
+                name: 'draw',
+                phase: options.phase,
+                playerKey: options.player?.key,
+                turn: options.turn,
+            });
+        }
     }
 
     return card ?? null;
@@ -1057,6 +1561,20 @@ function hasDeclaredAttackers(phaseSteps, step, stepIndex, resolvedActions = [])
     });
 }
 
+function processBeginningOfPhase(engineState, player, turn, phase) {
+    const name = beginningEventByPhase[phase];
+    if (!name) {
+        return null;
+    }
+
+    return processGameEngineEvent(engineState, {
+        name,
+        phase,
+        playerKey: player.key,
+        turn,
+    });
+}
+
 export function shouldAutoAdvanceStep(step, phaseSteps = [], stepIndex = -1, resolvedActions = []) {
     if (!step) {
         return true;
@@ -1089,7 +1607,7 @@ export function findNextInteractiveStepIndex(phaseSteps = [], currentIndex = 0, 
     return nextIndex;
 }
 
-function playFirstLand(playerState) {
+function playFirstLand(playerState, options = {}) {
     if ((playerState.landPlaysAvailable ?? 1) <= 0) {
         return null;
     }
@@ -1100,19 +1618,55 @@ function playFirstLand(playerState) {
     }
 
     const [land] = playerState.hand.splice(landIndex, 1);
-    playerState.zones.battlefield.lands.push(cardWithState(land));
+    const battlefieldLand = cardWithState(land);
+    playerState.zones.battlefield.lands.push(battlefieldLand);
     playerState.landPlaysAvailable -= 1;
+    if (options.engineState) {
+        registerPermanentHooks(options.engineState, battlefieldLand, options.player?.key);
+        processGameEngineEvent(options.engineState, {
+            card: battlefieldLand,
+            name: 'enterBattlefield',
+            phase: options.phase,
+            playerKey: options.player?.key,
+            toZone: 'battlefield',
+            turn: options.turn,
+        });
+    }
     return land;
 }
 
-function castCard(card, playerState) {
+function castCard(card, playerState, options = {}) {
     if (isCreature(card)) {
-        playerState.zones.battlefield.creatures.push(cardWithState(card, { summoningSick: true }));
+        const permanent = cardWithState(card, { summoningSick: true });
+        playerState.zones.battlefield.creatures.push(permanent);
+        if (options.engineState) {
+            registerPermanentHooks(options.engineState, permanent, options.player?.key);
+            processGameEngineEvent(options.engineState, {
+                card: permanent,
+                name: 'enterBattlefield',
+                phase: options.phase,
+                playerKey: options.player?.key,
+                toZone: 'battlefield',
+                turn: options.turn,
+            });
+        }
         return 'battlefield';
     }
 
     if (isPermanent(card)) {
-        playerState.zones.battlefield.nonCreaturePermanents.push(cardWithState(card));
+        const permanent = cardWithState(card);
+        playerState.zones.battlefield.nonCreaturePermanents.push(permanent);
+        if (options.engineState) {
+            registerPermanentHooks(options.engineState, permanent, options.player?.key);
+            processGameEngineEvent(options.engineState, {
+                card: permanent,
+                name: 'enterBattlefield',
+                phase: options.phase,
+                playerKey: options.player?.key,
+                toZone: 'battlefield',
+                turn: options.turn,
+            });
+        }
         return 'battlefield';
     }
 
@@ -1122,6 +1676,17 @@ function castCard(card, playerState) {
     }
 
     playerState.zones.graveyard.push(card);
+    if (options.engineState) {
+        processGameEngineEvent(options.engineState, {
+            card,
+            fromZone: 'stack',
+            name: 'enterGraveyard',
+            phase: options.phase,
+            playerKey: options.player?.key,
+            toZone: 'graveyard',
+            turn: options.turn,
+        });
+    }
     return 'graveyard';
 }
 
@@ -1133,7 +1698,12 @@ function applySimpleMainPhase(playerState, options = {}) {
         };
     }
 
-    const playedLand = playFirstLand(playerState);
+    const playedLand = playFirstLand(playerState, {
+        engineState: options.engineState,
+        phase: 'main',
+        player: options.player,
+        turn: options.turn,
+    });
     let remainingMana = playerState.zones.battlefield.lands.length;
     const castCards = [];
 
@@ -1146,10 +1716,24 @@ function applySimpleMainPhase(playerState, options = {}) {
         }
 
         const [card] = playerState.hand.splice(castIndex, 1);
+        if (options.engineState) {
+            processGameEngineEvent(options.engineState, {
+                card,
+                name: 'cast',
+                phase: 'main',
+                playerKey: options.player?.key,
+                turn: options.turn,
+            });
+        }
         remainingMana -= card.manaValue;
         castCards.push({
             card,
-            destination: castCard(card, playerState),
+            destination: castCard(card, playerState, {
+                engineState: options.engineState,
+                phase: 'main',
+                player: options.player,
+                turn: options.turn,
+            }),
         });
     }
 
@@ -1247,6 +1831,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
             },
         ];
     }));
+    const gameEngine = createGameEngineState();
     const timeline = [];
     const phaseSteps = [];
 
@@ -1254,6 +1839,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
         for (const player of basePlayers) {
             const playerState = playerStates.get(player.key);
             playerState.landPlaysAvailable = 1;
+            processBeginningOfPhase(gameEngine, player, turn, 'upkeep');
             timeline.push({
                 turn,
                 playerKey: player.key,
@@ -1264,7 +1850,13 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
             phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'upkeep'));
 
             const skipsFirstDraw = turn === 1 && player.key === basePlayers[0].key;
-            const drawnCard = skipsFirstDraw ? null : drawCard(playerState);
+            processBeginningOfPhase(gameEngine, player, turn, 'draw');
+            const drawnCard = skipsFirstDraw ? null : drawCard(playerState, {
+                engineState: gameEngine,
+                phase: 'draw',
+                player,
+                turn,
+            });
 
             timeline.push({
                 turn,
@@ -1276,13 +1868,20 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
             });
             phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'draw'));
 
+            processBeginningOfPhase(gameEngine, player, turn, 'main');
             const mainStep = buildMainPhaseStep(player, turn, playerState);
             phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'main'));
-            const mainActions = applySimpleMainPhase(playerState, options);
+            const mainActions = applySimpleMainPhase(playerState, {
+                ...options,
+                engineState: gameEngine,
+                player,
+                turn,
+            });
             timeline.push({
                 ...mainStep,
                 ...mainActions,
             });
+            processBeginningOfPhase(gameEngine, player, turn, 'attack');
             phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'attack'));
             timeline.push({
                 turn,
@@ -1291,8 +1890,11 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
                 phase: 'combat',
                 note: 'Combat choices are not resolved yet.',
             });
+            processBeginningOfPhase(gameEngine, player, turn, 'blockers');
             phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'blockers'));
+            processBeginningOfPhase(gameEngine, player, turn, 'damageOrder');
             phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'damageOrder'));
+            processBeginningOfPhase(gameEngine, player, turn, 'secondMain');
             phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'secondMain'));
             timeline.push({
                 turn,
@@ -1301,6 +1903,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
                 phase: 'end',
                 holdUpOptions: buildMainPhaseStep(player, turn, playerState).holdUpOptions,
             });
+            processBeginningOfPhase(gameEngine, player, turn, 'end');
             phaseSteps.push(buildPhaseStep(basePlayers, playerStates, player, turn, 'end'));
 
             if (playerState.hand.length > normalizeMaxHandSize(playerState.maxHandSize)) {
@@ -1331,6 +1934,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
             seed,
             turnCount,
         },
+        gameEngine,
         phaseSequence,
         phaseSteps,
         playerList,
