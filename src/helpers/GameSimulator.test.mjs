@@ -278,7 +278,14 @@ describe('GameSimulator', () => {
             card('mountain', 10, { typeLine: 'Basic Land - Mountain' }),
         ];
 
-        const penalized = buildGameSimulation(deck, deck, {
+        const pendingBottom = buildGameSimulation(deck, deck, {
+            mulliganCounts: { you: 1 },
+            seed: 1,
+            shuffle: false,
+            turnCount: 1,
+        });
+        const chosenBottom = buildGameSimulation(deck, deck, {
+            mulliganBottomChoices: { you: ['mountain:0'] },
             mulliganCounts: { you: 1 },
             seed: 1,
             shuffle: false,
@@ -292,14 +299,29 @@ describe('GameSimulator', () => {
             turnCount: 1,
         });
 
-        expect(quantityTotal(penalized.players.you.openingHand)).toBe(6);
-        expect(penalized.players.you.libraryCount).toBe(4);
-        expect(penalized.players.you.mulligan).toMatchObject({
+        expect(quantityTotal(pendingBottom.players.you.openingHand)).toBe(7);
+        expect(pendingBottom.players.you.libraryCount).toBe(3);
+        expect(pendingBottom.players.you.mulligan).toMatchObject({
+            bottomedCount: 0,
+            countedMulligans: 1,
+            freeMulligans: 0,
+            mulligansTaken: 1,
+            pendingBottomCount: 1,
+            requiredBottomCount: 1,
+        });
+        expect(quantityTotal(chosenBottom.players.you.openingHand)).toBe(6);
+        expect(chosenBottom.players.you.libraryCount).toBe(4);
+        expect(chosenBottom.players.you.mulligan).toMatchObject({
             bottomedCount: 1,
             countedMulligans: 1,
             freeMulligans: 0,
             mulligansTaken: 1,
+            pendingBottomCount: 0,
+            requiredBottomCount: 1,
         });
+        expect(chosenBottom.players.you.mulligan.bottomedCards).toEqual([
+            expect.objectContaining({ id: 'mountain:0' }),
+        ]);
         expect(quantityTotal(free.players.you.openingHand)).toBe(7);
         expect(free.players.you.libraryCount).toBe(3);
         expect(free.players.you.mulligan).toMatchObject({
@@ -307,6 +329,8 @@ describe('GameSimulator', () => {
             countedMulligans: 0,
             freeMulligans: 1,
             mulligansTaken: 1,
+            pendingBottomCount: 0,
+            requiredBottomCount: 0,
         });
     });
 

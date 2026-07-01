@@ -1391,6 +1391,7 @@ function buildMainPhaseStep(player, turn, playerState) {
 
 function buildPlayerSummary(player, playerState, actionContext = null) {
     return {
+        handCards: playerState.hand.map(cardSnapshot),
         key: player.key,
         library: player.library,
         libraryCount: Math.max(0, playerState.library.length - playerState.libraryIndex),
@@ -1976,12 +1977,14 @@ function buildPlayers(currentDeck, opponentDeck, options = {}) {
         const config = buildPlayerConfig(index, options);
         const deck = options.playerDecks?.[index] ?? (index === 0 ? currentDeck : opponentDeck);
         const expandedDeck = expandDeckCards(deck);
+        const mulligansTaken = mulliganCountForPlayer(options.mulliganCounts, config.key, index);
         const shuffledLibrary = options.shuffle === false
             ? expandedDeck
-            : shuffle(expandedDeck, `${options.seed ?? 1}:${config.key}`);
+            : shuffle(expandedDeck, `${options.seed ?? 1}:${config.key}:mulligan:${mulligansTaken}`);
         const mulligan = buildOpeningHandFromMulligans(shuffledLibrary, {
+            bottomCardIds: mulliganBottomChoicesForPlayer(options.mulliganBottomChoices, config.key, index),
             freeMulligans: options.freeMulligans,
-            mulligansTaken: mulliganCountForPlayer(options.mulliganCounts, config.key, index),
+            mulligansTaken,
         });
 
         return {
@@ -2037,19 +2040,61 @@ function mulliganCountForPlayer(mulliganCounts = {}, playerKey, playerIndex) {
     return normalizedNonNegativeInteger(mulliganCounts?.[playerKey], 0);
 }
 
+function mulliganBottomChoicesForPlayer(mulliganBottomChoices = {}, playerKey, playerIndex) {
+    const choice = Array.isArray(mulliganBottomChoices)
+        ? mulliganBottomChoices[playerIndex]
+        : mulliganBottomChoices?.[playerKey];
+
+    if (Array.isArray(choice)) {
+        return choice;
+    }
+
+    if (Array.isArray(choice?.cardIds)) {
+        return choice.cardIds;
+    }
+
+    return [];
+}
+
+function bottomCardsFromChoice(drawnCards, bottomCardIds, requiredBottomCount) {
+    const remainingIds = [...bottomCardIds].map(String);
+    const bottomedCards = [];
+    const openingHand = [];
+
+    for (const card of drawnCards) {
+        const matchingIndex = remainingIds.indexOf(String(card.id));
+        if (bottomedCards.length < requiredBottomCount && matchingIndex >= 0) {
+            bottomedCards.push(card);
+            remainingIds.splice(matchingIndex, 1);
+            continue;
+        }
+
+        openingHand.push(card);
+    }
+
+    return {
+        bottomedCards,
+        openingHand,
+    };
+}
+
 function buildOpeningHandFromMulligans(library = [], options = {}) {
     const startingHandSize = 7;
     const mulligansTaken = normalizedNonNegativeInteger(options.mulligansTaken, 0);
     const freeMulligans = normalizedNonNegativeInteger(options.freeMulligans, 0);
     const countedMulligans = Math.max(0, mulligansTaken - freeMulligans);
-    const keptHandSize = Math.max(0, startingHandSize - countedMulligans);
     const drawnCards = library.slice(0, startingHandSize);
-    const openingHand = drawnCards.slice(0, keptHandSize);
-    const bottomedCards = drawnCards.slice(keptHandSize);
+    const requiredBottomCount = Math.min(countedMulligans, drawnCards.length);
+    const { bottomedCards, openingHand } = bottomCardsFromChoice(
+        drawnCards,
+        options.bottomCardIds ?? [],
+        requiredBottomCount,
+    );
 
     return {
         bottomedCards,
         bottomedCount: bottomedCards.length,
+        bottomCardIds: bottomedCards.map(card => card.id),
         countedMulligans,
         freeMulligans,
         library: [
@@ -2059,6 +2104,8 @@ function buildOpeningHandFromMulligans(library = [], options = {}) {
         ],
         mulligansTaken,
         openingHand,
+        pendingBottomCount: Math.max(0, requiredBottomCount - bottomedCards.length),
+        requiredBottomCount,
         startingHandSize,
     };
 }

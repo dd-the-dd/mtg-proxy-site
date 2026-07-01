@@ -276,13 +276,23 @@ describe('Core Rendering', async () => {
         await wrapper.find('#simulation-mulligan-take').trigger('click');
         await wrapper.vm.$nextTick();
         expect(component.data.simulationMulliganCounts.you).toBe(1);
-        expect(component.proxy.gameSimulation.players.you.zones.handCount).toBe(6);
+        expect(component.proxy.gameSimulation.players.you.zones.handCount).toBe(7);
 
         await wrapper.find('#simulation-mulligan-keep').trigger('click');
         await wrapper.vm.$nextTick();
 
+        expect(wrapper.find('#simulation-mulligan-bottom-panel').exists()).toBe(true);
+        expect(wrapper.find('#simulation-mulligan-bottom-confirm').attributes('disabled')).toBeDefined();
+        await wrapper.findAll('.simulation-mulligan-bottom-card')[0].trigger('click');
+        await wrapper.vm.$nextTick();
+        expect(wrapper.find('#simulation-mulligan-bottom-confirm').attributes('disabled')).toBeUndefined();
+
+        await wrapper.find('#simulation-mulligan-bottom-confirm').trigger('click');
+        await wrapper.vm.$nextTick();
+
         expect(wrapper.find('#simulation-mulligan-panel').exists()).toBe(false);
         expect(component.data.simulationMulliganKept.you).toBe(true);
+        expect(component.proxy.gameSimulation.players.you.zones.handCount).toBe(6);
         expect(component.proxy.activeSimulationStep.phase).toBe('main');
         expect(component.proxy.activeSimulationStep.playerKey).toBe('you');
 

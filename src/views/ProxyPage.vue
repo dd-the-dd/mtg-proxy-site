@@ -820,7 +820,42 @@
                 Mulligans {{ simulationMulliganCount(simulationMulliganPendingPlayer) }}
                 / bottom {{ simulationMulliganBottomCount(simulationMulliganPendingPlayer) }}
               </div>
-              <div class="simulation-mulligan-actions">
+              <div
+                v-if="isSimulationMulliganBottoming"
+                id="simulation-mulligan-bottom-panel"
+                class="simulation-mulligan-bottom-panel"
+              >
+                <div class="simulation-mulligan-detail">
+                  Choose {{ simulationMulliganBottomCount(simulationMulliganPendingPlayer) }} card(s) to put on bottom.
+                </div>
+                <div class="simulation-mulligan-bottom-cards">
+                  <button
+                    v-for="card in simulationMulliganBottomCandidateCards(simulationMulliganPendingPlayer)"
+                    :key="`mulligan-bottom-${card.id}`"
+                    type="button"
+                    class="btn btn-sm simulation-mulligan-bottom-card"
+                    :class="{ active: isSimulationMulliganBottomCardSelected(simulationMulliganPendingPlayer, card) }"
+                    @click="toggleSimulationMulliganBottomCard(simulationMulliganPendingPlayer, card)"
+                  >
+                    {{ simulationDisplayCardName(card) }}
+                  </button>
+                </div>
+                <div class="simulation-mulligan-actions">
+                  <button
+                    id="simulation-mulligan-bottom-confirm"
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    :disabled="!canConfirmSimulationMulliganBottom(simulationMulliganPendingPlayer)"
+                    @click="confirmSimulationMulliganBottom"
+                  >
+                    Put on bottom
+                  </button>
+                </div>
+              </div>
+              <div
+                v-else
+                class="simulation-mulligan-actions"
+              >
                 <button
                   id="simulation-mulligan-keep"
                   type="button"
@@ -2292,6 +2327,9 @@ export default {
             expandedSimulationZones: {},
             simulationActionMenu: null,
             simulationLifeTotals: {},
+            simulationMulliganBottomChoices: {},
+            simulationMulliganBottomDrafts: {},
+            simulationMulliganBottomingPlayerKey: '',
             simulationMulliganCounts: {},
             simulationMulliganFlowActive: false,
             simulationMulliganKept: {},
@@ -2420,12 +2458,21 @@ export default {
                 return null;
             }
 
+            if (this.simulationMulliganBottomingPlayerKey) {
+                return this.gameSimulation.playerList.find(player => {
+                    return player.key === this.simulationMulliganBottomingPlayerKey;
+                }) ?? null;
+            }
+
             return this.gameSimulation.playerList.find(player => {
                 return player.role === 'human' && !this.simulationMulliganKept[player.key];
             }) ?? null;
         },
         isSimulationMulliganPending() {
             return Boolean(this.simulationMulliganPendingPlayer);
+        },
+        isSimulationMulliganBottoming() {
+            return Boolean(this.simulationMulliganBottomingPlayerKey && this.simulationMulliganPendingPlayer);
         },
         showSimulationBoardLogs() {
             return false;
@@ -2711,6 +2758,9 @@ export default {
                     mulliganCounts: this.config.simulationMulliganEnabled
                         ? this.simulationMulliganCounts
                         : {},
+                    mulliganBottomChoices: this.config.simulationMulliganEnabled
+                        ? this.simulationMulliganBottomChoices
+                        : {},
                     seed: this.config.simulationSeed,
                     turnCount: this.config.simulationTurnCount,
                 },
@@ -2887,17 +2937,28 @@ export default {
             this.simulationPendingAction = null;
         },
         resetSimulationMulliganState() {
+            this.simulationMulliganBottomChoices = {};
+            this.simulationMulliganBottomDrafts = {};
+            this.simulationMulliganBottomingPlayerKey = '';
             this.simulationMulliganCounts = {};
             this.simulationMulliganFlowActive = false;
             this.simulationMulliganKept = {};
         },
         markSimulationAiMulligansKept() {
             const kept = {};
+            const bottomChoices = { ...this.simulationMulliganBottomChoices };
             for (const player of this.gameSimulation?.playerList ?? []) {
                 if (player.role === 'ai') {
                     kept[player.key] = true;
+                    const bottomCount = this.simulationMulliganBottomCount(player);
+                    if (bottomCount > 0) {
+                        bottomChoices[player.key] = (player.handCards ?? [])
+                            .slice(0, bottomCount)
+                            .map(card => card.id);
+                    }
                 }
             }
+            this.simulationMulliganBottomChoices = bottomChoices;
             this.simulationMulliganKept = kept;
         },
         startSimulationAtFirstInteractiveStep() {
@@ -2917,6 +2978,37 @@ export default {
         simulationMulliganBottomCount(player) {
             return Math.max(0, this.simulationMulliganCount(player) - this.simulationFreeMulliganCount());
         },
+        simulationMulliganBottomDraft(player) {
+            return [...(this.simulationMulliganBottomDrafts[player?.key] ?? [])];
+        },
+        simulationMulliganBottomCandidateCards(player) {
+            return player?.handCards ?? [];
+        },
+        isSimulationMulliganBottomCardSelected(player, card) {
+            return this.simulationMulliganBottomDraft(player).includes(card?.id);
+        },
+        canConfirmSimulationMulliganBottom(player) {
+            return this.simulationMulliganBottomDraft(player).length === this.simulationMulliganBottomCount(player);
+        },
+        toggleSimulationMulliganBottomCard(player, card) {
+            if (!player || !card?.id) {
+                return;
+            }
+
+            const bottomCount = this.simulationMulliganBottomCount(player);
+            const draft = this.simulationMulliganBottomDraft(player);
+            const existingIndex = draft.indexOf(card.id);
+            if (existingIndex >= 0) {
+                draft.splice(existingIndex, 1);
+            } else if (draft.length < bottomCount) {
+                draft.push(card.id);
+            }
+
+            this.simulationMulliganBottomDrafts = {
+                ...this.simulationMulliganBottomDrafts,
+                [player.key]: draft,
+            };
+        },
         canSimulationMulligan(player) {
             return this.simulationMulliganBottomCount(player) < 7;
         },
@@ -2930,6 +3022,15 @@ export default {
                 ...this.simulationMulliganCounts,
                 [player.key]: this.simulationMulliganCount(player) + 1,
             };
+            this.simulationMulliganBottomChoices = {
+                ...this.simulationMulliganBottomChoices,
+                [player.key]: [],
+            };
+            this.simulationMulliganBottomDrafts = {
+                ...this.simulationMulliganBottomDrafts,
+                [player.key]: [],
+            };
+            this.simulationMulliganBottomingPlayerKey = '';
             this.config.simulationStepIndex = 0;
         },
         keepSimulationMulligan() {
@@ -2938,6 +3039,31 @@ export default {
                 return;
             }
 
+            if (this.simulationMulliganBottomCount(player) > 0) {
+                this.simulationMulliganBottomingPlayerKey = player.key;
+                this.simulationMulliganBottomDrafts = {
+                    ...this.simulationMulliganBottomDrafts,
+                    [player.key]: [],
+                };
+                return;
+            }
+
+            this.markSimulationMulliganPlayerKept(player);
+        },
+        confirmSimulationMulliganBottom() {
+            const player = this.simulationMulliganPendingPlayer;
+            if (!player || !this.canConfirmSimulationMulliganBottom(player)) {
+                return;
+            }
+
+            this.simulationMulliganBottomChoices = {
+                ...this.simulationMulliganBottomChoices,
+                [player.key]: this.simulationMulliganBottomDraft(player),
+            };
+            this.simulationMulliganBottomingPlayerKey = '';
+            this.markSimulationMulliganPlayerKept(player);
+        },
+        markSimulationMulliganPlayerKept(player) {
             this.simulationMulliganKept = {
                 ...this.simulationMulliganKept,
                 [player.key]: true,
@@ -5647,6 +5773,24 @@ export default {
     color: #475467;
     font-size: 0.68rem;
     font-weight: 700;
+}
+
+.simulation-mulligan-bottom-panel {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.simulation-mulligan-bottom-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    justify-content: center;
+}
+
+.simulation-mulligan-bottom-card.active {
+    background: #5755d9;
+    border-color: #5755d9;
+    color: #fff;
 }
 
 .simulation-mulligan-actions {
