@@ -4,9 +4,16 @@
 
     <div
       class="app-layout"
-      :class="{ 'app-layout-sidebar-collapsed': leftMenuCollapsed }"
+      :class="{
+        'app-layout-sidebar-collapsed': leftMenuCollapsed && !isPlayResource,
+        'app-layout-play': isPlayResource,
+      }"
     >
-      <aside id="app-sidebar" class="app-sidebar">
+      <aside
+        v-if="!isPlayResource"
+        id="app-sidebar"
+        class="app-sidebar"
+      >
         <button
           id="toggle-left-menu"
           class="btn btn-block"
@@ -78,58 +85,71 @@
               id="config"
               class="form-group p-sticky"
             >
-              <div class="form-group">
-                <textarea
-                  id="deck-input"
-                  class="form-input"
-                  title="Deck Input"
-                  v-model="config.decklist"
-                  autofocus
-                  placeholder="4 Wild Nacatl&#10;0x Griselbrand&#10;4 Strip Mine (ATQ) 82d&#10;&#10;// Sideboard&#10;3x Rough // Tumble&#10;SB: dead/gone&#10;&#10;// Tokens&#10;5 Goblin&#10;Lost Mine of Phandelver"
-                />
+              <div
+                v-if="workspaceResource === 'deck'"
+                id="deck-resource-panel"
+                class="resource-panel"
+              >
+                <div class="form-group">
+                  <textarea
+                    id="deck-input"
+                    class="form-input"
+                    title="Deck Input"
+                    v-model="config.decklist"
+                    autofocus
+                    placeholder="4 Wild Nacatl&#10;0x Griselbrand&#10;4 Strip Mine (ATQ) 82d&#10;&#10;// Sideboard&#10;3x Rough // Tumble&#10;SB: dead/gone&#10;&#10;// Tokens&#10;5 Goblin&#10;Lost Mine of Phandelver"
+                  />
+                </div>
+
+                <div class="form-group btn-group btn-group-block">
+                  <button
+                    id="submit-decklist"
+                    class="btn btn-primary"
+                    @click="loadCardList()"
+                    :class="{ loading: isLoadingDeckList || isHydratingCards }"
+                    :disabled="isLoadingDeckList || isHydratingCards"
+                  >
+                    {{ cards.length ? $t('buttons.update') : $t('buttons.submit') }}
+                  </button>
+                </div>
               </div>
 
-              <div class="form-group btn-group btn-group-block">
-                <button
-                  id="submit-decklist"
-                  class="btn btn-primary"
-                  @click="loadCardList()"
-                  :class="{ loading: isLoadingDeckList || isHydratingCards }"
-                  :disabled="isLoadingDeckList || isHydratingCards"
-                >
-                  {{ cards.length ? $t('buttons.update') : $t('buttons.submit') }}
-                </button>
-                <button
-                  id="print"
-                  class="btn btn-block tooltip"
-                  @click="printList"
-                  :disabled="cards.length == 0"
-                  :data-tooltip="$t('consumedSlots', { count: cardCountWhenPrinting.count, bound: cardCountWhenPrinting.bound})"
-                >
-                  <span class="icon-print" /> {{ $t('buttons.print') }}
-                </button>
-              </div>
-              <div class="form-group">
-                <button
-                  id="open-print-order"
-                  class="btn btn-block"
-                  @click="openPrintOrderModal"
-                  :disabled="printSlotsFrontBase.length == 0"
-                >
-                  Print Order
-                </button>
-              </div>
-              <div class="form-group">
-                <label class="form-switch">
-                  <input
-                    id="analysis-mode"
-                    type="checkbox"
-                    v-model="config.analysisMode"
+              <div
+                v-if="workspaceResource === 'print'"
+                id="print-resource-panel"
+                class="resource-panel"
+              >
+                <div class="form-group btn-group btn-group-block">
+                  <button
+                    id="print"
+                    class="btn btn-primary tooltip"
+                    @click="printList"
+                    :disabled="cards.length == 0"
+                    :data-tooltip="$t('consumedSlots', { count: cardCountWhenPrinting.count, bound: cardCountWhenPrinting.bound})"
                   >
-                  <i class="form-icon" /> Analysis mode
-                </label>
+                    <span class="icon-print" /> {{ $t('buttons.print') }}
+                  </button>
+                  <button
+                    id="open-print-order"
+                    class="btn"
+                    @click="openPrintOrderModal"
+                    :disabled="printSlotsFrontBase.length == 0"
+                  >
+                    Print Order
+                  </button>
+                </div>
               </div>
-              <div v-if="config.analysisMode" id="analysis-config" class="form-group">
+
+              <div
+                v-if="workspaceResource === 'analysis'"
+                id="analysis-resource-panel"
+                class="resource-panel"
+              >
+                <input
+                  id="analysis-mode"
+                  type="hidden"
+                  :value="isAnalysisResource ? 'true' : 'false'"
+                >
                 <label class="form-label">
                   Metric
                   <select
@@ -178,7 +198,10 @@
                 </label>
               </div>
 
-              <div class="form-group btn-group btn-group-block">
+              <div
+                v-if="workspaceResource === 'print'"
+                class="form-group btn-group btn-group-block"
+              >
                 <div id="slot-usage" class="bar">
                   <template v-for="index in printCapacity.pageSize" :key="index">
                     <div
@@ -189,7 +212,7 @@
                 </div>
               </div>
               <div
-                v-if="cards.length"
+                v-if="workspaceResource === 'print' && cards.length"
                 id="print-capacity"
                 class="text-small text-gray"
               >
@@ -197,13 +220,17 @@
                 / {{ printCapacity.missingGamePieces }} game piece face{{ printCapacity.missingGamePieces === 1 ? '' : 's' }}
               </div>
 
-              <div class="spacer" style="height: 0.4rem" />
+              <div v-if="workspaceResource === 'print'" class="spacer" style="height: 0.4rem" />
               <div
+                v-if="workspaceResource === 'print'"
                 class="divider text-center"
                 :data-content="$t('configuration.label').toUpperCase()"
               />
 
-              <div class="columns">
+              <div
+                v-if="workspaceResource === 'print'"
+                class="columns"
+              >
                 <div class="column col-12">
                   <label class="form-switch">
                     <input
@@ -291,8 +318,11 @@
                   </label>
                 </div>
               </div>
-              <div class="column col-12 divider" />
-              <div class="columns">
+              <div v-if="workspaceResource === 'deck'" class="column col-12 divider" />
+              <div
+                v-if="workspaceResource === 'deck'"
+                class="columns"
+              >
                 <div class="column col-12 btn-group btn-group-block">
                   <button
                     id="toggle-combo-piece-config"
@@ -380,8 +410,11 @@
                   </label>
                 </div>
               </div>
-              <div class="column col-12 divider" />
-              <div class="columns">
+              <div v-if="workspaceResource === 'print'" class="column col-12 divider" />
+              <div
+                v-if="workspaceResource === 'print'"
+                class="columns"
+              >
                 <div class="column col-12">
                   <label class="form-label">
                     <span
@@ -466,6 +499,71 @@
                   </div>
                 </div>
               </div>
+              <div
+                v-if="workspaceResource === 'card-analysis'"
+                id="card-analysis-resource-panel"
+                class="resource-panel"
+              >
+                <label class="form-label">
+                  Card search
+                  <input
+                    class="form-input"
+                    type="search"
+                    placeholder="Search any card"
+                  >
+                </label>
+                <div class="text-small text-gray">
+                  Oracle parser diagnostics and card-only value analysis will live here.
+                </div>
+              </div>
+              <div
+                v-if="workspaceResource === 'compare'"
+                id="compare-resource-panel"
+                class="resource-panel"
+              >
+                <label class="form-label">
+                  Compare cards
+                  <input
+                    class="form-input"
+                    type="search"
+                    placeholder="Search a card to compare"
+                  >
+                </label>
+                <div class="text-small text-gray">
+                  Deck-aware card comparison will live here.
+                </div>
+              </div>
+              <div
+                v-if="workspaceResource === 'meta'"
+                id="meta-resource-panel"
+                class="resource-panel"
+              >
+                <label v-if="activeSessionId" class="form-switch">
+                  <input
+                    type="checkbox"
+                    v-model="activeSessionIsMetaDeck"
+                  >
+                  <i class="form-icon" /> Current deck is meta
+                </label>
+                <div class="menu local-session-list">
+                  <button
+                    v-for="session in metaDeckSessionOptions"
+                    :key="`meta-resource-${session.id}`"
+                    type="button"
+                    class="menu-item btn btn-link local-session-item"
+                    :class="{ active: session.id === activeSessionId }"
+                    @click="loadLocalSession(session.id)"
+                  >
+                    {{ session.name }}
+                  </button>
+                  <div
+                    v-if="metaDeckSessionOptions.length === 0"
+                    class="text-small text-gray"
+                  >
+                    No meta decks yet.
+                  </div>
+                </div>
+              </div>
               <div class="column col-12 divider" />
               <div class="columns">
                 <div class="column col-12">
@@ -486,7 +584,7 @@
       <main class="app-main">
         <div
           class="empty"
-          v-show="cards.length === 0 && errors.length === 0"
+          v-show="workspaceResource === 'deck' && cards.length === 0 && errors.length === 0"
         >
           <div class="empty-icon">
             <i class="icon icon-3x icon-search" />
@@ -518,566 +616,561 @@
           </ul>
         </div>
 
-        <div v-if="cards.length" id="workspace-tabs" class="workspace-tabs">
+        <div id="resource-nav" class="resource-nav">
           <button
-            id="workspace-tab-cards"
+            v-for="item in resourceNavItems"
+            :id="`resource-tab-${item.key}`"
+            :key="item.key"
             type="button"
             class="btn"
-            :class="{ active: config.activeWorkspaceTab === 'cards' }"
-            @click="config.activeWorkspaceTab = 'cards'"
+            :class="{ active: workspaceResource === item.key }"
+            @click="setWorkspaceResource(item.key)"
           >
-            Cards
-          </button>
-          <button
-            id="workspace-tab-simulation"
-            type="button"
-            class="btn"
-            :class="{ active: config.activeWorkspaceTab === 'simulation' }"
-            @click="config.activeWorkspaceTab = 'simulation'"
-          >
-            Simulation
+            {{ item.label }}
           </button>
         </div>
 
         <div
-          v-if="config.activeWorkspaceTab === 'simulation'"
-          id="game-simulation-tab"
+          v-if="workspaceResource === 'play'"
+          id="play-resource-panel"
           class="game-simulation"
         >
-          <div class="simulation-toolbar">
-            <label class="form-label simulation-control">
-              Matchup
-              <select
-                id="simulation-matchup"
-                class="form-select select"
-                v-model="effectiveSimulationMatchupSessionId"
-                :disabled="simulationMetaDeckOptions.length === 0"
-              >
-                <option
-                  v-if="simulationMetaDeckOptions.length === 0"
-                  value=""
-                >
-                  No meta deck
-                </option>
-                <option
-                  v-for="session in simulationMetaDeckOptions"
-                  :key="session.id"
-                  :value="session.id"
-                >
-                  {{ session.name }}
-                </option>
-              </select>
-            </label>
-            <label class="form-label simulation-control simulation-control-compact">
-              Seed
-              <input
-                id="simulation-seed"
-                class="form-input"
-                type="number"
-                min="1"
-                v-model.number="config.simulationSeed"
-              >
-            </label>
-            <label class="form-label simulation-control simulation-control-compact">
-              Turns
-              <select
-                id="simulation-turn-count"
-                class="form-select select"
-                v-model.number="config.simulationTurnCount"
-              >
-                <option :value="1">1</option>
-                <option :value="2">2</option>
-                <option :value="3">3</option>
-                <option :value="4">4</option>
-                <option :value="5">5</option>
-              </select>
-            </label>
-            <label class="form-label simulation-control simulation-control-compact">
-              Players
-              <select
-                id="simulation-player-count"
-                class="form-select select"
-                v-model.number="config.simulationPlayerCount"
-              >
-                <option :value="2">2</option>
-                <option :value="3">3</option>
-                <option :value="4">4</option>
-                <option :value="5">5</option>
-                <option :value="6">6</option>
-              </select>
-            </label>
-            <label class="form-label simulation-control simulation-control-compact">
-              Speed
-              <select
-                id="simulation-speed"
-                class="form-select select"
-                v-model="config.simulationSpeed"
-              >
-                <option value="slow">Slow</option>
-                <option value="normal">Normal</option>
-                <option value="fast">Fast</option>
-              </select>
-            </label>
-            <label class="form-label simulation-control simulation-control-compact">
-              Zoom
-              <input
-                id="simulation-board-zoom"
-                class="form-input"
-                type="range"
-                min="0.6"
-                max="1.4"
-                step="0.1"
-                v-model.number="config.simulationBoardZoom"
-              >
-            </label>
-            <label class="form-switch simulation-switch">
-              <input
-                id="simulation-show-opponent-hands"
-                type="checkbox"
-                v-model="config.simulationShowOpponentHands"
-              >
-              <i class="form-icon" /> Opponent hands
-            </label>
-            <button
-              id="simulation-reroll"
-              type="button"
-              class="btn btn-primary simulation-reroll"
-              :disabled="!gameSimulation"
-              @click="rerollSimulation"
-            >
-              Simulate
-            </button>
-            <div class="simulation-player-settings">
-              <label
-                v-for="index in simulationPlayerSlots"
-                :key="`simulation-player-role-${index}`"
-                class="form-label simulation-player-role-label"
-              >
-                P{{ index + 1 }}
+          <div id="game-simulation-tab">
+            <div class="simulation-toolbar">
+              <label class="form-label simulation-control">
+                Matchup
                 <select
-                  class="form-select select simulation-player-deck"
-                  :value="simulationPlayerDeckId(index)"
-                  @change="setSimulationPlayerDeckId(index, $event.target.value)"
+                  id="simulation-matchup"
+                  class="form-select select"
+                  v-model="effectiveSimulationMatchupSessionId"
+                  :disabled="simulationMetaDeckOptions.length === 0"
                 >
                   <option
-                    v-if="index > 0"
+                    v-if="simulationMetaDeckOptions.length === 0"
                     value=""
                   >
-                    Matchup
-                  </option>
-                  <option value="current">
-                    Current deck
+                    No meta deck
                   </option>
                   <option
                     v-for="session in simulationMetaDeckOptions"
-                    :key="`simulation-player-${index}-deck-${session.id}`"
+                    :key="session.id"
                     :value="session.id"
                   >
                     {{ session.name }}
                   </option>
                 </select>
-                <select
-                  class="form-select select simulation-player-role"
-                  v-model="config.simulationPlayerRoles[index]"
+              </label>
+              <label class="form-label simulation-control simulation-control-compact">
+                Seed
+                <input
+                  id="simulation-seed"
+                  class="form-input"
+                  type="number"
+                  min="1"
+                  v-model.number="config.simulationSeed"
                 >
-                  <option value="human">Human</option>
-                  <option value="ai">AI</option>
+              </label>
+              <label class="form-label simulation-control simulation-control-compact">
+                Turns
+                <select
+                  id="simulation-turn-count"
+                  class="form-select select"
+                  v-model.number="config.simulationTurnCount"
+                >
+                  <option :value="1">1</option>
+                  <option :value="2">2</option>
+                  <option :value="3">3</option>
+                  <option :value="4">4</option>
+                  <option :value="5">5</option>
                 </select>
               </label>
+              <label class="form-label simulation-control simulation-control-compact">
+                Players
+                <select
+                  id="simulation-player-count"
+                  class="form-select select"
+                  v-model.number="config.simulationPlayerCount"
+                >
+                  <option :value="2">2</option>
+                  <option :value="3">3</option>
+                  <option :value="4">4</option>
+                  <option :value="5">5</option>
+                  <option :value="6">6</option>
+                </select>
+              </label>
+              <label class="form-label simulation-control simulation-control-compact">
+                Speed
+                <select
+                  id="simulation-speed"
+                  class="form-select select"
+                  v-model="config.simulationSpeed"
+                >
+                  <option value="slow">Slow</option>
+                  <option value="normal">Normal</option>
+                  <option value="fast">Fast</option>
+                </select>
+              </label>
+              <label class="form-label simulation-control simulation-control-compact">
+                Zoom
+                <input
+                  id="simulation-board-zoom"
+                  class="form-input"
+                  type="range"
+                  min="0.6"
+                  max="1.4"
+                  step="0.1"
+                  v-model.number="config.simulationBoardZoom"
+                >
+              </label>
+              <label class="form-switch simulation-switch">
+                <input
+                  id="simulation-show-opponent-hands"
+                  type="checkbox"
+                  v-model="config.simulationShowOpponentHands"
+                >
+                <i class="form-icon" /> Opponent hands
+              </label>
+              <button
+                id="simulation-reroll"
+                type="button"
+                class="btn btn-primary simulation-reroll"
+                :disabled="!gameSimulation"
+                @click="rerollSimulation"
+              >
+                Simulate
+              </button>
+              <div class="simulation-player-settings">
+                <label
+                  v-for="index in simulationPlayerSlots"
+                  :key="`simulation-player-role-${index}`"
+                  class="form-label simulation-player-role-label"
+                >
+                  P{{ index + 1 }}
+                  <select
+                    class="form-select select simulation-player-deck"
+                    :value="simulationPlayerDeckId(index)"
+                    @change="setSimulationPlayerDeckId(index, $event.target.value)"
+                  >
+                    <option
+                      v-if="index > 0"
+                      value=""
+                    >
+                      Matchup
+                    </option>
+                    <option value="current">
+                      Current deck
+                    </option>
+                    <option
+                      v-for="session in simulationMetaDeckOptions"
+                      :key="`simulation-player-${index}-deck-${session.id}`"
+                      :value="session.id"
+                    >
+                      {{ session.name }}
+                    </option>
+                  </select>
+                  <select
+                    class="form-select select simulation-player-role"
+                    v-model="config.simulationPlayerRoles[index]"
+                  >
+                    <option value="human">Human</option>
+                    <option value="ai">AI</option>
+                  </select>
+                </label>
+              </div>
             </div>
-          </div>
 
-          <div
-            v-if="simulationPendingAction"
-            class="simulation-targeting-banner"
-          >
-            Choose target for {{ simulationDisplayCardName(simulationPendingAction.card) }}
-          </div>
-
-          <div
-            v-if="!gameSimulation"
-            class="empty simulation-empty"
-          >
-            <p class="empty-title h5">
-              Load a deck or choose player decks to run a matchup simulation.
-            </p>
-          </div>
-
-          <div
-            v-else-if="gameSimulation"
-            class="simulation-board"
-            :class="{ 'simulation-board-compact': simulationPlayerLanes.length === 1 }"
-          >
             <div
-              class="simulation-play-surface"
-              :class="{ 'simulation-play-surface-compact': simulationPlayerLanes.length === 1 }"
+              v-if="simulationPendingAction"
+              class="simulation-targeting-banner"
+            >
+              Choose target for {{ simulationDisplayCardName(simulationPendingAction.card) }}
+            </div>
+
+            <div
+              v-if="!gameSimulation"
+              class="empty simulation-empty"
+            >
+              <p class="empty-title h5">
+                Load a deck or choose player decks to run a matchup simulation.
+              </p>
+            </div>
+
+            <div
+              v-else-if="gameSimulation"
+              class="simulation-board"
+              :class="{ 'simulation-board-compact': simulationPlayerLanes.length === 1 }"
             >
               <div
-                class="simulation-board-viewport"
-                :class="{ 'simulation-board-viewport-compact': simulationPlayerLanes.length === 1 }"
+                class="simulation-play-surface"
+                :class="{ 'simulation-play-surface-compact': simulationPlayerLanes.length === 1 }"
               >
                 <div
-                  class="simulation-board-area"
-                  :class="{ 'simulation-board-area-two-player': simulationPlayerLanes.length === 1 }"
-                  :style="simulationBoardStyle()"
+                  class="simulation-board-viewport"
+                  :class="{ 'simulation-board-viewport-compact': simulationPlayerLanes.length === 1 }"
                 >
                   <div
-                    v-for="lane in simulationPlayerLanes"
-                    :key="`simulation-lane-${lane.index}`"
-                    class="simulation-player-lane"
+                    class="simulation-board-area"
+                    :class="{ 'simulation-board-area-two-player': simulationPlayerLanes.length === 1 }"
+                    :style="simulationBoardStyle()"
                   >
-                    <section
-                      v-for="seat in simulationLaneSeats(lane)"
-                      :key="`simulation-player-${seat.player.key}`"
-                      class="simulation-player-board"
-                      :class="[
-                        `simulation-player-seat-${seat.position}`,
-                        `simulation-player-board-${seat.position}`,
-                      ]"
+                    <div
+                      v-for="lane in simulationPlayerLanes"
+                      :key="`simulation-lane-${lane.index}`"
+                      class="simulation-player-lane"
                     >
-                      <div class="simulation-player-header">
-                        <span>{{ seat.player.name }}</span>
-                        <button
-                          type="button"
-                          class="simulation-life-total"
-                          :class="{ 'simulation-life-total-targetable': isSimulationPlayerTargetable(seat.player) }"
-                          @click.stop="selectSimulationPlayerTarget(seat.player)"
-                        >
-                          {{ simulationPlayerLife(seat.player) }}
-                        </button>
-                        <span class="label">{{ seat.player.role }}</span>
-                      </div>
-                      <div class="simulation-hand-and-stacks">
-                        <div
-                          class="simulation-hand-zone"
-                          :aria-label="`${seat.player.name} hand`"
-                        >
-                          <div class="simulation-hand-card-row">
-                            <div
-                              v-for="card in visibleSimulationHandCards(seat.player)"
-                              :key="`simulation-hand-${seat.player.key}-${card.id ?? card.name}-${card.sourceZone ?? 'hand'}`"
-                              class="simulation-hand-card"
-                              :class="simulationCardClasses(card)"
-                              :title="simulationCardActionTitle(card)"
-                              @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
-                            >
-                              <ImageLoader
-                                class="simulation-hand-card-image"
-                                :src="simulationCardImage(card)"
-                                placeholder="./card_back_border_crop.jpg"
-                                :alt="card.name"
-                                @mouseenter="scheduleCardPreview(card)"
-                                @mouseleave="hideCardPreview"
-                              />
-                              <span class="simulation-card-count">{{ card.quantity }}x</span>
-                              <span v-if="card.sourceZone" class="simulation-source-zone">{{ simulationSourceZoneLabel(card.sourceZone) }}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div
-                          class="simulation-zone-stacks"
-                          :class="`simulation-zone-stacks-${seat.position}`"
-                        >
-                          <button
-                            type="button"
-                            class="simulation-zone-stack simulation-zone-stack-library"
-                            :aria-label="`${seat.player.name} library`"
-                          >
-                            <ImageLoader
-                              class="simulation-zone-image"
-                              src="./card_back_border_crop.jpg"
-                              placeholder="./card_back_border_crop.jpg"
-                              alt="Library"
-                            />
-                            <span class="simulation-zone-count">{{ seat.player.zones.libraryCount }}</span>
-                          </button>
-                          <button
-                            type="button"
-                            class="simulation-zone-stack simulation-zone-stack-graveyard"
-                            :class="{ 'simulation-zone-stack-empty': seat.player.zones.graveyard.count === 0 }"
-                            :aria-label="`${seat.player.name} graveyard`"
-                            @click="toggleSimulationZone(seat.player, 'graveyard')"
-                          >
-                            <ImageLoader
-                              v-if="seat.player.zones.graveyard.top"
-                              class="simulation-zone-image"
-                              :src="simulationCardImage(seat.player.zones.graveyard.top)"
-                              placeholder="./card_back_border_crop.jpg"
-                              alt="Graveyard"
-                              @mouseenter="scheduleCardPreview(seat.player.zones.graveyard.top)"
-                              @mouseleave="hideCardPreview"
-                            />
-                            <div
-                              v-else
-                              class="simulation-zone-empty-card"
-                              aria-label="Empty graveyard"
-                            />
-                            <span class="simulation-zone-count">{{ seat.player.zones.graveyard.count }}</span>
-                          </button>
-                          <button
-                            type="button"
-                            class="simulation-zone-stack simulation-zone-stack-exile"
-                            :class="{ 'simulation-zone-stack-empty': seat.player.zones.exile.count === 0 }"
-                            :aria-label="`${seat.player.name} exile`"
-                            @click="toggleSimulationZone(seat.player, 'exile')"
-                          >
-                            <ImageLoader
-                              v-if="seat.player.zones.exile.top"
-                              class="simulation-zone-image simulation-zone-image-exile"
-                              :src="simulationCardImage(seat.player.zones.exile.top)"
-                              placeholder="./card_back_border_crop.jpg"
-                              alt="Exile"
-                              @mouseenter="scheduleCardPreview(seat.player.zones.exile.top)"
-                              @mouseleave="hideCardPreview"
-                            />
-                            <div
-                              v-else
-                              class="simulation-zone-empty-card"
-                              aria-label="Empty exile"
-                            />
-                            <span class="simulation-zone-count">{{ seat.player.zones.exile.count }}</span>
-                          </button>
-                        </div>
-                      </div>
-                      <div
-                        v-if="isSimulationZoneExpanded(seat.player, 'graveyard') || isSimulationZoneExpanded(seat.player, 'exile')"
-                        class="simulation-zone-drawer"
+                      <section
+                        v-for="seat in simulationLaneSeats(lane)"
+                        :key="`simulation-player-${seat.player.key}`"
+                        class="simulation-player-board"
+                        :class="[
+                          `simulation-player-seat-${seat.position}`,
+                          `simulation-player-board-${seat.position}`,
+                        ]"
                       >
-                        <div
-                          v-for="zone in ['graveyard', 'exile']"
-                          :key="`simulation-zone-drawer-${seat.player.key}-${zone}`"
-                          v-show="isSimulationZoneExpanded(seat.player, zone)"
-                          :aria-label="`${seat.player.name} ${zone}`"
-                        >
-                          <div v-if="seat.player.zones[zone].cards.length" class="simulation-mini-card-grid">
-                            <div
-                              v-for="card in seat.player.zones[zone].cards"
-                              :key="`simulation-zone-card-${seat.player.key}-${zone}-${card.name}`"
-                              class="simulation-mini-card"
-                              :class="simulationCardClasses(card)"
-                              :title="simulationCardActionTitle(card)"
-                              @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
-                            >
-                              <ImageLoader
-                                class="simulation-mini-card-image"
-                                :src="simulationCardImage(card)"
-                                placeholder="./card_back_border_crop.jpg"
-                                :alt="card.name"
-                                @mouseenter="scheduleCardPreview(card)"
-                                @mouseleave="hideCardPreview"
-                              />
-                              <span>{{ card.quantity }}x {{ card.name }}</span>
+                        <div class="simulation-player-header">
+                          <span>{{ seat.player.name }}</span>
+                          <button
+                            type="button"
+                            class="simulation-life-total"
+                            :class="{ 'simulation-life-total-targetable': isSimulationPlayerTargetable(seat.player) }"
+                            @click.stop="selectSimulationPlayerTarget(seat.player)"
+                          >
+                            {{ simulationPlayerLife(seat.player) }}
+                          </button>
+                          <span class="label">{{ seat.player.role }}</span>
+                        </div>
+                        <div class="simulation-hand-and-stacks">
+                          <div
+                            class="simulation-hand-zone"
+                            :aria-label="`${seat.player.name} hand`"
+                          >
+                            <div class="simulation-hand-card-row">
+                              <div
+                                v-for="card in visibleSimulationHandCards(seat.player)"
+                                :key="`simulation-hand-${seat.player.key}-${card.id ?? card.name}-${card.sourceZone ?? 'hand'}`"
+                                class="simulation-hand-card"
+                                :class="simulationCardClasses(card)"
+                                :title="simulationCardActionTitle(card)"
+                                @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                              >
+                                <ImageLoader
+                                  class="simulation-hand-card-image"
+                                  :src="simulationCardImage(card)"
+                                  placeholder="./card_back_border_crop.jpg"
+                                  :alt="card.name"
+                                  @mouseenter="scheduleCardPreview(card)"
+                                  @mouseleave="hideCardPreview"
+                                />
+                                <span class="simulation-card-count">{{ card.quantity }}x</span>
+                                <span v-if="card.sourceZone" class="simulation-source-zone">{{ simulationSourceZoneLabel(card.sourceZone) }}</span>
+                              </div>
                             </div>
                           </div>
-                          <div v-else class="simulation-zone-empty">
-                            Empty
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        class="simulation-battlefield-zone"
-                        :aria-label="`${seat.player.name} battlefield`"
-                      >
-                        <div
-                          class="simulation-battlefield-row simulation-battlefield-lands simulation-battlefield-column-left"
-                          :aria-label="`${seat.player.name} lands`"
-                        >
-                          <div class="simulation-permanent-row">
-                            <div
-                              v-for="card in seat.player.zones.battlefield.lands"
-                              :key="`simulation-land-${seat.player.key}-${card.name}`"
-                              class="simulation-permanent-card simulation-permanent-card-land"
-                              :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
-                              :title="simulationCardActionTitle(card)"
-                              @click.stop="selectSimulationCardTarget(card, seat.player)"
-                              @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                          <div
+                            class="simulation-zone-stacks"
+                            :class="`simulation-zone-stacks-${seat.position}`"
+                          >
+                            <button
+                              type="button"
+                              class="simulation-zone-stack simulation-zone-stack-library"
+                              :aria-label="`${seat.player.name} library`"
                             >
                               <ImageLoader
-                                class="simulation-permanent-image"
-                                :src="simulationCardImage(card)"
+                                class="simulation-zone-image"
+                                src="./card_back_border_crop.jpg"
                                 placeholder="./card_back_border_crop.jpg"
-                                :alt="card.name"
-                                @mouseenter="scheduleCardPreview(card)"
+                                alt="Library"
+                              />
+                              <span class="simulation-zone-count">{{ seat.player.zones.libraryCount }}</span>
+                            </button>
+                            <button
+                              type="button"
+                              class="simulation-zone-stack simulation-zone-stack-graveyard"
+                              :class="{ 'simulation-zone-stack-empty': seat.player.zones.graveyard.count === 0 }"
+                              :aria-label="`${seat.player.name} graveyard`"
+                              @click="toggleSimulationZone(seat.player, 'graveyard')"
+                            >
+                              <ImageLoader
+                                v-if="seat.player.zones.graveyard.top"
+                                class="simulation-zone-image"
+                                :src="simulationCardImage(seat.player.zones.graveyard.top)"
+                                placeholder="./card_back_border_crop.jpg"
+                                alt="Graveyard"
+                                @mouseenter="scheduleCardPreview(seat.player.zones.graveyard.top)"
                                 @mouseleave="hideCardPreview"
                               />
-                              <span class="simulation-card-count">{{ card.quantity }}x</span>
+                              <div
+                                v-else
+                                class="simulation-zone-empty-card"
+                                aria-label="Empty graveyard"
+                              />
+                              <span class="simulation-zone-count">{{ seat.player.zones.graveyard.count }}</span>
+                            </button>
+                            <button
+                              type="button"
+                              class="simulation-zone-stack simulation-zone-stack-exile"
+                              :class="{ 'simulation-zone-stack-empty': seat.player.zones.exile.count === 0 }"
+                              :aria-label="`${seat.player.name} exile`"
+                              @click="toggleSimulationZone(seat.player, 'exile')"
+                            >
+                              <ImageLoader
+                                v-if="seat.player.zones.exile.top"
+                                class="simulation-zone-image simulation-zone-image-exile"
+                                :src="simulationCardImage(seat.player.zones.exile.top)"
+                                placeholder="./card_back_border_crop.jpg"
+                                alt="Exile"
+                                @mouseenter="scheduleCardPreview(seat.player.zones.exile.top)"
+                                @mouseleave="hideCardPreview"
+                              />
+                              <div
+                                v-else
+                                class="simulation-zone-empty-card"
+                                aria-label="Empty exile"
+                              />
+                              <span class="simulation-zone-count">{{ seat.player.zones.exile.count }}</span>
+                            </button>
+                          </div>
+                        </div>
+                        <div
+                          v-if="isSimulationZoneExpanded(seat.player, 'graveyard') || isSimulationZoneExpanded(seat.player, 'exile')"
+                          class="simulation-zone-drawer"
+                        >
+                          <div
+                            v-for="zone in ['graveyard', 'exile']"
+                            :key="`simulation-zone-drawer-${seat.player.key}-${zone}`"
+                            v-show="isSimulationZoneExpanded(seat.player, zone)"
+                            :aria-label="`${seat.player.name} ${zone}`"
+                          >
+                            <div v-if="seat.player.zones[zone].cards.length" class="simulation-mini-card-grid">
+                              <div
+                                v-for="card in seat.player.zones[zone].cards"
+                                :key="`simulation-zone-card-${seat.player.key}-${zone}-${card.name}`"
+                                class="simulation-mini-card"
+                                :class="simulationCardClasses(card)"
+                                :title="simulationCardActionTitle(card)"
+                                @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                              >
+                                <ImageLoader
+                                  class="simulation-mini-card-image"
+                                  :src="simulationCardImage(card)"
+                                  placeholder="./card_back_border_crop.jpg"
+                                  :alt="card.name"
+                                  @mouseenter="scheduleCardPreview(card)"
+                                  @mouseleave="hideCardPreview"
+                                />
+                                <span>{{ card.quantity }}x {{ card.name }}</span>
+                              </div>
+                            </div>
+                            <div v-else class="simulation-zone-empty">
+                              Empty
                             </div>
                           </div>
                         </div>
                         <div
-                          class="simulation-battlefield-row simulation-battlefield-creatures simulation-battlefield-column-center"
-                          :aria-label="`${seat.player.name} creatures`"
+                          class="simulation-battlefield-zone"
+                          :aria-label="`${seat.player.name} battlefield`"
                         >
-                          <div class="simulation-permanent-row">
-                            <div
-                              v-for="card in seat.player.zones.battlefield.creatures"
-                              :key="`simulation-creature-${seat.player.key}-${card.name}`"
-                              class="simulation-permanent-card"
-                              :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
-                              :title="simulationCardActionTitle(card)"
-                              @click.stop="selectSimulationCardTarget(card, seat.player)"
-                              @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
-                            >
-                              <ImageLoader
-                                class="simulation-permanent-image"
-                                :src="simulationCardImage(card)"
-                                placeholder="./card_back_border_crop.jpg"
-                                :alt="card.name"
-                                @mouseenter="scheduleCardPreview(card)"
-                                @mouseleave="hideCardPreview"
-                              />
-                              <span class="simulation-card-count">{{ card.quantity }}x</span>
-                              <span v-if="card.state?.summoningSick" class="simulation-state-badge">SS</span>
-                              <span v-else-if="card.state?.attacking" class="simulation-state-badge simulation-state-badge-attack">ATK</span>
+                          <div
+                            class="simulation-battlefield-row simulation-battlefield-lands simulation-battlefield-column-left"
+                            :aria-label="`${seat.player.name} lands`"
+                          >
+                            <div class="simulation-permanent-row">
+                              <div
+                                v-for="card in seat.player.zones.battlefield.lands"
+                                :key="`simulation-land-${seat.player.key}-${card.name}`"
+                                class="simulation-permanent-card simulation-permanent-card-land"
+                                :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
+                                :title="simulationCardActionTitle(card)"
+                                @click.stop="selectSimulationCardTarget(card, seat.player)"
+                                @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                              >
+                                <ImageLoader
+                                  class="simulation-permanent-image"
+                                  :src="simulationCardImage(card)"
+                                  placeholder="./card_back_border_crop.jpg"
+                                  :alt="card.name"
+                                  @mouseenter="scheduleCardPreview(card)"
+                                  @mouseleave="hideCardPreview"
+                                />
+                                <span class="simulation-card-count">{{ card.quantity }}x</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            class="simulation-battlefield-row simulation-battlefield-creatures simulation-battlefield-column-center"
+                            :aria-label="`${seat.player.name} creatures`"
+                          >
+                            <div class="simulation-permanent-row">
+                              <div
+                                v-for="card in seat.player.zones.battlefield.creatures"
+                                :key="`simulation-creature-${seat.player.key}-${card.name}`"
+                                class="simulation-permanent-card"
+                                :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
+                                :title="simulationCardActionTitle(card)"
+                                @click.stop="selectSimulationCardTarget(card, seat.player)"
+                                @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                              >
+                                <ImageLoader
+                                  class="simulation-permanent-image"
+                                  :src="simulationCardImage(card)"
+                                  placeholder="./card_back_border_crop.jpg"
+                                  :alt="card.name"
+                                  @mouseenter="scheduleCardPreview(card)"
+                                  @mouseleave="hideCardPreview"
+                                />
+                                <span class="simulation-card-count">{{ card.quantity }}x</span>
+                                <span v-if="card.state?.summoningSick" class="simulation-state-badge">SS</span>
+                                <span v-else-if="card.state?.attacking" class="simulation-state-badge simulation-state-badge-attack">ATK</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            class="simulation-battlefield-row simulation-battlefield-noncreatures simulation-battlefield-column-right"
+                            :aria-label="`${seat.player.name} noncreature permanents`"
+                          >
+                            <div class="simulation-permanent-row">
+                              <div
+                                v-for="card in seat.player.zones.battlefield.nonCreaturePermanents"
+                                :key="`simulation-noncreature-${seat.player.key}-${card.name}`"
+                                class="simulation-permanent-card simulation-permanent-card-noncreature"
+                                :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
+                                :title="simulationCardActionTitle(card)"
+                                @click.stop="selectSimulationCardTarget(card, seat.player)"
+                                @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
+                              >
+                                <ImageLoader
+                                  class="simulation-permanent-image"
+                                  :src="simulationCardImage(card)"
+                                  placeholder="./card_back_border_crop.jpg"
+                                  :alt="card.name"
+                                  @mouseenter="scheduleCardPreview(card)"
+                                  @mouseleave="hideCardPreview"
+                                />
+                                <span class="simulation-card-count">{{ card.quantity }}x</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                        <div
-                          class="simulation-battlefield-row simulation-battlefield-noncreatures simulation-battlefield-column-right"
-                          :aria-label="`${seat.player.name} noncreature permanents`"
-                        >
-                          <div class="simulation-permanent-row">
-                            <div
-                              v-for="card in seat.player.zones.battlefield.nonCreaturePermanents"
-                              :key="`simulation-noncreature-${seat.player.key}-${card.name}`"
-                              class="simulation-permanent-card simulation-permanent-card-noncreature"
-                              :class="simulationCardClasses(card, isSimulationCardTargetable(card))"
-                              :title="simulationCardActionTitle(card)"
-                              @click.stop="selectSimulationCardTarget(card, seat.player)"
-                              @dblclick.stop="handleSimulationCardDoubleClick(card, seat.player)"
-                            >
-                              <ImageLoader
-                                class="simulation-permanent-image"
-                                :src="simulationCardImage(card)"
-                                placeholder="./card_back_border_crop.jpg"
-                                :alt="card.name"
-                                @mouseenter="scheduleCardPreview(card)"
-                                @mouseleave="hideCardPreview"
-                              />
-                              <span class="simulation-card-count">{{ card.quantity }}x</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </section>
+                      </section>
+                    </div>
                   </div>
+                </div>
+
+                <div
+                  v-if="activeSimulationStep"
+                  class="simulation-phase-bar"
+                  :class="{ 'simulation-phase-bar-compact': simulationPlayerLanes.length === 1 }"
+                >
+                  <div
+                    id="simulation-current-step"
+                    class="simulation-current-step"
+                  >
+                    T{{ activeSimulationStep.turn }}
+                    {{ activeSimulationStep.playerName }} /
+                    {{ phaseLabel(activeSimulationStep.phase) }}
+                  </div>
+                  <div class="simulation-current-actions">
+                    Mana {{ activeSimulationStep.actionContext.availableMana }}
+                    <span v-if="simulationManaPoolText(activeSimulationPlayer?.zones?.manaPool)">
+                      / pool {{ simulationManaPoolText(activeSimulationPlayer.zones.manaPool) }}
+                    </span>
+                    <span v-if="activeSimulationStep.actionContext.canPlayLand">
+                      / land available
+                    </span>
+                  </div>
+                  <button
+                    id="simulation-next-step"
+                    type="button"
+                    class="btn simulation-next-step"
+                    :disabled="isLastSimulationStep"
+                    @click="advanceSimulationStep"
+                  >
+                    Next step
+                  </button>
                 </div>
               </div>
 
-              <div
-                v-if="activeSimulationStep"
-                class="simulation-phase-bar"
-                :class="{ 'simulation-phase-bar-compact': simulationPlayerLanes.length === 1 }"
-              >
-                <div
-                  id="simulation-current-step"
-                  class="simulation-current-step"
-                >
-                  T{{ activeSimulationStep.turn }}
-                  {{ activeSimulationStep.playerName }} /
-                  {{ phaseLabel(activeSimulationStep.phase) }}
+              <div class="simulation-log-panel">
+                <div class="simulation-section-title">
+                  Logs
                 </div>
-                <div class="simulation-current-actions">
-                  Mana {{ activeSimulationStep.actionContext.availableMana }}
-                  <span v-if="simulationManaPoolText(activeSimulationPlayer?.zones?.manaPool)">
-                    / pool {{ simulationManaPoolText(activeSimulationPlayer.zones.manaPool) }}
-                  </span>
-                  <span v-if="activeSimulationStep.actionContext.canPlayLand">
-                    / land available
-                  </span>
-                </div>
-                <button
-                  id="simulation-next-step"
-                  type="button"
-                  class="btn simulation-next-step"
-                  :disabled="isLastSimulationStep"
-                  @click="advanceSimulationStep"
-                >
-                  Next step
-                </button>
-              </div>
-            </div>
-
-            <div class="simulation-log-panel">
-              <div class="simulation-section-title">
-                Logs
-              </div>
-              <div class="simulation-timeline">
-                <div
-                  v-for="(step, stepIndex) in gameSimulation.timeline"
-                  :key="`simulation-step-${stepIndex}`"
-                  class="simulation-step"
-                  :class="`simulation-step-${step.playerKey}`"
-                >
-                  <div class="simulation-step-header">
-                    T{{ step.turn }} {{ step.playerName }} / {{ phaseLabel(step.phase) }}
-                  </div>
-                  <div v-if="step.drawnCard" class="simulation-step-line">
-                    Draw: {{ step.drawnCard.name }}
-                  </div>
-                  <div v-if="step.landOptions?.length" class="simulation-step-line">
-                    Land: {{ formatSimulationOptions(step.landOptions) }}
-                  </div>
-                  <div v-if="step.phase === 'main'" class="simulation-step-line">
-                    Land plays {{ step.landPlaysAvailable }} /
-                    mana {{ step.availableMana }} now, {{ step.manaAfterLandPlay }} after land
-                  </div>
-                  <div v-if="step.castOptions?.length" class="simulation-step-line">
-                    Cast: {{ formatSimulationOptions(step.castOptions) }}
-                  </div>
-                  <div v-if="step.holdUpOptions?.length" class="simulation-step-line">
-                    Hold: {{ formatSimulationOptions(step.holdUpOptions) }}
-                  </div>
-                  <div v-if="step.playedLand" class="simulation-step-line">
-                    Played: {{ step.playedLand.name }}
-                  </div>
-                  <div v-if="step.castCards?.length" class="simulation-step-line">
-                    Resolved: {{ formatSimulationCastActions(step.castCards) }}
-                  </div>
-                  <div v-if="step.note" class="simulation-step-note">
-                    {{ step.note }}
-                  </div>
-                </div>
-                <div
-                  v-if="simulationActionLogLines.length"
-                  class="simulation-step simulation-step-actions"
-                >
-                  <div class="simulation-step-header">
-                    Resolved actions
+                <div class="simulation-timeline">
+                  <div
+                    v-for="(step, stepIndex) in gameSimulation.timeline"
+                    :key="`simulation-step-${stepIndex}`"
+                    class="simulation-step"
+                    :class="`simulation-step-${step.playerKey}`"
+                  >
+                    <div class="simulation-step-header">
+                      T{{ step.turn }} {{ step.playerName }} / {{ phaseLabel(step.phase) }}
+                    </div>
+                    <div v-if="step.drawnCard" class="simulation-step-line">
+                      Draw: {{ step.drawnCard.name }}
+                    </div>
+                    <div v-if="step.landOptions?.length" class="simulation-step-line">
+                      Land: {{ formatSimulationOptions(step.landOptions) }}
+                    </div>
+                    <div v-if="step.phase === 'main'" class="simulation-step-line">
+                      Land plays {{ step.landPlaysAvailable }} /
+                      mana {{ step.availableMana }} now, {{ step.manaAfterLandPlay }} after land
+                    </div>
+                    <div v-if="step.castOptions?.length" class="simulation-step-line">
+                      Cast: {{ formatSimulationOptions(step.castOptions) }}
+                    </div>
+                    <div v-if="step.holdUpOptions?.length" class="simulation-step-line">
+                      Hold: {{ formatSimulationOptions(step.holdUpOptions) }}
+                    </div>
+                    <div v-if="step.playedLand" class="simulation-step-line">
+                      Played: {{ step.playedLand.name }}
+                    </div>
+                    <div v-if="step.castCards?.length" class="simulation-step-line">
+                      Resolved: {{ formatSimulationCastActions(step.castCards) }}
+                    </div>
+                    <div v-if="step.note" class="simulation-step-note">
+                      {{ step.note }}
+                    </div>
                   </div>
                   <div
-                    v-for="(line, lineIndex) in simulationActionLogLines"
-                    :key="`simulation-action-log-${lineIndex}`"
-                    class="simulation-step-line"
+                    v-if="simulationActionLogLines.length"
+                    class="simulation-step simulation-step-actions"
                   >
-                    {{ line }}
+                    <div class="simulation-step-header">
+                      Resolved actions
+                    </div>
+                    <div
+                      v-for="(line, lineIndex) in simulationActionLogLines"
+                      :key="`simulation-action-log-${lineIndex}`"
+                      class="simulation-step-line"
+                    >
+                      {{ line }}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div class="simulation-history">
-              <div class="simulation-section-title">
-                History
-              </div>
-              <div
-                v-if="simulationHistory.length === 0"
-                class="simulation-zone-empty"
-              >
-                No saved games yet.
-              </div>
-              <div
-                v-for="entry in simulationHistory"
-                :key="entry.id"
-                class="simulation-history-entry"
-              >
-                Seed {{ entry.seed }} / {{ entry.matchupName }} / {{ entry.playerCount }} players
+              <div class="simulation-history">
+                <div class="simulation-section-title">
+                  History
+                </div>
+                <div
+                  v-if="simulationHistory.length === 0"
+                  class="simulation-zone-empty"
+                >
+                  No saved games yet.
+                </div>
+                <div
+                  v-for="entry in simulationHistory"
+                  :key="entry.id"
+                  class="simulation-history-entry"
+                >
+                  Seed {{ entry.seed }} / {{ entry.matchupName }} / {{ entry.playerCount }} players
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div v-else-if="config.analysisMode" id="analysis-card-list" class="analysis-card-list">
+        <div v-else-if="workspaceResource === 'analysis'" id="analysis-card-list" class="analysis-card-list">
           <div
             v-if="analysisColumns.length === 0"
             class="empty"
@@ -1664,7 +1757,7 @@
           </div>
         </div>
 
-        <div v-else class="cards columns">
+        <div v-else-if="workspaceResource === 'deck' || workspaceResource === 'print'" class="cards columns">
           <div
             v-for="(card, cardIndex) in cards"
             :key="cardIndex"
@@ -1706,6 +1799,60 @@
               </select>
             </div>
           </div>
+        </div>
+
+        <div
+          v-else-if="workspaceResource === 'card-analysis'"
+          id="card-analysis-main"
+          class="resource-empty"
+        >
+          <div class="empty-icon">
+            <i class="icon icon-search" />
+          </div>
+          <p class="empty-title h5">
+            Card Analysis
+          </p>
+          <p class="empty-subtitle">
+            Search a card to inspect its Oracle parser coverage, actions, and reusable card relationships.
+          </p>
+        </div>
+
+        <div
+          v-else-if="workspaceResource === 'compare'"
+          id="compare-main"
+          class="resource-empty"
+        >
+          <p class="empty-title h5">
+            Compare Cards
+          </p>
+          <p class="empty-subtitle">
+            Compare a candidate card against the current deck context, mana curve, interactions, and value profile.
+          </p>
+        </div>
+
+        <div
+          v-else-if="workspaceResource === 'meta'"
+          id="meta-main"
+          class="resource-empty"
+        >
+          <p class="empty-title h5">
+            Meta Decks
+          </p>
+          <div
+            v-if="metaDeckSessionOptions.length"
+            class="meta-deck-list"
+          >
+            <div
+              v-for="session in metaDeckSessionOptions"
+              :key="`meta-main-${session.id}`"
+              class="meta-deck-list-item"
+            >
+              {{ session.name }}
+            </div>
+          </div>
+          <p v-else class="empty-subtitle">
+            Mark saved decks as meta to use them in analysis and play setup.
+          </p>
         </div>
 
         <ArnoldsApproval id="arnold" :cards="cards" />
@@ -1962,7 +2109,7 @@ function createDefaultConfig() {
         analysisMetric: "count",
         analysisColumnMode: "metaDeck",
         analysisMatchupSessionId: "all",
-        activeWorkspaceTab: "cards",
+        activeWorkspaceTab: "deck",
         simulationMatchupSessionId: "",
         simulationPlayerDeckIds: ["current", "", "", "", "", ""],
         simulationPlayerCount: 2,
@@ -2120,6 +2267,51 @@ export default {
         },
     },
     computed: {
+        resourceNavItems() {
+            return [
+                { key: 'deck', label: 'Deck' },
+                { key: 'print', label: 'Print' },
+                { key: 'analysis', label: 'Analysis' },
+                { key: 'play', label: 'Play' },
+                { key: 'card-analysis', label: 'Card Analysis' },
+                { key: 'compare', label: 'Compare' },
+                { key: 'meta', label: 'Meta' },
+            ];
+        },
+        workspaceResource() {
+            const tab = this.config.activeWorkspaceTab;
+            if (tab === 'simulation') {
+                return 'play';
+            }
+            if (tab === 'cards') {
+                return this.config.analysisMode ? 'analysis' : 'deck';
+            }
+            if (this.resourceNavItems.some(item => item.key === tab)) {
+                return tab;
+            }
+
+            return 'deck';
+        },
+        isPlayResource() {
+            return this.workspaceResource === 'play';
+        },
+        isAnalysisResource() {
+            return this.workspaceResource === 'analysis';
+        },
+        metaDeckSessionOptions() {
+            const sessionsById = new Map();
+            for (const session of this.localSessions.filter(session => session.isMetaDeck)) {
+                sessionsById.set(session.id, session);
+            }
+            for (const session of this.metaDeckStates) {
+                sessionsById.set(session.id, {
+                    ...(sessionsById.get(session.id) ?? {}),
+                    ...session,
+                });
+            }
+
+            return Array.from(sessionsById.values()).filter(session => session.id);
+        },
         cardCountWhenPrinting() {
             const count = this.printCapacity.physicalCards;
 
@@ -2307,24 +2499,7 @@ export default {
             return this.metaDeckStates.filter(session => session.id === this.config.analysisMatchupSessionId);
         },
         simulationMetaDeckOptions() {
-            const optionsById = new Map();
-
-            for (const session of this.localSessions.filter(session => session.isMetaDeck)) {
-                optionsById.set(session.id, {
-                    id: session.id,
-                    name: session.name,
-                    state: null,
-                });
-            }
-
-            for (const session of this.metaDeckStates) {
-                optionsById.set(session.id, {
-                    ...(optionsById.get(session.id) ?? {}),
-                    ...session,
-                });
-            }
-
-            return Array.from(optionsById.values()).filter(session => session.id);
+            return this.metaDeckSessionOptions;
         },
         simulationMetaDeckStates() {
             return this.metaDeckStates.filter(session => (session.state?.cards ?? []).length > 0);
@@ -2522,6 +2697,10 @@ export default {
         this.analysisClient?.terminate();
     },
     methods: {
+        setWorkspaceResource(resource) {
+            this.config.activeWorkspaceTab = resource;
+            this.config.analysisMode = resource === 'analysis';
+        },
         cloneForStorage(value) {
             return JSON.parse(JSON.stringify(value));
         },
@@ -3611,7 +3790,7 @@ export default {
         },
         scheduleAnalysisRefresh() {
             clearTimeout(this.analysisQueueTimer);
-            if (this.config.analysisMode && this.cards.length > 0) {
+            if (this.isAnalysisResource && this.cards.length > 0) {
                 const visibleCards = this.cards.filter(card => this.shouldShowCard(card));
                 this.analysisLoadingCardIds = visibleCards.reduce((flags, card) => {
                     flags[this.cardRuntimeKey(card)] = true;
@@ -3632,7 +3811,7 @@ export default {
             clearTimeout(this.analysisQueueTimer);
             this.analysisQueueTimer = null;
 
-            if (!this.config.analysisMode || this.cards.length === 0) {
+            if (!this.isAnalysisResource || this.cards.length === 0) {
                 this.analysisRowsByCardId = {};
                 this.valueAnalysisByCardId = {};
                 this.analysisLoadingCardIds = {};
@@ -4773,6 +4952,10 @@ export default {
     grid-template-columns: 2.4rem minmax(0, 1fr);
 }
 
+.app-layout-play {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .app-sidebar {
     position: sticky;
     top: 0.6rem;
@@ -4860,8 +5043,10 @@ export default {
     }
 }
 
+.resource-nav,
 .workspace-tabs {
     display: inline-flex;
+    flex-wrap: wrap;
     gap: 0.25rem;
     margin-bottom: 0.6rem;
 
@@ -4870,6 +5055,39 @@ export default {
         border-color: #5755d9;
         color: #fff;
     }
+}
+
+.resource-panel {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.resource-empty {
+    align-items: center;
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    color: #667085;
+    display: grid;
+    justify-items: center;
+    min-height: 18rem;
+    padding: 1.25rem;
+    text-align: center;
+}
+
+.meta-deck-list {
+    display: grid;
+    gap: 0.35rem;
+    min-width: min(22rem, 100%);
+}
+
+.meta-deck-list-item {
+    background: #f8f9fa;
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    color: #303742;
+    font-weight: 700;
+    padding: 0.45rem 0.55rem;
+    text-align: left;
 }
 
 .game-simulation {

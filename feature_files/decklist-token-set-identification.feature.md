@@ -114,6 +114,9 @@
 - Basic bounce effects such as `Return target permanent to its owner's hand` show two value uses: target an opponent permanent for battlefield-to-hand tempo, or target one of your non-land permanents for battlefield-to-hand plus draw.
 - Modal instant creature-shape spells that make target creatures `1/1` with hexproof or `3/4` with flying and vigilance appear as creature modifier options for every creature in the current deck.
 - The left session/config rail can collapse toward the left; when open it uses a narrow sidebar layout so analysis content keeps most of the page width.
+- The workspace is organized around resources: Deck, Print, Analysis, Play, Card Analysis, Compare, and Meta, with top navigation switching between those contexts.
+- The left rail keeps persistent session controls but shows only the configuration relevant to the active resource; deck import controls live in Deck, print layout controls live in Print, and analysis controls live in Analysis.
+- Play uses a full-width workspace without the left rail so the game board can occupy the available screen space.
 - Analysis card rows prioritize a near-card-sized image beside a compact interaction grid that avoids horizontal scrolling for normal meta views.
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
 - Generating combo pieces skips disabled categories and does not duplicate related pieces already in the decklist.

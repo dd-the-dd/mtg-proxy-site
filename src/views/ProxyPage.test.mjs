@@ -46,6 +46,70 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.app-layout-sidebar-collapsed').exists()).toBe(false);
     });
 
+    test('Feature: Resource navigation exposes contextual deck, print, analysis, play, card analysis, compare, and meta workspaces.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.activeWorkspaceTab = 'deck';
+        component.data.config.analysisMode = false;
+        component.data.cards = [
+            {
+                quantity: 1,
+                name: 'opt',
+                selectedOption: {
+                    manaCost: '{U}',
+                    typeLine: 'Instant',
+                    urlFront: 'opt-front',
+                },
+                setOptions: [],
+            },
+        ];
+        component.data.localSessions = [
+            {
+                id: 'meta-one',
+                name: 'Izzet Prowess',
+                isMetaDeck: true,
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('#resource-nav').exists()).toBe(true);
+        expect(wrapper.find('#resource-tab-deck').classes()).toContain('active');
+        expect(wrapper.find('#deck-resource-panel').exists()).toBe(true);
+        expect(wrapper.find('#print-resource-panel').exists()).toBe(false);
+
+        await wrapper.find('#resource-tab-print').trigger('click');
+        expect(component.data.config.activeWorkspaceTab).toBe('print');
+        expect(wrapper.find('#print-resource-panel').exists()).toBe(true);
+        expect(wrapper.find('#deck-input').exists()).toBe(false);
+
+        await wrapper.find('#resource-tab-analysis').trigger('click');
+        expect(component.data.config.activeWorkspaceTab).toBe('analysis');
+        expect(wrapper.find('#analysis-resource-panel').exists()).toBe(true);
+        expect(wrapper.find('#analysis-card-list').exists()).toBe(true);
+
+        await wrapper.find('#resource-tab-card-analysis').trigger('click');
+        expect(wrapper.find('#card-analysis-resource-panel').exists()).toBe(true);
+
+        await wrapper.find('#resource-tab-compare').trigger('click');
+        expect(wrapper.find('#compare-resource-panel').exists()).toBe(true);
+        expect(wrapper.find('#compare-main').exists()).toBe(true);
+
+        await wrapper.find('#resource-tab-meta').trigger('click');
+        expect(wrapper.find('#meta-resource-panel').exists()).toBe(true);
+        expect(wrapper.find('#meta-resource-panel').text()).toContain('Izzet Prowess');
+
+        await wrapper.find('#resource-tab-play').trigger('click');
+        expect(wrapper.find('#play-resource-panel').exists()).toBe(true);
+        expect(wrapper.find('#app-sidebar').exists()).toBe(false);
+
+        component.data.config.activeWorkspaceTab = 'deck';
+        component.data.config.analysisMode = false;
+        component.data.cards = [];
+        component.data.localSessions = [];
+        await wrapper.vm.$nextTick();
+    });
+
     test('Feature: Hovering a card image opens a fast center-left card preview.', async () => {
         const component = wrapper.getCurrentComponent();
         vi.useFakeTimers();
@@ -2213,6 +2277,8 @@ describe('Deck Loading', async () => {
     test('Feature: Advanced print order opens a page-shaped grid and swaps two print slots.', async () => {
         const component = wrapper.getCurrentComponent();
 
+        component.data.config.activeWorkspaceTab = 'print';
+        component.data.config.analysisMode = false;
         component.data.cards = [
             {
                 quantity: 1,
@@ -2353,6 +2419,8 @@ describe('Deck Loading', async () => {
     test('Feature: Advanced print order preview matches opposite-side token print pages.', async () => {
         const component = wrapper.getCurrentComponent();
 
+        component.data.config.activeWorkspaceTab = 'print';
+        component.data.config.analysisMode = false;
         component.data.config.cardBacks = 'all-pages';
         component.data.config.tokenBackMode = 'opposite';
         component.data.config.tokenPlacementMode = 'auto';
@@ -2420,6 +2488,8 @@ describe('Deck Loading', async () => {
     test('Feature: Related combo piece config is collapsible while generation stays available.', async () => {
         const component = wrapper.getCurrentComponent();
 
+        component.data.config.activeWorkspaceTab = 'deck';
+        component.data.config.analysisMode = false;
         component.data.config.comboPieceConfigOpen = false;
         await wrapper.vm.$nextTick();
 
@@ -2440,6 +2510,12 @@ describe('Deck Loading', async () => {
     });
 
     test('Feature: Print content type filters are exposed beside the basic land filter.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.activeWorkspaceTab = 'print';
+        component.data.config.analysisMode = false;
+        await wrapper.vm.$nextTick();
+
         expect(wrapper.find('input[name="include-cards"]').exists()).toBe(true);
         expect(wrapper.find('input[name="include-game-pieces"]').exists()).toBe(true);
     });
@@ -2713,7 +2789,11 @@ describe('shouldShowSetOption()', async () => {
         selectedOption: options.standard,
     };
 
-    test('No Promos, No Digital', () => {
+    test('No Promos, No Digital', async () => {
+        wrapper.getCurrentComponent().data.config.activeWorkspaceTab = 'print';
+        wrapper.getCurrentComponent().data.config.analysisMode = false;
+        await wrapper.vm.$nextTick();
+
         wrapper.find('input[name="include-digital"]').setValue(false);
         wrapper.find('input[name="include-promo"]').setValue(false);
         expect(wrapper.getCurrentComponent().ctx.shouldShowSetOption(card, options.standard)).toBe(true);
@@ -2722,7 +2802,11 @@ describe('shouldShowSetOption()', async () => {
         expect(wrapper.getCurrentComponent().ctx.shouldShowSetOption(card, options.digitalPromo)).toBe(false);
     });
 
-    test('No Promos, Yes Digital', () => {
+    test('No Promos, Yes Digital', async () => {
+        wrapper.getCurrentComponent().data.config.activeWorkspaceTab = 'print';
+        wrapper.getCurrentComponent().data.config.analysisMode = false;
+        await wrapper.vm.$nextTick();
+
         wrapper.find('input[name="include-digital"]').setValue(true);
         wrapper.find('input[name="include-promo"]').setValue(false);
         expect(wrapper.getCurrentComponent().ctx.shouldShowSetOption(card, options.standard)).toBe(true);
@@ -2731,7 +2815,11 @@ describe('shouldShowSetOption()', async () => {
         expect(wrapper.getCurrentComponent().ctx.shouldShowSetOption(card, options.digitalPromo)).toBe(false);
     });
 
-    test('Yes Promos, No Digital', () => {
+    test('Yes Promos, No Digital', async () => {
+        wrapper.getCurrentComponent().data.config.activeWorkspaceTab = 'print';
+        wrapper.getCurrentComponent().data.config.analysisMode = false;
+        await wrapper.vm.$nextTick();
+
         wrapper.find('input[name="include-digital"]').setValue(false);
         wrapper.find('input[name="include-promo"]').setValue(true);
         expect(wrapper.getCurrentComponent().ctx.shouldShowSetOption(card, options.standard)).toBe(true);
@@ -2740,7 +2828,11 @@ describe('shouldShowSetOption()', async () => {
         expect(wrapper.getCurrentComponent().ctx.shouldShowSetOption(card, options.digitalPromo)).toBe(false);
     });
 
-    test('Yes Promos, Yes Digital', () => {
+    test('Yes Promos, Yes Digital', async () => {
+        wrapper.getCurrentComponent().data.config.activeWorkspaceTab = 'print';
+        wrapper.getCurrentComponent().data.config.analysisMode = false;
+        await wrapper.vm.$nextTick();
+
         wrapper.find('input[name="include-digital"]').setValue(true);
         wrapper.find('input[name="include-promo"]').setValue(true);
         expect(wrapper.getCurrentComponent().ctx.shouldShowSetOption(card, options.standard)).toBe(true);
