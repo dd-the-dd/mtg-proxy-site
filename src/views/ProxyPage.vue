@@ -766,18 +766,14 @@
                     <span class="simulation-player-index">
                       P{{ index + 1 }}
                     </span>
-                    <span
-                      v-if="index === 0"
-                      class="simulation-player-deck-source"
-                    >
-                      You / Loaded deck
-                    </span>
                     <select
-                      v-else
                       class="form-select select simulation-player-deck"
                       :value="simulationPlayerDeckId(index)"
                       @change="setSimulationPlayerDeckId(index, $event.target.value)"
                     >
+                      <option value="current">
+                        Loaded deck
+                      </option>
                       <option
                         v-if="simulationMetaDeckOptions.length === 0"
                         value=""
@@ -2850,11 +2846,20 @@ export default {
     },
     methods: {
         setWorkspaceResource(resource) {
+            const previousResource = this.workspaceResource;
             this.config.activeWorkspaceTab = resource;
             this.config.analysisMode = resource === 'analysis';
             if (resource === 'play') {
+                if (previousResource !== 'play') {
+                    this.defaultFirstSimulationPlayerToLoadedDeck();
+                }
                 this.returnToSimulationSetup();
             }
+        },
+        defaultFirstSimulationPlayerToLoadedDeck() {
+            const deckIds = [...(this.config.simulationPlayerDeckIds ?? [])];
+            deckIds[0] = 'current';
+            this.config.simulationPlayerDeckIds = deckIds;
         },
         startSimulationGame() {
             if (!this.gameSimulation) {
@@ -3092,23 +3097,22 @@ export default {
             };
         },
         simulationPlayerDeckId(index) {
-            if (index === 0) {
-                return 'current';
-            }
-
             const selectedId = this.config.simulationPlayerDeckIds?.[index];
-            if (selectedId && this.simulationMetaDeckOptions.some(session => session.id === selectedId)) {
+            if (
+                selectedId === 'current' ||
+                this.simulationMetaDeckOptions.some(session => session.id === selectedId)
+            ) {
                 return selectedId;
             }
 
-            return this.simulationMetaDeckOptions[0]?.id ?? '';
+            return index === 0 ? 'current' : (this.simulationMetaDeckOptions[0]?.id ?? 'current');
         },
         setSimulationPlayerDeckId(index, value) {
             const deckIds = [...(this.config.simulationPlayerDeckIds ?? [])];
             while (deckIds.length <= index) {
                 deckIds.push('');
             }
-            deckIds[index] = index === 0 ? 'current' : value;
+            deckIds[index] = value;
             this.config.simulationPlayerDeckIds = deckIds;
             this.config.simulationGameStarted = false;
             this.config.simulationStepIndex = 0;
@@ -3117,11 +3121,11 @@ export default {
         },
         simulationDeckSelectionForPlayer(index) {
             const deckId = this.simulationPlayerDeckId(index);
-            if (index === 0) {
+            if (deckId === 'current') {
                 return {
                     cards: this.cards,
                     id: 'current',
-                    name: 'You',
+                    name: index === 0 ? 'You' : 'Loaded deck',
                 };
             }
 
@@ -5550,18 +5554,8 @@ export default {
     font-weight: 600;
 }
 
-.simulation-player-deck-source {
-    background: #eef6ff;
-    border: 1px solid #c7def8;
-    border-radius: 4px;
-    color: #23496f;
-    min-height: 1.55rem;
-    padding: 0.22rem 0.35rem;
-}
-
 .simulation-player-role-label .simulation-player-deck,
-.simulation-player-role-label .simulation-player-role,
-.simulation-player-role-label .simulation-player-deck-source {
+.simulation-player-role-label .simulation-player-role {
     width: 100%;
 }
 

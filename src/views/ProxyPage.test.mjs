@@ -52,6 +52,7 @@ describe('Core Rendering', async () => {
         component.data.config.activeWorkspaceTab = 'deck';
         component.data.config.analysisMode = false;
         component.data.config.simulationGameStarted = false;
+        component.data.config.simulationPlayerDeckIds = ['meta-one', 'meta-one'];
         component.data.cards = [
             {
                 quantity: 1,
@@ -121,18 +122,27 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#meta-resource-panel').exists()).toBe(true);
         expect(wrapper.find('#meta-resource-panel').text()).toContain('Izzet Prowess');
 
+        await wrapper.find('#resource-tab-deck').trigger('click');
+        expect(wrapper.find('#deck-resource-panel').exists()).toBe(true);
+
         await wrapper.find('#resource-tab-play').trigger('click');
         expect(wrapper.find('#play-resource-panel').exists()).toBe(true);
         expect(wrapper.find('#app-sidebar').exists()).toBe(false);
         expect(wrapper.find('#play-setup-panel').exists()).toBe(true);
         expect(wrapper.find('#simulation-matchup').exists()).toBe(false);
         expect(wrapper.find('#simulation-turn-count').exists()).toBe(false);
-        expect(wrapper.text()).not.toContain('Current deck');
         expect(wrapper.text()).not.toContain('Matchup');
-        expect(wrapper.find('.simulation-player-deck-source').text()).toContain('You');
-        expect(wrapper.find('.simulation-player-deck-source').text()).toContain('Loaded deck');
-        expect(wrapper.findAll('.simulation-player-deck')).toHaveLength(1);
-        expect(wrapper.find('.simulation-player-deck').text()).toContain('Izzet Prowess');
+        expect(wrapper.findAll('.simulation-player-deck')).toHaveLength(2);
+        expect(wrapper.findAll('.simulation-player-deck')[0].element.value).toBe('current');
+        expect(component.data.config.simulationPlayerDeckIds[0]).toBe('current');
+        expect(wrapper.findAll('.simulation-player-deck')[0].text()).toContain('Loaded deck');
+        expect(wrapper.findAll('.simulation-player-deck')[0].text()).toContain('Izzet Prowess');
+        expect(wrapper.findAll('.simulation-player-deck')[1].text()).toContain('Izzet Prowess');
+        await wrapper.findAll('.simulation-player-deck')[0].setValue('meta-one');
+        expect(component.data.config.simulationPlayerDeckIds[0]).toBe('meta-one');
+        expect(component.proxy.gameSimulation.playerList[0].zones.hand).toContainEqual(expect.objectContaining({
+            name: 'island',
+        }));
         expect(wrapper.find('.simulation-board').exists()).toBe(false);
         expect(wrapper.find('#resource-nav').exists()).toBe(true);
 
@@ -189,10 +199,11 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#play-setup-panel').exists()).toBe(true);
         expect(wrapper.find('#simulation-matchup').exists()).toBe(false);
         expect(wrapper.find('#simulation-turn-count').exists()).toBe(false);
-        expect(wrapper.find('.simulation-player-deck-source').text()).toContain('Loaded deck');
-        expect(wrapper.find('.simulation-player-deck').text()).toContain('Izzet Mirror');
-        expect(wrapper.find('.simulation-player-deck').text()).not.toContain('Matchup');
-        expect(wrapper.find('.simulation-player-deck').text()).not.toContain('Current deck');
+        expect(wrapper.findAll('.simulation-player-deck')).toHaveLength(2);
+        expect(wrapper.findAll('.simulation-player-deck')[0].element.value).toBe('current');
+        expect(wrapper.findAll('.simulation-player-deck')[0].text()).toContain('Loaded deck');
+        expect(wrapper.findAll('.simulation-player-deck')[1].text()).toContain('Izzet Mirror');
+        expect(wrapper.findAll('.simulation-player-deck')[1].text()).not.toContain('Matchup');
         expect(wrapper.find('.simulation-board').exists()).toBe(false);
         expect(wrapper.find('.simulation-log-panel').exists()).toBe(false);
         expect(document.body.classList.contains('play-board-active')).toBe(false);
