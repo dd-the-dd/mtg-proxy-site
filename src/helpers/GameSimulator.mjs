@@ -1446,6 +1446,206 @@ export function annotateSimulationPlayerActions(player, phase, options = {}) {
     };
 }
 
+function actionTargets(option, targetPlayers = []) {
+    const targetTypes = option.targetTypes ?? [];
+    const targetCandidates = targetCandidatesFromSummaryPlayers(targetPlayers);
+    const cards = targetCandidates.cards.filter(candidate => {
+        return cardMatchesTargetTypes(candidate.card, targetTypes);
+    });
+    const players = targetTypes.includes('player') ? targetCandidates.players : [];
+
+    return {
+        candidates: {
+            cards,
+            players,
+        },
+        required: Boolean(option.requiresTarget),
+        targetTypes,
+    };
+}
+
+function actionCosts(option, card) {
+    const costs = [];
+    if (option.manaCost || option.paymentOptions) {
+        costs.push({
+            kind: 'mana',
+            manaCost: option.manaCost || manaCostOf(card),
+            paymentOptions: option.paymentOptions ?? [],
+        });
+    }
+    if (option.lifePayment) {
+        costs.push({
+            amount: Number(option.lifePayment),
+            kind: 'life',
+        });
+    }
+    if (['activate', 'attack', 'mana'].includes(option.kind)) {
+        costs.push({
+            kind: 'tap',
+            source: 'self',
+        });
+    }
+
+    return costs;
+}
+
+function actionConditions(option, card, player, phase) {
+    const sourceZone = option.sourceZone ?? card.sourceZone ?? 'hand';
+    const conditions = [];
+    if (option.kind === 'playLand') {
+        conditions.push(
+            {
+                name: 'phaseAllowsLandPlay',
+                params: { phase },
+            },
+            {
+                name: 'landPlayAvailable',
+                params: {
+                    remaining: player.zones?.landPlaysAvailable ?? 0,
+                },
+            },
+        );
+    }
+    if (option.kind === 'cast') {
+        conditions.push(
+            {
+                name: 'zoneAllowsCast',
+                params: { sourceZone },
+            },
+            {
+                name: 'phaseAllowsCast',
+                params: {
+                    phase,
+                    speed: isInstant(card) ? 'instant' : 'sorcery',
+                },
+            },
+        );
+        if (option.requiresTarget) {
+            conditions.push({
+                name: 'validTargetAvailable',
+                params: {
+                    targetTypes: option.targetTypes ?? [],
+                },
+            });
+        }
+    }
+    if (option.kind === 'mana') {
+        conditions.push({
+            name: 'permanentUntapped',
+            params: { source: 'self' },
+        });
+    }
+    if (option.kind === 'activate') {
+        conditions.push(
+            {
+                name: 'sourceOnBattlefield',
+                params: {},
+            },
+            {
+                name: 'activatedAbilityAvailable',
+                params: {},
+            },
+        );
+    }
+    if (option.kind === 'attack') {
+        conditions.push({
+            name: 'creatureCanAttack',
+            params: {},
+        });
+    }
+
+    return conditions;
+}
+
+function decisionCard(card, sourceZone) {
+    return {
+        ...cardSnapshot(card),
+        sourceZone,
+    };
+}
+
+function decisionOptionFromAction(card, rawOption, player, phase, targetPlayers) {
+    const sourceZone = rawOption.sourceZone ?? card.sourceZone ?? 'hand';
+    const costs = actionCosts(rawOption, card);
+    const conditions = actionConditions(rawOption, card, player, phase);
+    const targets = actionTargets(rawOption, targetPlayers);
+    const option = {
+        ...rawOption,
+        conditions,
+        costs,
+        targets,
+    };
+
+    return {
+        id: `${player.key}:${sourceZone}:${card.id ?? card.name}:${rawOption.id ?? rawOption.label}`,
+        card: decisionCard(card, sourceZone),
+        conditions,
+        costs,
+        kind: rawOption.kind,
+        label: rawOption.label,
+        option,
+        playerKey: player.key,
+        sourceZone,
+        targets,
+    };
+}
+
+function decisionCardsForAnnotatedPlayer(player) {
+    return [
+        ...(player?.zones?.playableHand ?? []),
+        ...(player?.zones?.battlefield?.creatures ?? []),
+        ...(player?.zones?.battlefield?.lands ?? []),
+        ...(player?.zones?.battlefield?.nonCreaturePermanents ?? []),
+    ].filter(card => card?.actionState?.actionable);
+}
+
+export function buildPlayerDecisionOptions(player, phase, options = {}) {
+    const targetPlayers = options.targetPlayers ?? [player];
+    const annotatedPlayer = options.annotatedPlayer ?? annotateSimulationPlayerActions(player, phase, {
+        ...options,
+        targetPlayers,
+    });
+    const playerOptions = decisionCardsForAnnotatedPlayer(annotatedPlayer).flatMap(card => {
+        return (card.actionState?.options ?? []).map(option => {
+            return decisionOptionFromAction(card, option, annotatedPlayer, phase, targetPlayers);
+        });
+    });
+    if (options.includeAdvanceStep !== false) {
+        playerOptions.push({
+            id: `${annotatedPlayer.key}:game:advanceStep:${phase}`,
+            card: null,
+            conditions: [],
+            costs: [],
+            kind: 'advanceStep',
+            label: 'Continue to next step',
+            option: {
+                id: `${annotatedPlayer.key}:game:advanceStep:${phase}`,
+                kind: 'advanceStep',
+                label: 'Continue to next step',
+                sourceZone: 'game',
+            },
+            playerKey: annotatedPlayer.key,
+            sourceZone: 'game',
+            targets: {
+                candidates: {
+                    cards: [],
+                    players: [],
+                },
+                required: false,
+                targetTypes: [],
+            },
+        });
+    }
+
+    return {
+        options: playerOptions,
+        phase,
+        playerKey: annotatedPlayer.key,
+        playerName: annotatedPlayer.name,
+        role: annotatedPlayer.role,
+    };
+}
+
 function countActionableCards(value) {
     if (!value) {
         return 0;

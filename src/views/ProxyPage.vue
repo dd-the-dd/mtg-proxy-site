@@ -2036,7 +2036,13 @@
         class="btn simulation-action-choice"
         @click="chooseSimulationAction(option)"
       >
-        {{ option.label }}
+        <span>{{ option.label }}</span>
+        <span
+          v-if="simulationActionOptionSummary(option)"
+          class="simulation-action-choice-detail"
+        >
+          {{ simulationActionOptionSummary(option) }}
+        </span>
       </button>
       <button
         type="button"
@@ -2091,6 +2097,7 @@ import { createAnalysisWorkerClient } from "../helpers/AnalysisWorkerClient.mjs"
 import {
     annotateSimulationPlayerActions,
     buildGameSimulation,
+    buildPlayerDecisionOptions,
     findNextInteractiveStepIndex
 } from "../helpers/GameSimulator.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
@@ -3209,8 +3216,72 @@ export default {
                 };
             });
         },
+        simulationDecisionPacketForPlayer(player, includeAdvanceStep = false) {
+            if (!player) {
+                return {
+                    options: [],
+                    phase: this.activeSimulationStep?.phase ?? '',
+                    playerKey: '',
+                };
+            }
+
+            return buildPlayerDecisionOptions(player, this.activeSimulationStep?.phase ?? '', {
+                includeAdvanceStep,
+                targetPlayers: this.simulationPlayerList,
+            });
+        },
+        simulationDecisionMatchesCard(decision, card) {
+            if (!decision?.card || !card) {
+                return false;
+            }
+            if (decision.card.id && card.id) {
+                return decision.card.id === card.id;
+            }
+
+            const decisionName = String(decision.card.name ?? '').toLowerCase();
+            const cardName = String(card.name ?? '').toLowerCase();
+            const sameSourceZone = !card.sourceZone || decision.sourceZone === card.sourceZone;
+            return decisionName === cardName && sameSourceZone;
+        },
+        simulationDecisionOptionsForCard(card, player) {
+            return this.simulationDecisionPacketForPlayer(player, false).options
+                .filter(decision => decision.kind !== 'advanceStep' && this.simulationDecisionMatchesCard(decision, card))
+                .map(decision => decision.option);
+        },
+        simulationActionOptionSummary(option) {
+            const parts = [];
+            const sourceZone = option?.sourceZone;
+            const label = String(option?.label ?? '').toLowerCase();
+            if (sourceZone && sourceZone !== 'hand' && !label.includes(String(sourceZone).toLowerCase())) {
+                parts.push(sourceZone);
+            }
+            for (const cost of option?.costs ?? []) {
+                if (cost.kind === 'mana' && cost.manaCost) {
+                    if (!label.includes(String(cost.manaCost).toLowerCase())) {
+                        parts.push(cost.manaCost);
+                    }
+                } else if (cost.kind === 'life') {
+                    const lifeText = `${cost.amount} life`;
+                    if (!label.includes(lifeText)) {
+                        parts.push(lifeText);
+                    }
+                } else if (cost.kind === 'tap' && !label.includes('{t}')) {
+                    parts.push('tap');
+                }
+            }
+            if (option?.targets?.required && !label.includes('target')) {
+                parts.push(`target ${option.targets.targetTypes.join('/')}`);
+            } else if (option?.requiresTarget && !label.includes('target')) {
+                parts.push(`target ${(option.targetTypes ?? []).join('/')}`);
+            }
+
+            return parts.join(' \u00b7 ');
+        },
         handleSimulationCardDoubleClick(card, player) {
-            const options = this.normalizedSimulationActionOptions(card);
+            const options = this.simulationDecisionOptionsForCard(card, player);
+            if (options.length === 0) {
+                options.push(...this.normalizedSimulationActionOptions(card));
+            }
             if (options.length === 0) {
                 return;
             }
@@ -3245,15 +3316,16 @@ export default {
             ].filter(card => card?.actionState?.actionable);
         },
         simulationActionChoicesForPlayer(player) {
-            return this.simulationActionCardsForPlayer(player).flatMap(card => {
-                return this.normalizedSimulationActionOptions(card).map(option => {
+            return this.simulationDecisionPacketForPlayer(player, false).options
+                .filter(decision => decision.kind !== 'advanceStep')
+                .map(decision => {
                     return {
-                        card,
-                        option,
+                        card: decision.card,
+                        decision,
+                        option: decision.option,
                         player,
                     };
                 });
-            });
         },
         simulationDeterministicNumber(salt) {
             const text = `${this.config.simulationSeed}:${salt}`;
@@ -5446,7 +5518,17 @@ export default {
 }
 
 .simulation-action-choice {
+    align-items: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 0.08rem;
     text-align: left;
+}
+
+.simulation-action-choice-detail {
+    color: #667085;
+    font-size: 0.66rem;
+    font-weight: 600;
 }
 
 .simulation-action-close {

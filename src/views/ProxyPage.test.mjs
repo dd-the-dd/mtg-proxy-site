@@ -908,6 +908,17 @@ describe('Core Rendering', async () => {
 
         expect(wrapper.find('#simulation-action-menu').exists()).toBe(true);
         expect(wrapper.findAll('.simulation-action-choice')).toHaveLength(2);
+        expect(component.ctx.simulationActionOptionSummary({
+            costs: [{ kind: 'mana', manaCost: '{R}' }],
+            label: 'Use from graveyard',
+            sourceZone: 'graveyard',
+            targets: { required: true, targetTypes: ['player', 'creature'] },
+        })).toBe('{R} \u00b7 target player/creature');
+        expect(component.ctx.simulationActionOptionSummary({
+            costs: [{ amount: 2, kind: 'life' }],
+            label: 'Play untapped, pay 2 life',
+            sourceZone: 'hand',
+        })).toBe('');
 
         component.ctx.closeSimulationActionMenu();
         await wrapper.vm.$nextTick();

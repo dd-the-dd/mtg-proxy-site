@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
     annotateSimulationPlayerActions,
     buildGameSimulation,
+    buildPlayerDecisionOptions,
     expandDeckCards,
     findManaPaymentOptionsForCard,
     findNextInteractiveStepIndex,
@@ -585,6 +586,166 @@ describe('GameSimulator', () => {
                     }),
                 ]),
             }),
+        }));
+    });
+
+    test('Feature: Game engine lists player decision options as zone-aware JSON.', () => {
+        const mountain = {
+            id: 'mountain:0',
+            name: 'mountain',
+            quantity: 1,
+            state: { tapped: false },
+            typeLine: 'Basic Land - Mountain',
+        };
+        const handMountain = {
+            id: 'mountain:hand',
+            name: 'mountain',
+            quantity: 1,
+            typeLine: 'Basic Land - Mountain',
+        };
+        const flameSlash = {
+            id: 'flame slash:0',
+            manaCost: '{R}',
+            manaValue: 1,
+            name: 'flame slash',
+            oracleText: 'Flame Slash deals 4 damage to target creature.',
+            quantity: 1,
+            typeLine: 'Sorcery',
+        };
+        const graveSpark = {
+            id: 'grave spark:0',
+            manaCost: '{R}',
+            manaValue: 1,
+            name: 'grave spark',
+            oracleText: 'Grave Spark deals 1 damage to any target. You may cast this card from your graveyard.',
+            quantity: 1,
+            typeLine: 'Instant',
+        };
+        const tablet = {
+            id: 'tablet:0',
+            manaCost: '{1}',
+            manaValue: 1,
+            name: 'tablet',
+            oracleText: '{T}: Add {R}.\n{T}: Draw a card.',
+            quantity: 1,
+            state: { tapped: false },
+            typeLine: 'Artifact',
+        };
+        const you = {
+            key: 'you',
+            name: 'You',
+            role: 'human',
+            zones: {
+                battlefield: {
+                    creatures: [],
+                    lands: [mountain],
+                    nonCreaturePermanents: [tablet],
+                },
+                exile: { cards: [], count: 0, recoverable: [], top: null },
+                graveyard: { cards: [graveSpark], count: 1, recoverable: [], top: graveSpark },
+                hand: [handMountain, flameSlash],
+                handCount: 2,
+                landPlaysAvailable: 1,
+                libraryCount: 0,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [handMountain, flameSlash],
+            },
+        };
+        const opponent = {
+            key: 'opponent',
+            name: 'Opponent',
+            role: 'ai',
+            zones: {
+                battlefield: {
+                    creatures: [{
+                        id: 'bear:0',
+                        name: 'bear',
+                        quantity: 1,
+                        state: { tapped: false },
+                        typeLine: 'Creature - Bear',
+                    }],
+                    lands: [],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, recoverable: [], top: null },
+                graveyard: { cards: [], count: 0, recoverable: [], top: null },
+                hand: [],
+                handCount: 0,
+                landPlaysAvailable: 0,
+                libraryCount: 0,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [],
+            },
+        };
+
+        const decision = buildPlayerDecisionOptions(you, 'main', {
+            targetPlayers: [you, opponent],
+        });
+
+        expect(decision).toMatchObject({
+            phase: 'main',
+            playerKey: 'you',
+        });
+        expect(decision.options).toContainEqual(expect.objectContaining({
+            kind: 'advanceStep',
+            sourceZone: 'game',
+        }));
+        expect(decision.options).toContainEqual(expect.objectContaining({
+            kind: 'playLand',
+            sourceZone: 'hand',
+            card: expect.objectContaining({ name: 'mountain' }),
+            conditions: expect.arrayContaining([
+                expect.objectContaining({
+                    name: 'landPlayAvailable',
+                    params: { remaining: 1 },
+                }),
+            ]),
+        }));
+        expect(decision.options).toContainEqual(expect.objectContaining({
+            kind: 'cast',
+            sourceZone: 'hand',
+            card: expect.objectContaining({ name: 'flame slash' }),
+            costs: expect.arrayContaining([
+                expect.objectContaining({
+                    kind: 'mana',
+                    manaCost: '{R}',
+                    paymentOptions: expect.arrayContaining([
+                        expect.objectContaining({
+                            sources: [expect.objectContaining({ name: 'mountain' })],
+                        }),
+                    ]),
+                }),
+            ]),
+            targets: expect.objectContaining({
+                required: true,
+                candidates: expect.objectContaining({
+                    cards: [expect.objectContaining({
+                        card: expect.objectContaining({ name: 'bear' }),
+                        playerKey: 'opponent',
+                    })],
+                }),
+            }),
+        }));
+        expect(decision.options).toContainEqual(expect.objectContaining({
+            kind: 'cast',
+            sourceZone: 'graveyard',
+            card: expect.objectContaining({ name: 'grave spark' }),
+        }));
+        expect(decision.options).toContainEqual(expect.objectContaining({
+            kind: 'mana',
+            sourceZone: 'battlefield',
+            card: expect.objectContaining({ name: 'tablet' }),
+            costs: expect.arrayContaining([
+                expect.objectContaining({ kind: 'tap' }),
+            ]),
+        }));
+        expect(decision.options).toContainEqual(expect.objectContaining({
+            kind: 'activate',
+            sourceZone: 'battlefield',
+            card: expect.objectContaining({ name: 'tablet' }),
+            conditions: expect.arrayContaining([
+                expect.objectContaining({ name: 'activatedAbilityAvailable' }),
+            ]),
         }));
     });
 
