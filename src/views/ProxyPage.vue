@@ -826,18 +826,25 @@
                 class="simulation-mulligan-bottom-panel"
               >
                 <div class="simulation-mulligan-detail">
-                  Choose {{ simulationMulliganBottomCount(simulationMulliganPendingPlayer) }} card(s) to put on bottom.
+                  {{ simulationMulliganBottomInstruction(simulationMulliganPendingPlayer) }}
                 </div>
                 <div class="simulation-mulligan-bottom-cards">
                   <button
                     v-for="card in simulationMulliganBottomCandidateCards(simulationMulliganPendingPlayer)"
                     :key="`mulligan-bottom-${card.id}`"
                     type="button"
-                    class="btn btn-sm simulation-mulligan-bottom-card"
+                    class="simulation-mulligan-bottom-card"
                     :class="{ active: isSimulationMulliganBottomCardSelected(simulationMulliganPendingPlayer, card) }"
                     @click="toggleSimulationMulliganBottomCard(simulationMulliganPendingPlayer, card)"
                   >
-                    {{ simulationDisplayCardName(card) }}
+                    <img
+                      class="simulation-mulligan-bottom-image"
+                      :src="simulationCardImage(card)"
+                      :alt="simulationDisplayCardName(card)"
+                    >
+                    <span class="simulation-mulligan-bottom-name">
+                      {{ simulationDisplayCardName(card) }}
+                    </span>
                   </button>
                 </div>
                 <div class="simulation-mulligan-actions">
@@ -2977,6 +2984,11 @@ export default {
         },
         simulationMulliganBottomCount(player) {
             return Math.max(0, this.simulationMulliganCount(player) - this.simulationFreeMulliganCount());
+        },
+        simulationMulliganBottomInstruction(player) {
+            const count = this.simulationMulliganBottomCount(player);
+            const plural = count === 1 ? 'card' : 'cards';
+            return `Select ${count} ${plural} to put on the bottom of your library.`;
         },
         simulationMulliganBottomDraft(player) {
             return [...(this.simulationMulliganBottomDrafts[player?.key] ?? [])];
@@ -5783,14 +5795,41 @@ export default {
 .simulation-mulligan-bottom-cards {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.25rem;
+    gap: 0.45rem;
     justify-content: center;
 }
 
+.simulation-mulligan-bottom-card {
+    background: transparent;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 0.12rem;
+    width: 4.4rem;
+}
+
+.simulation-mulligan-bottom-card:hover,
+.simulation-mulligan-bottom-card:focus {
+    border-color: #98c9ff;
+    outline: none;
+}
+
 .simulation-mulligan-bottom-card.active {
-    background: #5755d9;
-    border-color: #5755d9;
-    color: #fff;
+    background: #e8f3ff;
+    border-color: #228be6;
+    box-shadow: 0 0 0 3px rgb(34 139 230 / 22%);
+}
+
+.simulation-mulligan-bottom-image {
+    aspect-ratio: 488 / 680;
+    border-radius: 4px;
+    display: block;
+    object-fit: cover;
+    width: 100%;
+}
+
+.simulation-mulligan-bottom-name {
+    display: none;
 }
 
 .simulation-mulligan-actions {

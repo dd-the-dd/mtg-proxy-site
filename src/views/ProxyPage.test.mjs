@@ -282,9 +282,14 @@ describe('Core Rendering', async () => {
         await wrapper.vm.$nextTick();
 
         expect(wrapper.find('#simulation-mulligan-bottom-panel').exists()).toBe(true);
+        expect(wrapper.find('#simulation-mulligan-bottom-panel').text()).toContain(
+            'Select 1 card to put on the bottom of your library.',
+        );
+        expect(wrapper.findAll('.simulation-mulligan-bottom-card img')).toHaveLength(7);
         expect(wrapper.find('#simulation-mulligan-bottom-confirm').attributes('disabled')).toBeDefined();
         await wrapper.findAll('.simulation-mulligan-bottom-card')[0].trigger('click');
         await wrapper.vm.$nextTick();
+        expect(wrapper.findAll('.simulation-mulligan-bottom-card')[0].classes()).toContain('active');
         expect(wrapper.find('#simulation-mulligan-bottom-confirm').attributes('disabled')).toBeUndefined();
 
         await wrapper.find('#simulation-mulligan-bottom-confirm').trigger('click');
