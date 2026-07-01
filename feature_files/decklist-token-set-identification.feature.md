@@ -116,7 +116,9 @@
 - The left session/config rail can collapse toward the left; when open it uses a narrow sidebar layout so analysis content keeps most of the page width.
 - The workspace is organized around resources: Deck, Print, Analysis, Play, Card Analysis, Compare, and Meta, with top navigation switching between those contexts.
 - The left rail keeps persistent session controls but shows only the configuration relevant to the active resource; deck import controls live in Deck, print layout controls live in Print, and analysis controls live in Analysis.
-- Play uses a full-width workspace without the left rail so the game board can occupy the available screen space.
+- Play opens on a game setup screen first; starting a game switches to the full-width board, hides the global resource navigation, and leaves only a compact options menu on the board.
+- Card Analysis organizes parser output into effect registries such as enters-the-battlefield triggers, life-gain triggers, attack triggers, phase or step triggers, permanent modifiers, player modifiers, and rule parameter changes. Game simulation can consume these registries at the relevant event or phase instead of hard-coding every card interaction directly into the board UI.
+- Rule-effect registries must distinguish temporary and permanent modifications to permanents, players, and rule parameters such as lands playable per turn, maximum hand size, draw-loss replacement, and game-loss conditions.
 - Analysis card rows prioritize a near-card-sized image beside a compact interaction grid that avoids horizontal scrolling for normal meta views.
 - Generating combo pieces for `Pestbrood Sloth` appends `Pest [tsos] 9` if no `Pest` line is already present.
 - Generating combo pieces skips disabled categories and does not duplicate related pieces already in the decklist.

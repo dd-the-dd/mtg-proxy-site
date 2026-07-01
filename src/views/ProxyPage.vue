@@ -515,6 +515,23 @@
                 <div class="text-small text-gray">
                   Oracle parser diagnostics and card-only value analysis will live here.
                 </div>
+                <div
+                  id="card-analysis-effect-registry"
+                  class="card-analysis-effect-registry"
+                >
+                  <div
+                    v-for="category in cardEffectRegistryCategories"
+                    :key="category.key"
+                    class="card-analysis-effect-category"
+                  >
+                    <div class="card-analysis-effect-title">
+                      {{ category.label }}
+                    </div>
+                    <div class="card-analysis-effect-description">
+                      {{ category.description }}
+                    </div>
+                  </div>
+                </div>
               </div>
               <div
                 v-if="workspaceResource === 'compare'"
@@ -616,7 +633,11 @@
           </ul>
         </div>
 
-        <div id="resource-nav" class="resource-nav">
+        <div
+          v-if="!isActivePlayBoard"
+          id="resource-nav"
+          class="resource-nav"
+        >
           <button
             v-for="item in resourceNavItems"
             :id="`resource-tab-${item.key}`"
@@ -636,151 +657,157 @@
           class="game-simulation"
         >
           <div id="game-simulation-tab">
-            <div class="simulation-toolbar">
-              <label class="form-label simulation-control">
-                Matchup
-                <select
-                  id="simulation-matchup"
-                  class="form-select select"
-                  v-model="effectiveSimulationMatchupSessionId"
-                  :disabled="simulationMetaDeckOptions.length === 0"
-                >
-                  <option
-                    v-if="simulationMetaDeckOptions.length === 0"
-                    value=""
-                  >
-                    No meta deck
-                  </option>
-                  <option
-                    v-for="session in simulationMetaDeckOptions"
-                    :key="session.id"
-                    :value="session.id"
-                  >
-                    {{ session.name }}
-                  </option>
-                </select>
-              </label>
-              <label class="form-label simulation-control simulation-control-compact">
-                Seed
-                <input
-                  id="simulation-seed"
-                  class="form-input"
-                  type="number"
-                  min="1"
-                  v-model.number="config.simulationSeed"
-                >
-              </label>
-              <label class="form-label simulation-control simulation-control-compact">
-                Turns
-                <select
-                  id="simulation-turn-count"
-                  class="form-select select"
-                  v-model.number="config.simulationTurnCount"
-                >
-                  <option :value="1">1</option>
-                  <option :value="2">2</option>
-                  <option :value="3">3</option>
-                  <option :value="4">4</option>
-                  <option :value="5">5</option>
-                </select>
-              </label>
-              <label class="form-label simulation-control simulation-control-compact">
-                Players
-                <select
-                  id="simulation-player-count"
-                  class="form-select select"
-                  v-model.number="config.simulationPlayerCount"
-                >
-                  <option :value="2">2</option>
-                  <option :value="3">3</option>
-                  <option :value="4">4</option>
-                  <option :value="5">5</option>
-                  <option :value="6">6</option>
-                </select>
-              </label>
-              <label class="form-label simulation-control simulation-control-compact">
-                Speed
-                <select
-                  id="simulation-speed"
-                  class="form-select select"
-                  v-model="config.simulationSpeed"
-                >
-                  <option value="slow">Slow</option>
-                  <option value="normal">Normal</option>
-                  <option value="fast">Fast</option>
-                </select>
-              </label>
-              <label class="form-label simulation-control simulation-control-compact">
-                Zoom
-                <input
-                  id="simulation-board-zoom"
-                  class="form-input"
-                  type="range"
-                  min="0.6"
-                  max="1.4"
-                  step="0.1"
-                  v-model.number="config.simulationBoardZoom"
-                >
-              </label>
-              <label class="form-switch simulation-switch">
-                <input
-                  id="simulation-show-opponent-hands"
-                  type="checkbox"
-                  v-model="config.simulationShowOpponentHands"
-                >
-                <i class="form-icon" /> Opponent hands
-              </label>
-              <button
-                id="simulation-reroll"
-                type="button"
-                class="btn btn-primary simulation-reroll"
-                :disabled="!gameSimulation"
-                @click="rerollSimulation"
-              >
-                Simulate
-              </button>
-              <div class="simulation-player-settings">
-                <label
-                  v-for="index in simulationPlayerSlots"
-                  :key="`simulation-player-role-${index}`"
-                  class="form-label simulation-player-role-label"
-                >
-                  P{{ index + 1 }}
+            <div
+              v-if="isPlaySetupVisible"
+              id="play-setup-panel"
+              class="play-setup-panel"
+            >
+              <div class="simulation-toolbar">
+                <label class="form-label simulation-control">
+                  Matchup
                   <select
-                    class="form-select select simulation-player-deck"
-                    :value="simulationPlayerDeckId(index)"
-                    @change="setSimulationPlayerDeckId(index, $event.target.value)"
+                    id="simulation-matchup"
+                    class="form-select select"
+                    v-model="effectiveSimulationMatchupSessionId"
+                    :disabled="simulationMetaDeckOptions.length === 0"
                   >
                     <option
-                      v-if="index > 0"
+                      v-if="simulationMetaDeckOptions.length === 0"
                       value=""
                     >
-                      Matchup
-                    </option>
-                    <option value="current">
-                      Current deck
+                      No meta deck
                     </option>
                     <option
                       v-for="session in simulationMetaDeckOptions"
-                      :key="`simulation-player-${index}-deck-${session.id}`"
+                      :key="session.id"
                       :value="session.id"
                     >
                       {{ session.name }}
                     </option>
                   </select>
-                  <select
-                    class="form-select select simulation-player-role"
-                    v-model="config.simulationPlayerRoles[index]"
+                </label>
+                <label class="form-label simulation-control simulation-control-compact">
+                  Seed
+                  <input
+                    id="simulation-seed"
+                    class="form-input"
+                    type="number"
+                    min="1"
+                    v-model.number="config.simulationSeed"
                   >
-                    <option value="human">Human</option>
-                    <option value="ai">AI</option>
+                </label>
+                <label class="form-label simulation-control simulation-control-compact">
+                  Turns
+                  <select
+                    id="simulation-turn-count"
+                    class="form-select select"
+                    v-model.number="config.simulationTurnCount"
+                  >
+                    <option :value="1">1</option>
+                    <option :value="2">2</option>
+                    <option :value="3">3</option>
+                    <option :value="4">4</option>
+                    <option :value="5">5</option>
                   </select>
                 </label>
+                <label class="form-label simulation-control simulation-control-compact">
+                  Players
+                  <select
+                    id="simulation-player-count"
+                    class="form-select select"
+                    v-model.number="config.simulationPlayerCount"
+                  >
+                    <option :value="2">2</option>
+                    <option :value="3">3</option>
+                    <option :value="4">4</option>
+                    <option :value="5">5</option>
+                    <option :value="6">6</option>
+                  </select>
+                </label>
+                <label class="form-label simulation-control simulation-control-compact">
+                  Speed
+                  <select
+                    id="simulation-speed"
+                    class="form-select select"
+                    v-model="config.simulationSpeed"
+                  >
+                    <option value="slow">Slow</option>
+                    <option value="normal">Normal</option>
+                    <option value="fast">Fast</option>
+                  </select>
+                </label>
+                <label class="form-label simulation-control simulation-control-compact">
+                  Zoom
+                  <input
+                    id="simulation-board-zoom"
+                    class="form-input"
+                    type="range"
+                    min="0.6"
+                    max="1.4"
+                    step="0.1"
+                    v-model.number="config.simulationBoardZoom"
+                  >
+                </label>
+                <label class="form-switch simulation-switch">
+                  <input
+                    id="simulation-show-opponent-hands"
+                    type="checkbox"
+                    v-model="config.simulationShowOpponentHands"
+                  >
+                  <i class="form-icon" /> Opponent hands
+                </label>
+                <button
+                  id="start-simulation-game"
+                  type="button"
+                  class="btn btn-primary simulation-reroll"
+                  :disabled="!gameSimulation"
+                  @click="startSimulationGame"
+                >
+                  Start game
+                </button>
+                <div class="simulation-player-settings">
+                  <label
+                    v-for="index in simulationPlayerSlots"
+                    :key="`simulation-player-role-${index}`"
+                    class="form-label simulation-player-role-label"
+                  >
+                    P{{ index + 1 }}
+                    <select
+                      class="form-select select simulation-player-deck"
+                      :value="simulationPlayerDeckId(index)"
+                      @change="setSimulationPlayerDeckId(index, $event.target.value)"
+                    >
+                      <option
+                        v-if="index > 0"
+                        value=""
+                      >
+                        Matchup
+                      </option>
+                      <option value="current">
+                        Current deck
+                      </option>
+                      <option
+                        v-for="session in simulationMetaDeckOptions"
+                        :key="`simulation-player-${index}-deck-${session.id}`"
+                        :value="session.id"
+                      >
+                        {{ session.name }}
+                      </option>
+                    </select>
+                    <select
+                      class="form-select select simulation-player-role"
+                      v-model="config.simulationPlayerRoles[index]"
+                    >
+                      <option value="human">Human</option>
+                      <option value="ai">AI</option>
+                    </select>
+                  </label>
+                </div>
               </div>
             </div>
 
             <div
-              v-if="simulationPendingAction"
+              v-if="isActivePlayBoard && simulationPendingAction"
               class="simulation-targeting-banner"
             >
               Choose target for {{ simulationDisplayCardName(simulationPendingAction.card) }}
@@ -796,7 +823,30 @@
             </div>
 
             <div
-              v-else-if="gameSimulation"
+              v-if="isActivePlayBoard && gameSimulation"
+              id="play-board-options"
+              class="play-board-options"
+            >
+              <button
+                id="return-to-play-setup"
+                type="button"
+                class="btn btn-sm"
+                @click="returnToSimulationSetup"
+              >
+                Setup
+              </button>
+              <button
+                id="simulation-reroll"
+                type="button"
+                class="btn btn-sm"
+                @click="rerollSimulation"
+              >
+                New seed
+              </button>
+            </div>
+
+            <div
+              v-if="isActivePlayBoard && gameSimulation"
               class="simulation-board"
               :class="{ 'simulation-board-compact': simulationPlayerLanes.length === 1 }"
             >
@@ -2120,6 +2170,7 @@ function createDefaultConfig() {
         simulationStepIndex: 0,
         simulationTurnCount: 2,
         simulationBoardZoom: 1,
+        simulationGameStarted: false,
         comboPieceConfigOpen: false,
         comboPieceTypes: {
             token: true,
@@ -2295,8 +2346,59 @@ export default {
         isPlayResource() {
             return this.workspaceResource === 'play';
         },
+        isActivePlayBoard() {
+            return this.workspaceResource === 'play' && (
+                this.config.simulationGameStarted ||
+                this.config.activeWorkspaceTab === 'simulation'
+            );
+        },
+        isPlaySetupVisible() {
+            return this.workspaceResource === 'play' && (
+                !this.config.simulationGameStarted ||
+                this.config.activeWorkspaceTab === 'simulation'
+            );
+        },
         isAnalysisResource() {
             return this.workspaceResource === 'analysis';
+        },
+        cardEffectRegistryCategories() {
+            return [
+                {
+                    key: 'enters-battlefield',
+                    label: 'Whenever enters the battlefield',
+                    description: 'Triggers queued when matching permanents enter the battlefield.',
+                },
+                {
+                    key: 'gain-life',
+                    label: 'Whenever gain life',
+                    description: 'Triggers queued when a player gains life.',
+                },
+                {
+                    key: 'attacks',
+                    label: 'Whenever attacks',
+                    description: 'Triggers queued when a creature attacks or a matching attacker is declared.',
+                },
+                {
+                    key: 'phase-step',
+                    label: 'Phase and step triggers',
+                    description: 'Upkeep, draw, combat, end step, and other turn-structure triggers.',
+                },
+                {
+                    key: 'permanent-modifiers',
+                    label: 'Permanent modifiers',
+                    description: 'Continuous, temporary, and counter-like changes applied to permanents.',
+                },
+                {
+                    key: 'player-modifiers',
+                    label: 'Player modifiers',
+                    description: 'Changes applied to players, including hand size, life rules, and turn permissions.',
+                },
+                {
+                    key: 'rule-parameters',
+                    label: 'Rule parameters',
+                    description: 'Rules that cards can rewrite, such as lands per turn, draw loss, or game-loss conditions.',
+                },
+            ];
         },
         metaDeckSessionOptions() {
             const sessionsById = new Map();
@@ -2535,6 +2637,9 @@ export default {
             },
             set(value) {
                 this.config.simulationMatchupSessionId = value;
+                this.config.simulationGameStarted = false;
+                this.config.simulationStepIndex = 0;
+                this.resetSimulationRuntime();
             },
         },
         simulationPlayerSlots() {
@@ -2700,6 +2805,24 @@ export default {
         setWorkspaceResource(resource) {
             this.config.activeWorkspaceTab = resource;
             this.config.analysisMode = resource === 'analysis';
+            if (resource === 'play') {
+                this.returnToSimulationSetup();
+            }
+        },
+        startSimulationGame() {
+            if (!this.gameSimulation) {
+                return;
+            }
+
+            this.config.simulationGameStarted = true;
+            this.config.simulationStepIndex = 0;
+            this.resetSimulationRuntime();
+            this.resolveSimulationAiSteps();
+        },
+        returnToSimulationSetup() {
+            this.config.simulationGameStarted = false;
+            this.simulationActionMenu = null;
+            this.simulationPendingAction = null;
         },
         cloneForStorage(value) {
             return JSON.parse(JSON.stringify(value));
@@ -2862,6 +2985,7 @@ export default {
             }
             deckIds[index] = value;
             this.config.simulationPlayerDeckIds = deckIds;
+            this.config.simulationGameStarted = false;
             this.config.simulationStepIndex = 0;
             this.resetSimulationRuntime();
         },
@@ -4599,6 +4723,7 @@ export default {
                 const zoom = Number(v);
                 return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
             });
+            this.config.simulationGameStarted = false;
             this.config.comboPieceConfigOpen = bindStorage('comboPieceConfigOpen', (v) => v === "true");
             this.config.comboPieceTypes.token = bindStorage('comboPieceToken', (v) => v !== "false");
             this.config.comboPieceTypes.emblem = bindStorage('comboPieceEmblem', (v) => v !== "false");
@@ -5090,11 +5215,51 @@ export default {
     text-align: left;
 }
 
+.card-analysis-effect-registry {
+    display: grid;
+    gap: 0.32rem;
+}
+
+.card-analysis-effect-category {
+    background: #f8f9fa;
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    padding: 0.42rem 0.48rem;
+}
+
+.card-analysis-effect-title {
+    color: #303742;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.card-analysis-effect-description {
+    color: #667085;
+    font-size: 0.62rem;
+    line-height: 1.25;
+    margin-top: 0.14rem;
+}
+
 .game-simulation {
     display: grid;
     gap: 0.45rem;
     min-width: 0;
     width: 100%;
+}
+
+.play-setup-panel {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.play-board-options {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.25rem;
+    justify-self: end;
+    position: sticky;
+    top: 0.45rem;
+    z-index: 1100;
 }
 
 .simulation-toolbar {

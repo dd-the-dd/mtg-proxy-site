@@ -51,6 +51,7 @@ describe('Core Rendering', async () => {
 
         component.data.config.activeWorkspaceTab = 'deck';
         component.data.config.analysisMode = false;
+        component.data.config.simulationGameStarted = false;
         component.data.cards = [
             {
                 quantity: 1,
@@ -68,6 +69,23 @@ describe('Core Rendering', async () => {
                 id: 'meta-one',
                 name: 'Izzet Prowess',
                 isMetaDeck: true,
+            },
+        ];
+        component.data.metaDeckStates = [
+            {
+                id: 'meta-one',
+                name: 'Izzet Prowess',
+                state: {
+                    cards: [
+                        {
+                            quantity: 1,
+                            name: 'island',
+                            selectedOption: {
+                                typeLine: 'Basic Land - Island',
+                            },
+                        },
+                    ],
+                },
             },
         ];
 
@@ -90,6 +108,10 @@ describe('Core Rendering', async () => {
 
         await wrapper.find('#resource-tab-card-analysis').trigger('click');
         expect(wrapper.find('#card-analysis-resource-panel').exists()).toBe(true);
+        expect(wrapper.find('#card-analysis-effect-registry').exists()).toBe(true);
+        expect(wrapper.find('#card-analysis-effect-registry').text()).toContain('Whenever enters the battlefield');
+        expect(wrapper.find('#card-analysis-effect-registry').text()).toContain('Permanent modifiers');
+        expect(wrapper.find('#card-analysis-effect-registry').text()).toContain('Rule parameters');
 
         await wrapper.find('#resource-tab-compare').trigger('click');
         expect(wrapper.find('#compare-resource-panel').exists()).toBe(true);
@@ -102,11 +124,22 @@ describe('Core Rendering', async () => {
         await wrapper.find('#resource-tab-play').trigger('click');
         expect(wrapper.find('#play-resource-panel').exists()).toBe(true);
         expect(wrapper.find('#app-sidebar').exists()).toBe(false);
+        expect(wrapper.find('#play-setup-panel').exists()).toBe(true);
+        expect(wrapper.find('.simulation-board').exists()).toBe(false);
+        expect(wrapper.find('#resource-nav').exists()).toBe(true);
+
+        await wrapper.find('#start-simulation-game').trigger('click');
+        expect(wrapper.find('#play-setup-panel').exists()).toBe(false);
+        expect(wrapper.find('.simulation-board').exists()).toBe(true);
+        expect(wrapper.find('#resource-nav').exists()).toBe(false);
+        expect(wrapper.find('#play-board-options').exists()).toBe(true);
 
         component.data.config.activeWorkspaceTab = 'deck';
         component.data.config.analysisMode = false;
+        component.data.config.simulationGameStarted = false;
         component.data.cards = [];
         component.data.localSessions = [];
+        component.data.metaDeckStates = [];
         await wrapper.vm.$nextTick();
     });
 
