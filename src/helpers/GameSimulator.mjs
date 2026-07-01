@@ -52,6 +52,14 @@ function isPermanent(card) {
     return !isInstant(card) && !isSorcery(card);
 }
 
+function isGamePiece(card) {
+    return Boolean(card?.isGamePiece || card?.isToken || selected(card).isGamePiece || selected(card).isToken);
+}
+
+function isDeckLibraryCard(card) {
+    return !isGamePiece(card);
+}
+
 const phaseSequence = [
     'upkeep',
     'draw',
@@ -1386,6 +1394,7 @@ function buildPlayerSummary(player, playerState, actionContext = null) {
         key: player.key,
         library: player.library,
         libraryCount: Math.max(0, playerState.library.length - playerState.libraryIndex),
+        mulligan: player.mulligan,
         name: player.name,
         openingHand: groupCards(player.openingHand),
         role: player.role,
@@ -1967,15 +1976,20 @@ function buildPlayers(currentDeck, opponentDeck, options = {}) {
         const config = buildPlayerConfig(index, options);
         const deck = options.playerDecks?.[index] ?? (index === 0 ? currentDeck : opponentDeck);
         const expandedDeck = expandDeckCards(deck);
-        const library = options.shuffle === false
+        const shuffledLibrary = options.shuffle === false
             ? expandedDeck
             : shuffle(expandedDeck, `${options.seed ?? 1}:${config.key}`);
+        const mulligan = buildOpeningHandFromMulligans(shuffledLibrary, {
+            freeMulligans: options.freeMulligans,
+            mulligansTaken: mulliganCountForPlayer(options.mulliganCounts, config.key, index),
+        });
 
         return {
             ...config,
             deck,
-            library,
-            openingHand: library.slice(0, 7),
+            library: mulligan.library,
+            mulligan,
+            openingHand: mulligan.openingHand,
         };
     });
 }
@@ -2001,13 +2015,52 @@ function logLine(step) {
 
 export function expandDeckCards(cards = []) {
     const expanded = [];
-    for (const card of cards) {
+    for (const card of cards.filter(isDeckLibraryCard)) {
         for (let copyIndex = 0; copyIndex < quantityOf(card); copyIndex += 1) {
             expanded.push(compactCard(card, copyIndex));
         }
     }
 
     return expanded;
+}
+
+function normalizedNonNegativeInteger(value, fallback = 0) {
+    const number = Number(value ?? fallback);
+    return Number.isFinite(number) && number >= 0 ? Math.floor(number) : fallback;
+}
+
+function mulliganCountForPlayer(mulliganCounts = {}, playerKey, playerIndex) {
+    if (Array.isArray(mulliganCounts)) {
+        return normalizedNonNegativeInteger(mulliganCounts[playerIndex], 0);
+    }
+
+    return normalizedNonNegativeInteger(mulliganCounts?.[playerKey], 0);
+}
+
+function buildOpeningHandFromMulligans(library = [], options = {}) {
+    const startingHandSize = 7;
+    const mulligansTaken = normalizedNonNegativeInteger(options.mulligansTaken, 0);
+    const freeMulligans = normalizedNonNegativeInteger(options.freeMulligans, 0);
+    const countedMulligans = Math.max(0, mulligansTaken - freeMulligans);
+    const keptHandSize = Math.max(0, startingHandSize - countedMulligans);
+    const drawnCards = library.slice(0, startingHandSize);
+    const openingHand = drawnCards.slice(0, keptHandSize);
+    const bottomedCards = drawnCards.slice(keptHandSize);
+
+    return {
+        bottomedCards,
+        bottomedCount: bottomedCards.length,
+        countedMulligans,
+        freeMulligans,
+        library: [
+            ...openingHand,
+            ...library.slice(startingHandSize),
+            ...bottomedCards,
+        ],
+        mulligansTaken,
+        openingHand,
+        startingHandSize,
+    };
 }
 
 export function buildGameSimulation(currentDeck = [], opponentDeck = [], options = {}) {
@@ -2024,7 +2077,7 @@ export function buildGameSimulation(currentDeck = [], opponentDeck = [], options
                 hand: [...player.openingHand],
                 landPlaysAvailable: 1,
                 library: player.library,
-                libraryIndex: 7,
+                libraryIndex: player.openingHand.length,
                 manaPool: emptyManaPool(),
                 maxHandSize: normalizeMaxHandSize(options.maxHandSize),
                 zones: createMutableZones(),

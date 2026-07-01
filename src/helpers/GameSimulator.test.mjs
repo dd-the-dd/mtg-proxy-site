@@ -248,6 +248,68 @@ describe('GameSimulator', () => {
         expect(quantityTotal(first.players.opponent.openingHand)).toBe(7);
     });
 
+    test('Feature: Game simulation excludes tokens from shuffled libraries.', () => {
+        const deck = [
+            card('mountain', 7, { typeLine: 'Basic Land - Mountain' }),
+            card('treasure', 4, { isGamePiece: true, isToken: true, typeLine: 'Token Artifact - Treasure' }),
+            card('otter token', 2, { isGamePiece: true, isToken: true, typeLine: 'Token Creature - Otter' }),
+        ];
+
+        expect(expandDeckCards(deck)).toHaveLength(7);
+
+        const simulation = buildGameSimulation(deck, deck, {
+            seed: 1,
+            shuffle: false,
+            turnCount: 1,
+        });
+
+        expect(simulation.players.you.openingHand.map(entry => entry.name)).toEqual(['mountain']);
+        expect(simulation.players.you.zones.hand).toEqual([
+            expect.objectContaining({
+                name: 'mountain',
+                quantity: 7,
+            }),
+        ]);
+        expect(simulation.players.you.libraryCount).toBe(0);
+    });
+
+    test('Feature: Game simulation applies London mulligans with configurable free mulligans.', () => {
+        const deck = [
+            card('mountain', 10, { typeLine: 'Basic Land - Mountain' }),
+        ];
+
+        const penalized = buildGameSimulation(deck, deck, {
+            mulliganCounts: { you: 1 },
+            seed: 1,
+            shuffle: false,
+            turnCount: 1,
+        });
+        const free = buildGameSimulation(deck, deck, {
+            freeMulligans: 1,
+            mulliganCounts: { you: 1 },
+            seed: 1,
+            shuffle: false,
+            turnCount: 1,
+        });
+
+        expect(quantityTotal(penalized.players.you.openingHand)).toBe(6);
+        expect(penalized.players.you.libraryCount).toBe(4);
+        expect(penalized.players.you.mulligan).toMatchObject({
+            bottomedCount: 1,
+            countedMulligans: 1,
+            freeMulligans: 0,
+            mulligansTaken: 1,
+        });
+        expect(quantityTotal(free.players.you.openingHand)).toBe(7);
+        expect(free.players.you.libraryCount).toBe(3);
+        expect(free.players.you.mulligan).toMatchObject({
+            bottomedCount: 0,
+            countedMulligans: 0,
+            freeMulligans: 1,
+            mulligansTaken: 1,
+        });
+    });
+
     test('Feature: Game simulation reports early turn cast and hold-up options against a meta deck.', () => {
         const currentDeck = [
             card('mountain', 8, { typeLine: 'Basic Land - Mountain' }),

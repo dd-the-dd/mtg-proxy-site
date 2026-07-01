@@ -200,6 +200,79 @@ describe('Core Rendering', async () => {
         expect(document.body.classList.contains('play-board-active')).toBe(false);
     });
 
+    test('Feature: Simulation start asks for mulligan decisions before the first interactive step.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationGameStarted = false;
+        component.data.config.simulationMulliganEnabled = true;
+        component.data.config.simulationFreeMulligans = 0;
+        component.data.config.simulationPlayerCount = 2;
+        component.data.config.simulationPlayerRoles = ['human', 'ai'];
+        component.data.config.simulationSeed = 1;
+        component.data.config.simulationTurnCount = 1;
+        component.data.cards = [
+            {
+                quantity: 8,
+                name: 'mountain',
+                selectedOption: {
+                    typeLine: 'Basic Land - Mountain',
+                    urlFront: 'mountain-front',
+                },
+            },
+        ];
+        component.data.metaDeckStates = [
+            {
+                id: 'mulligan-meta',
+                name: 'Mulligan Meta',
+                state: {
+                    cards: [
+                        {
+                            quantity: 8,
+                            name: 'island',
+                            selectedOption: {
+                                typeLine: 'Basic Land - Island',
+                            },
+                        },
+                    ],
+                },
+            },
+        ];
+        component.data.config.simulationMatchupSessionId = 'mulligan-meta';
+        await wrapper.vm.$nextTick();
+
+        await wrapper.find('#start-simulation-game').trigger('click');
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('#simulation-mulligan-panel').exists()).toBe(true);
+        expect(component.data.config.simulationGameStarted).toBe(true);
+        expect(component.data.config.simulationStepIndex).toBe(0);
+
+        await wrapper.find('#simulation-mulligan-take').trigger('click');
+        await wrapper.vm.$nextTick();
+        expect(component.data.simulationMulliganCounts.you).toBe(1);
+        expect(component.proxy.gameSimulation.players.you.zones.handCount).toBe(6);
+
+        await wrapper.find('#simulation-mulligan-keep').trigger('click');
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('#simulation-mulligan-panel').exists()).toBe(false);
+        expect(component.data.simulationMulliganKept.you).toBe(true);
+        expect(component.proxy.activeSimulationStep.phase).toBe('main');
+        expect(component.proxy.activeSimulationStep.playerKey).toBe('you');
+
+        component.data.config.activeWorkspaceTab = 'cards';
+        component.data.config.simulationGameStarted = false;
+        component.data.config.simulationStepIndex = 0;
+        component.data.config.simulationMulliganEnabled = true;
+        component.data.config.simulationFreeMulligans = 0;
+        component.data.simulationMulliganCounts = {};
+        component.data.simulationMulliganFlowActive = false;
+        component.data.simulationMulliganKept = {};
+        component.data.cards = [];
+        component.data.metaDeckStates = [];
+    });
+
     test('Feature: Hovering a card image opens a fast center-left card preview.', async () => {
         const component = wrapper.getCurrentComponent();
         vi.useFakeTimers();

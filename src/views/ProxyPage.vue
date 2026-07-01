@@ -763,6 +763,28 @@
                   >
                   <i class="form-icon" /> Opponent hands
                 </label>
+                <label class="form-switch simulation-switch">
+                  <input
+                    id="simulation-mulligan-enabled"
+                    type="checkbox"
+                    v-model="config.simulationMulliganEnabled"
+                  >
+                  <i class="form-icon" /> Mulligan
+                </label>
+                <label
+                  v-if="config.simulationMulliganEnabled"
+                  class="form-label simulation-control simulation-control-compact"
+                >
+                  Free mulligans
+                  <input
+                    id="simulation-free-mulligans"
+                    class="form-input"
+                    type="number"
+                    min="0"
+                    max="7"
+                    v-model.number="config.simulationFreeMulligans"
+                  >
+                </label>
                 <button
                   id="start-simulation-game"
                   type="button"
@@ -818,6 +840,39 @@
               class="simulation-targeting-banner"
             >
               Choose target for {{ simulationDisplayCardName(simulationPendingAction.card) }}
+            </div>
+
+            <div
+              v-if="isActivePlayBoard && isSimulationMulliganPending"
+              id="simulation-mulligan-panel"
+              class="simulation-mulligan-panel"
+            >
+              <div class="simulation-mulligan-title">
+                {{ simulationMulliganPendingPlayer.name }} opening hand
+              </div>
+              <div class="simulation-mulligan-detail">
+                Mulligans {{ simulationMulliganCount(simulationMulliganPendingPlayer) }}
+                / bottom {{ simulationMulliganBottomCount(simulationMulliganPendingPlayer) }}
+              </div>
+              <div class="simulation-mulligan-actions">
+                <button
+                  id="simulation-mulligan-keep"
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  @click="keepSimulationMulligan"
+                >
+                  Keep
+                </button>
+                <button
+                  id="simulation-mulligan-take"
+                  type="button"
+                  class="btn btn-sm"
+                  :disabled="!canSimulationMulligan(simulationMulliganPendingPlayer)"
+                  @click="takeSimulationMulligan"
+                >
+                  Mulligan
+                </button>
+              </div>
             </div>
 
             <div
@@ -1114,7 +1169,7 @@
                 </div>
 
                 <div
-                  v-if="activeSimulationStep"
+                  v-if="activeSimulationStep && !isSimulationMulliganPending"
                   class="simulation-phase-bar"
                   :class="{ 'simulation-phase-bar-compact': simulationPlayerLanes.length === 1 }"
                 >
@@ -2188,6 +2243,8 @@ function createDefaultConfig() {
         simulationPlayerDeckIds: ["current", "", "", "", "", ""],
         simulationPlayerCount: 2,
         simulationPlayerRoles: ["human", "ai", "ai", "ai", "ai", "ai"],
+        simulationMulliganEnabled: true,
+        simulationFreeMulligans: 0,
         simulationShowOpponentHands: false,
         simulationSeed: 1,
         simulationSpeed: "normal",
@@ -2270,6 +2327,9 @@ export default {
             expandedSimulationZones: {},
             simulationActionMenu: null,
             simulationLifeTotals: {},
+            simulationMulliganCounts: {},
+            simulationMulliganFlowActive: false,
+            simulationMulliganKept: {},
             simulationPendingAction: null,
             simulationResolvedActions: [],
             cardPreview: {
@@ -2344,6 +2404,9 @@ export default {
             immediate: true,
             handler(value) {
                 document.body?.classList.toggle('play-board-active', value);
+                if (!value) {
+                    this.resetSimulationMulliganState();
+                }
             },
         },
     },
@@ -2381,6 +2444,23 @@ export default {
         },
         isPlaySetupVisible() {
             return this.workspaceResource === 'play' && !this.config.simulationGameStarted;
+        },
+        simulationMulliganPendingPlayer() {
+            if (
+                !this.isActivePlayBoard ||
+                !this.config.simulationMulliganEnabled ||
+                !this.simulationMulliganFlowActive ||
+                !this.gameSimulation
+            ) {
+                return null;
+            }
+
+            return this.gameSimulation.playerList.find(player => {
+                return player.role === 'human' && !this.simulationMulliganKept[player.key];
+            }) ?? null;
+        },
+        isSimulationMulliganPending() {
+            return Boolean(this.simulationMulliganPendingPlayer);
         },
         showSimulationBoardLogs() {
             return false;
@@ -2696,6 +2776,12 @@ export default {
                     playerDecks: playerDeckSelections.map(selection => selection.cards),
                     playerCount: this.config.simulationPlayerCount,
                     playerRoles: this.config.simulationPlayerRoles,
+                    freeMulligans: this.config.simulationMulliganEnabled
+                        ? this.config.simulationFreeMulligans
+                        : 0,
+                    mulliganCounts: this.config.simulationMulliganEnabled
+                        ? this.simulationMulliganCounts
+                        : {},
                     seed: this.config.simulationSeed,
                     turnCount: this.config.simulationTurnCount,
                 },
@@ -2845,12 +2931,86 @@ export default {
             this.config.simulationGameStarted = true;
             this.config.simulationStepIndex = 0;
             this.resetSimulationRuntime();
+            this.resetSimulationMulliganState();
+            if (this.config.simulationMulliganEnabled) {
+                this.simulationMulliganFlowActive = true;
+                this.markSimulationAiMulligansKept();
+                if (this.isSimulationMulliganPending) {
+                    return;
+                }
+            }
+            this.startSimulationAtFirstInteractiveStep();
             this.resolveSimulationAiSteps();
         },
         returnToSimulationSetup() {
             this.config.simulationGameStarted = false;
             this.simulationActionMenu = null;
+            this.resetSimulationMulliganState();
             this.simulationPendingAction = null;
+        },
+        resetSimulationMulliganState() {
+            this.simulationMulliganCounts = {};
+            this.simulationMulliganFlowActive = false;
+            this.simulationMulliganKept = {};
+        },
+        markSimulationAiMulligansKept() {
+            const kept = {};
+            for (const player of this.gameSimulation?.playerList ?? []) {
+                if (player.role === 'ai') {
+                    kept[player.key] = true;
+                }
+            }
+            this.simulationMulliganKept = kept;
+        },
+        startSimulationAtFirstInteractiveStep() {
+            this.config.simulationStepIndex = findNextInteractiveStepIndex(
+                this.gameSimulation?.phaseSteps ?? [],
+                -1,
+                this.simulationResolvedActions,
+            );
+        },
+        simulationMulliganCount(player) {
+            return Math.max(0, Number(this.simulationMulliganCounts[player?.key] ?? 0) || 0);
+        },
+        simulationFreeMulliganCount() {
+            const count = Number(this.config.simulationFreeMulligans ?? 0);
+            return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+        },
+        simulationMulliganBottomCount(player) {
+            return Math.max(0, this.simulationMulliganCount(player) - this.simulationFreeMulliganCount());
+        },
+        canSimulationMulligan(player) {
+            return this.simulationMulliganBottomCount(player) < 7;
+        },
+        takeSimulationMulligan() {
+            const player = this.simulationMulliganPendingPlayer;
+            if (!player || !this.canSimulationMulligan(player)) {
+                return;
+            }
+
+            this.simulationMulliganCounts = {
+                ...this.simulationMulliganCounts,
+                [player.key]: this.simulationMulliganCount(player) + 1,
+            };
+            this.config.simulationStepIndex = 0;
+        },
+        keepSimulationMulligan() {
+            const player = this.simulationMulliganPendingPlayer;
+            if (!player) {
+                return;
+            }
+
+            this.simulationMulliganKept = {
+                ...this.simulationMulliganKept,
+                [player.key]: true,
+            };
+            this.$nextTick(() => {
+                if (!this.isSimulationMulliganPending) {
+                    this.simulationMulliganFlowActive = false;
+                    this.startSimulationAtFirstInteractiveStep();
+                    this.resolveSimulationAiSteps();
+                }
+            });
         },
         cloneForStorage(value) {
             return JSON.parse(JSON.stringify(value));
@@ -3016,6 +3176,7 @@ export default {
             this.config.simulationGameStarted = false;
             this.config.simulationStepIndex = 0;
             this.resetSimulationRuntime();
+            this.resetSimulationMulliganState();
         },
         simulationDeckSelectionForPlayer(index) {
             const deckId = this.simulationPlayerDeckId(index);
@@ -3131,6 +3292,19 @@ export default {
             this.config.simulationSeed = Number.isFinite(currentSeed) ? currentSeed + 1 : 1;
             this.config.simulationStepIndex = 0;
             this.resetSimulationRuntime();
+            this.resetSimulationMulliganState();
+            if (this.config.simulationGameStarted && this.config.simulationMulliganEnabled) {
+                this.simulationMulliganFlowActive = true;
+                this.markSimulationAiMulligansKept();
+                if (!this.isSimulationMulliganPending) {
+                    this.simulationMulliganFlowActive = false;
+                    this.startSimulationAtFirstInteractiveStep();
+                    this.resolveSimulationAiSteps();
+                }
+            } else if (this.config.simulationGameStarted) {
+                this.startSimulationAtFirstInteractiveStep();
+                this.resolveSimulationAiSteps();
+            }
             this.recordSimulationHistory();
         },
         advanceSimulationStep() {
@@ -4804,6 +4978,11 @@ export default {
             });
             this.config.simulationPlayerRoles = createDefaultConfig().simulationPlayerRoles;
             this.config.simulationPlayerDeckIds = createDefaultConfig().simulationPlayerDeckIds;
+            this.config.simulationMulliganEnabled = bindStorage('simulationMulliganEnabled', (v) => v !== "false");
+            this.config.simulationFreeMulligans = bindStorage('simulationFreeMulligans', (v) => {
+                const count = Number(v);
+                return Number.isFinite(count) && count >= 0 ? Math.floor(count) : 0;
+            });
             this.config.simulationShowOpponentHands = bindStorage('simulationShowOpponentHands', (v) => v === "true");
             this.config.simulationSeed = bindStorage('simulationSeed', (v) => {
                 const seed = Number(v);
@@ -5382,15 +5561,21 @@ export default {
     background: #f8f9fa;
     border: 1px solid #dadee4;
     border-radius: 4px;
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.35rem;
-    grid-template-columns: minmax(10rem, 1fr) repeat(5, minmax(4.1rem, 5.6rem)) minmax(6.8rem, auto) auto;
     padding: 0.4rem;
 }
 
 .simulation-control {
+    flex: 1 1 6.2rem;
     font-size: 0.68rem;
     margin: 0;
+    min-width: 5.2rem;
+}
+
+.simulation-toolbar .simulation-control:first-child {
+    flex-basis: 11rem;
 }
 
 .simulation-toolbar .form-select,
@@ -5413,14 +5598,17 @@ export default {
 }
 
 .simulation-switch {
+    flex: 0 0 auto;
     font-size: 0.68rem;
     margin-bottom: 0.25rem;
+    min-width: 5.8rem;
+    white-space: nowrap;
 }
 
 .simulation-player-settings {
     display: grid;
+    flex: 1 0 100%;
     gap: 0.25rem;
-    grid-column: 1 / -1;
     grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
 }
 
@@ -5493,6 +5681,39 @@ export default {
     font-size: 0.72rem;
     font-weight: 800;
     padding: 0.35rem 0.5rem;
+}
+
+.simulation-mulligan-panel {
+    background: #fff;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    box-shadow: 0 1rem 2.5rem rgb(16 24 40 / 24%);
+    display: grid;
+    gap: 0.35rem;
+    left: 50%;
+    min-width: 13rem;
+    padding: 0.55rem;
+    position: fixed;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2200;
+}
+
+.simulation-mulligan-title {
+    color: #101828;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.simulation-mulligan-detail {
+    color: #475467;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.simulation-mulligan-actions {
+    display: flex;
+    gap: 0.35rem;
 }
 
 .simulation-action-menu {
