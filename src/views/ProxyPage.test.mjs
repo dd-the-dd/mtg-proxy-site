@@ -161,6 +161,59 @@ describe('Core Rendering', async () => {
         await wrapper.vm.$nextTick();
     });
 
+    test('Feature: Card Analysis shows parser output and game-engine support per card.', async () => {
+        const component = wrapper.getCurrentComponent();
+        component.data.config.activeWorkspaceTab = 'card-analysis';
+        component.data.config.analysisMode = false;
+        component.data.config.simulationGameStarted = false;
+        component.data.cards = [
+            {
+                quantity: 1,
+                name: 'tablet of discovery',
+                selectedOption: {
+                    oracleText: 'When this artifact enters, mill a card.\nAt the beginning of your upkeep, scry 1.',
+                    typeLine: 'Artifact',
+                    urlFront: 'tablet-front',
+                },
+                setOptions: [],
+            },
+            {
+                quantity: 1,
+                name: 'patient cleric',
+                selectedOption: {
+                    oracleText: 'Whenever you gain life, create a Treasure token.',
+                    typeLine: 'Creature - Cleric',
+                    urlFront: 'cleric-front',
+                },
+                setOptions: [],
+            },
+            {
+                quantity: 1,
+                name: 'tap spell',
+                selectedOption: {
+                    oracleText: 'Tap target creature.',
+                    typeLine: 'Instant',
+                    urlFront: 'tap-front',
+                },
+                setOptions: [],
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('#card-analysis-parser-inspector').exists()).toBe(true);
+        expect(wrapper.findAll('.card-parser-card')).toHaveLength(3);
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('tablet of discovery');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('millCards');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Engine-ready');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Stack only');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Unsupported clause');
+
+        component.data.cards = [];
+        component.data.config.activeWorkspaceTab = 'deck';
+        await wrapper.vm.$nextTick();
+    });
+
     test('Feature: Play resource opens persisted simulation sessions on setup before showing the board.', async () => {
         const component = wrapper.getCurrentComponent();
 

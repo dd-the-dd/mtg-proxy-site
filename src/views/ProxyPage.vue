@@ -1972,17 +1972,165 @@
         <div
           v-else-if="workspaceResource === 'card-analysis'"
           id="card-analysis-main"
-          class="resource-empty"
+          class="card-analysis-workspace"
         >
-          <div class="empty-icon">
-            <i class="icon icon-search" />
+          <div class="card-analysis-workspace-header">
+            <div>
+              <p class="empty-title h5">
+                Card Analysis
+              </p>
+              <p class="empty-subtitle">
+                Inspect parser coverage, rule hooks, and game-engine support for the current deck.
+              </p>
+            </div>
+            <div class="card-analysis-summary">
+              {{ cardParserReports.length }} cards
+            </div>
           </div>
-          <p class="empty-title h5">
-            Card Analysis
-          </p>
-          <p class="empty-subtitle">
-            Search a card to inspect its Oracle parser coverage, actions, and reusable card relationships.
-          </p>
+          <div
+            v-if="cardParserReports.length"
+            id="card-analysis-parser-inspector"
+            class="card-parser-inspector"
+          >
+            <article
+              v-for="report in cardParserReports"
+              :key="`card-parser-${report.key}`"
+              class="card-parser-card"
+            >
+              <div class="card-parser-image-wrap">
+                <ImageLoader
+                  class="card-parser-image"
+                  :src="report.imageUrl"
+                  placeholder="./card_back_border_crop.jpg"
+                  :alt="report.name"
+                  @mouseenter="scheduleCardPreview(report.card)"
+                  @mouseleave="hideCardPreview"
+                />
+              </div>
+              <div class="card-parser-content">
+                <div class="card-parser-heading">
+                  <div>
+                    <div class="card-parser-name">
+                      {{ report.name }}
+                    </div>
+                    <div class="card-parser-type">
+                      {{ report.typeLine || 'Unknown type' }}
+                    </div>
+                  </div>
+                  <span class="card-parser-quantity">{{ report.quantity }}x</span>
+                </div>
+                <div class="card-parser-status-row">
+                  <span
+                    class="card-parser-status"
+                    :class="`card-parser-status-${report.coverageStatus}`"
+                  >
+                    {{ report.coverageLabel }}
+                  </span>
+                  <span
+                    class="card-parser-status"
+                    :class="`card-parser-status-${report.engineStatus}`"
+                  >
+                    {{ report.engineLabel }}
+                  </span>
+                </div>
+                <div
+                  v-if="report.oracleText"
+                  class="card-parser-oracle"
+                >
+                  {{ report.oracleText }}
+                </div>
+                <div class="card-parser-panels">
+                  <section class="card-parser-panel">
+                    <div class="card-parser-panel-title">
+                      Oracle actions
+                    </div>
+                    <div
+                      v-if="report.oracleActions.length"
+                      class="card-parser-mini-list"
+                    >
+                      <div
+                        v-for="(action, actionIndex) in report.oracleActions"
+                        :key="`oracle-action-${report.key}-${actionIndex}`"
+                        class="card-parser-mini-row"
+                      >
+                        <span>{{ oracleActionLabel(action) }}</span>
+                        <code>{{ compactJson(action.targets ?? []) }}</code>
+                      </div>
+                    </div>
+                    <div
+                      v-if="report.oracleErrors.length"
+                      class="card-parser-mini-list"
+                    >
+                      <div
+                        v-for="(error, errorIndex) in report.oracleErrors"
+                        :key="`oracle-error-${report.key}-${errorIndex}`"
+                        class="card-parser-mini-row card-parser-mini-row-warning"
+                      >
+                        <span>Unsupported clause</span>
+                        <code>{{ error.clause }}</code>
+                      </div>
+                    </div>
+                    <div
+                      v-if="!report.oracleActions.length && !report.oracleErrors.length"
+                      class="card-parser-empty"
+                    >
+                      No Oracle text to parse.
+                    </div>
+                  </section>
+                  <section class="card-parser-panel">
+                    <div class="card-parser-panel-title">
+                      Rule hooks
+                    </div>
+                    <div
+                      v-if="report.hooks.length"
+                      class="card-parser-hook-list"
+                    >
+                      <div
+                        v-for="hook in report.hooks"
+                        :key="hook.id"
+                        class="card-parser-hook"
+                      >
+                        <div class="card-parser-hook-main">
+                          <span
+                            class="card-parser-status"
+                            :class="`card-parser-status-${hook.support.status}`"
+                          >
+                            {{ hook.support.label }}
+                          </span>
+                          <span>{{ hook.event }}</span>
+                          <span>{{ hook.condition?.name }}</span>
+                          <span>{{ hook.action?.name }}</span>
+                        </div>
+                        <div class="card-parser-hook-detail">
+                          {{ hook.support.detail }}
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      v-else
+                      class="card-parser-empty"
+                    >
+                      No rule-trigger hook parsed.
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </article>
+          </div>
+          <div
+            v-else
+            class="resource-empty"
+          >
+            <div class="empty-icon">
+              <i class="icon icon-search" />
+            </div>
+            <p class="empty-title h5">
+              Card Analysis
+            </p>
+            <p class="empty-subtitle">
+              Add cards to the deck to inspect parser coverage and game-engine support.
+            </p>
+          </div>
         </div>
 
         <div
@@ -2203,8 +2351,11 @@ import {
     annotateSimulationPlayerActions,
     buildGameSimulation,
     buildPlayerDecisionOptions,
-    findNextInteractiveStepIndex
+    findNextInteractiveStepIndex,
+    parseRuleHooksFromCard,
+    ruleEventTypes
 } from "../helpers/GameSimulator.mjs";
+import { parseOracleDocument } from "../helpers/OracleParser.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
 import { bindStorage } from "../helpers/VueLocalStorage.mjs";
 import ImageLoader from "../components/ImageLoader.vue";
@@ -2266,6 +2417,24 @@ const analysisCategories = [
 ];
 
 const cardPreviewDelayMs = 700;
+const engineConditionNames = new Set([
+    'permanentEnteredMatches',
+    'permanentMovedZones',
+    'phaseBeginsForController',
+    'playerLifeChanged',
+    'sourceEnteredBattlefield',
+    'spellCastMatches',
+]);
+const engineReadyActionNames = new Set([
+    'drawCards',
+    'millCards',
+    'scry',
+]);
+const stackOnlyActionNames = new Set([
+    'createToken',
+    'gainLife',
+    'modifyPermanent',
+]);
 
 function createDefaultConfig() {
     return {
@@ -2587,6 +2756,11 @@ export default {
                     description: 'Rules that cards can rewrite, such as lands per turn, draw loss, or game-loss conditions.',
                 },
             ];
+        },
+        cardParserReports() {
+            return this.cards
+                .filter(card => this.shouldShowCard(card))
+                .map(card => this.buildCardParserReport(card));
         },
         metaDeckSessionOptions() {
             const sessionsById = new Map();
@@ -3265,6 +3439,165 @@ export default {
             }
 
             return card.__runtimeId;
+        },
+        selectedCardData(card) {
+            return card?.selectedOption ?? card ?? {};
+        },
+        cardParserCoverage(result, oracleText) {
+            if (!oracleText) {
+                return {
+                    label: 'No oracle text',
+                    status: 'empty',
+                };
+            }
+
+            if (result.errors.length === 0) {
+                return {
+                    label: 'Full parser coverage',
+                    status: 'ready',
+                };
+            }
+
+            if (result.actions.length > 0) {
+                return {
+                    label: 'Partial parser coverage',
+                    status: 'partial',
+                };
+            }
+
+            return {
+                label: 'Parser gaps',
+                status: 'unsupported',
+            };
+        },
+        gameEngineSupportForHook(hook) {
+            const eventSupported = ruleEventTypes.includes(hook.event);
+            const conditionSupported = engineConditionNames.has(hook.condition?.name);
+            const actionName = hook.action?.name;
+            if (actionName === 'unsupportedAction') {
+                return {
+                    detail: hook.action?.params?.text
+                        ? `Parser did not understand action text: ${hook.action.params.text}`
+                        : 'Parser did not understand this action.',
+                    label: 'Unsupported action',
+                    status: 'unsupported',
+                };
+            }
+
+            if (!eventSupported || !conditionSupported) {
+                return {
+                    detail: 'The parser found a hook, but the event or condition is not evaluated by the game engine yet.',
+                    label: 'Parser-only',
+                    status: 'partial',
+                };
+            }
+
+            if (engineReadyActionNames.has(actionName)) {
+                return {
+                    detail: 'The event and condition are tracked, and this action has a matching simulation resolver.',
+                    label: 'Engine-ready',
+                    status: 'ready',
+                };
+            }
+
+            if (stackOnlyActionNames.has(actionName)) {
+                return {
+                    detail: 'The trigger can be put on the stack, but the effect is not automatically applied yet.',
+                    label: 'Stack only',
+                    status: 'stack',
+                };
+            }
+
+            return {
+                detail: 'The trigger can be detected, but this action has no resolver yet.',
+                label: 'Action pending',
+                status: 'partial',
+            };
+        },
+        gameEngineStatusForHooks(hooks = []) {
+            if (hooks.length === 0) {
+                return {
+                    label: 'No hooks parsed',
+                    status: 'empty',
+                };
+            }
+
+            if (hooks.some(hook => hook.support.status === 'unsupported')) {
+                return {
+                    label: 'Unsupported action',
+                    status: 'unsupported',
+                };
+            }
+
+            if (hooks.every(hook => hook.support.status === 'ready')) {
+                return {
+                    label: 'Engine-ready',
+                    status: 'ready',
+                };
+            }
+
+            if (hooks.some(hook => hook.support.status === 'stack')) {
+                return {
+                    label: 'Stack only',
+                    status: 'stack',
+                };
+            }
+
+            return {
+                label: 'Parser-only',
+                status: 'partial',
+            };
+        },
+        buildCardParserReport(card) {
+            const selectedData = this.selectedCardData(card);
+            const oracleText = selectedData.oracleText ?? card.oracleText ?? '';
+            const oracleResult = parseOracleDocument(oracleText, {
+                cardName: card.name,
+            });
+            const coverage = this.cardParserCoverage(oracleResult, oracleText);
+            const hooks = parseRuleHooksFromCard(card, {
+                controllerKey: 'you',
+                sourceZone: 'card-analysis',
+            }).map(hook => {
+                const support = this.gameEngineSupportForHook(hook);
+                return {
+                    ...hook,
+                    support,
+                };
+            });
+            const engineStatus = this.gameEngineStatusForHooks(hooks);
+
+            return {
+                card,
+                coverageLabel: coverage.label,
+                coverageStatus: coverage.status,
+                engineLabel: engineStatus.label,
+                engineStatus: engineStatus.status,
+                hooks,
+                imageUrl: selectedData.urlFront ?? selectedData.imageUrl ?? './card_back_border_crop.jpg',
+                key: this.cardRuntimeKey(card),
+                name: card.name ?? selectedData.name ?? 'unknown card',
+                oracleActions: oracleResult.actions,
+                oracleErrors: oracleResult.errors,
+                oracleText,
+                quantity: card.quantity ?? 1,
+                typeLine: selectedData.typeLine ?? card.typeLine ?? '',
+            };
+        },
+        oracleActionLabel(action) {
+            if (action.type === 'damage') {
+                const amount = action.amount?.kind === 'number'
+                    ? action.amount.value
+                    : action.amount?.raw ?? '?';
+                return `Damage ${amount}`;
+            }
+
+            return action.type ?? 'Oracle action';
+        },
+        compactJson(value) {
+            return JSON.stringify(value)
+                .replace(/\s+/g, ' ')
+                .slice(0, 180);
         },
         setCardFlag(flagName, card, value) {
             const key = this.cardRuntimeKey(card);
@@ -5848,6 +6181,252 @@ export default {
     font-size: 0.62rem;
     line-height: 1.25;
     margin-top: 0.14rem;
+}
+
+.card-analysis-workspace {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.card-analysis-workspace-header {
+    align-items: end;
+    border-bottom: 1px solid #dadee4;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding-bottom: 0.55rem;
+
+    .empty-title,
+    .empty-subtitle {
+        margin: 0;
+        text-align: left;
+    }
+}
+
+.card-analysis-summary {
+    color: #667085;
+    font-size: 0.72rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.card-parser-inspector {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+.card-parser-card {
+    background: #fff;
+    border: 1px solid #dadee4;
+    border-radius: 6px;
+    display: grid;
+    gap: 0.7rem;
+    grid-template-columns: clamp(7.4rem, 16vw, 11rem) minmax(0, 1fr);
+    min-width: 0;
+    padding: 0.7rem;
+}
+
+.card-parser-image-wrap {
+    align-self: start;
+}
+
+.card-parser-image {
+    aspect-ratio: 0.716;
+    border-radius: 4px;
+    box-shadow: 0 0.35rem 0.9rem rgb(16 24 40 / 13%);
+    object-fit: cover;
+    width: 100%;
+}
+
+.card-parser-content {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.card-parser-heading {
+    align-items: start;
+    display: flex;
+    gap: 0.65rem;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.card-parser-name {
+    color: #101828;
+    font-size: 0.98rem;
+    font-weight: 900;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+    text-transform: capitalize;
+}
+
+.card-parser-type {
+    color: #667085;
+    font-size: 0.68rem;
+    font-weight: 700;
+    margin-top: 0.12rem;
+}
+
+.card-parser-quantity {
+    background: #f2f4f7;
+    border: 1px solid #dadee4;
+    border-radius: 999px;
+    color: #303742;
+    font-size: 0.66rem;
+    font-weight: 900;
+    line-height: 1;
+    padding: 0.23rem 0.42rem;
+}
+
+.card-parser-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.card-parser-status {
+    border: 1px solid #dadee4;
+    border-radius: 999px;
+    color: #344054;
+    font-size: 0.62rem;
+    font-weight: 900;
+    line-height: 1;
+    padding: 0.23rem 0.42rem;
+}
+
+.card-parser-status-ready {
+    background: #ecfdf3;
+    border-color: #abefc6;
+    color: #067647;
+}
+
+.card-parser-status-stack {
+    background: #eef4ff;
+    border-color: #c7d7fe;
+    color: #3538cd;
+}
+
+.card-parser-status-partial {
+    background: #fffaeb;
+    border-color: #fedf89;
+    color: #b54708;
+}
+
+.card-parser-status-unsupported {
+    background: #fef3f2;
+    border-color: #fecdca;
+    color: #b42318;
+}
+
+.card-parser-status-empty {
+    background: #f8f9fa;
+    border-color: #dadee4;
+    color: #667085;
+}
+
+.card-parser-oracle {
+    background: #f8f9fa;
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    color: #303742;
+    font-size: 0.7rem;
+    line-height: 1.32;
+    max-height: 5.8rem;
+    overflow: auto;
+    padding: 0.42rem 0.5rem;
+    white-space: pre-wrap;
+}
+
+.card-parser-panels {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.card-parser-panel {
+    background: #fcfcfd;
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.4rem;
+    min-width: 0;
+    padding: 0.48rem;
+}
+
+.card-parser-panel-title {
+    color: #101828;
+    font-size: 0.68rem;
+    font-weight: 900;
+}
+
+.card-parser-mini-list,
+.card-parser-hook-list {
+    display: grid;
+    gap: 0.32rem;
+}
+
+.card-parser-mini-row,
+.card-parser-hook {
+    background: #fff;
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    color: #303742;
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+    padding: 0.36rem 0.42rem;
+}
+
+.card-parser-mini-row-warning {
+    border-color: #fecdca;
+}
+
+.card-parser-mini-row code {
+    color: #667085;
+    font-size: 0.62rem;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.card-parser-hook-main {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+    min-width: 0;
+
+    span:not(.card-parser-status) {
+        background: #f2f4f7;
+        border-radius: 3px;
+        color: #344054;
+        font-size: 0.62rem;
+        font-weight: 800;
+        line-height: 1;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        padding: 0.2rem 0.3rem;
+    }
+}
+
+.card-parser-hook-detail,
+.card-parser-empty {
+    color: #667085;
+    font-size: 0.64rem;
+    line-height: 1.25;
+}
+
+@media (max-width: 760px) {
+    .card-parser-card,
+    .card-parser-panels {
+        grid-template-columns: 1fr;
+    }
+
+    .card-parser-image-wrap {
+        max-width: 10rem;
+    }
 }
 
 .game-simulation {
