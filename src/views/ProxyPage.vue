@@ -670,29 +670,6 @@
               class="play-setup-panel"
             >
               <div class="simulation-toolbar">
-                <label class="form-label simulation-control">
-                  Matchup
-                  <select
-                    id="simulation-matchup"
-                    class="form-select select"
-                    v-model="effectiveSimulationMatchupSessionId"
-                    :disabled="simulationMetaDeckOptions.length === 0"
-                  >
-                    <option
-                      v-if="simulationMetaDeckOptions.length === 0"
-                      value=""
-                    >
-                      No meta deck
-                    </option>
-                    <option
-                      v-for="session in simulationMetaDeckOptions"
-                      :key="session.id"
-                      :value="session.id"
-                    >
-                      {{ session.name }}
-                    </option>
-                  </select>
-                </label>
                 <label class="form-label simulation-control simulation-control-compact">
                   Seed
                   <input
@@ -702,20 +679,6 @@
                     min="1"
                     v-model.number="config.simulationSeed"
                   >
-                </label>
-                <label class="form-label simulation-control simulation-control-compact">
-                  Turns
-                  <select
-                    id="simulation-turn-count"
-                    class="form-select select"
-                    v-model.number="config.simulationTurnCount"
-                  >
-                    <option :value="1">1</option>
-                    <option :value="2">2</option>
-                    <option :value="3">3</option>
-                    <option :value="4">4</option>
-                    <option :value="5">5</option>
-                  </select>
                 </label>
                 <label class="form-label simulation-control simulation-control-compact">
                   Players
@@ -800,20 +763,27 @@
                     :key="`simulation-player-role-${index}`"
                     class="form-label simulation-player-role-label"
                   >
-                    P{{ index + 1 }}
+                    <span class="simulation-player-index">
+                      P{{ index + 1 }}
+                    </span>
+                    <span
+                      v-if="index === 0"
+                      class="simulation-player-deck-source"
+                    >
+                      You / Loaded deck
+                    </span>
                     <select
+                      v-else
                       class="form-select select simulation-player-deck"
                       :value="simulationPlayerDeckId(index)"
                       @change="setSimulationPlayerDeckId(index, $event.target.value)"
                     >
                       <option
-                        v-if="index > 0"
+                        v-if="simulationMetaDeckOptions.length === 0"
                         value=""
+                        disabled
                       >
-                        Matchup
-                      </option>
-                      <option value="current">
-                        Current deck
+                        No meta deck
                       </option>
                       <option
                         v-for="session in simulationMetaDeckOptions"
@@ -880,7 +850,7 @@
               class="empty simulation-empty"
             >
               <p class="empty-title h5">
-                Load a deck or choose player decks to run a matchup simulation.
+                Load a deck and choose player decks to start a game.
               </p>
             </div>
 
@@ -2239,7 +2209,6 @@ function createDefaultConfig() {
         analysisColumnMode: "metaDeck",
         analysisMatchupSessionId: "all",
         activeWorkspaceTab: "deck",
-        simulationMatchupSessionId: "",
         simulationPlayerDeckIds: ["current", "", "", "", "", ""],
         simulationPlayerCount: 2,
         simulationPlayerRoles: ["human", "ai", "ai", "ai", "ai", "ai"],
@@ -2713,42 +2682,6 @@ export default {
         simulationMetaDeckStates() {
             return this.metaDeckStates.filter(session => (session.state?.cards ?? []).length > 0);
         },
-        selectedSimulationMetaDeck() {
-            const selectedId = this.config.simulationMatchupSessionId;
-            if (selectedId) {
-                const loadedSelection = this.simulationMetaDeckStates.find(session => {
-                    return session.id === selectedId;
-                });
-                if (loadedSelection) {
-                    return loadedSelection;
-                }
-
-                const pendingSelection = this.simulationMetaDeckOptions.some(session => {
-                    return session.id === selectedId;
-                });
-                if (pendingSelection) {
-                    return null;
-                }
-            }
-
-            return this.simulationMetaDeckStates[0] ?? null;
-        },
-        effectiveSimulationMatchupSessionId: {
-            get() {
-                const selectedId = this.config.simulationMatchupSessionId;
-                if (selectedId && this.simulationMetaDeckOptions.some(session => session.id === selectedId)) {
-                    return selectedId;
-                }
-
-                return this.selectedSimulationMetaDeck?.id ?? "";
-            },
-            set(value) {
-                this.config.simulationMatchupSessionId = value;
-                this.config.simulationGameStarted = false;
-                this.config.simulationStepIndex = 0;
-                this.resetSimulationRuntime();
-            },
-        },
         simulationPlayerSlots() {
             const count = Math.max(2, Math.min(Number(this.config.simulationPlayerCount ?? 2), 6));
             return Array.from({ length: count }, (_, index) => index);
@@ -2771,7 +2704,7 @@ export default {
                 playerDeckSelections[0].cards,
                 playerDeckSelections[1]?.cards ?? [],
                 {
-                    opponentName: playerDeckSelections[1]?.name ?? this.selectedSimulationMetaDeck?.name ?? 'Meta deck',
+                    opponentName: playerDeckSelections[1]?.name ?? 'Player 2',
                     playerDeckNames: playerDeckSelections.map(selection => selection.name),
                     playerDecks: playerDeckSelections.map(selection => selection.cards),
                     playerCount: this.config.simulationPlayerCount,
@@ -3159,19 +3092,23 @@ export default {
             };
         },
         simulationPlayerDeckId(index) {
+            if (index === 0) {
+                return 'current';
+            }
+
             const selectedId = this.config.simulationPlayerDeckIds?.[index];
-            if (selectedId) {
+            if (selectedId && this.simulationMetaDeckOptions.some(session => session.id === selectedId)) {
                 return selectedId;
             }
 
-            return index === 0 ? 'current' : '';
+            return this.simulationMetaDeckOptions[0]?.id ?? '';
         },
         setSimulationPlayerDeckId(index, value) {
             const deckIds = [...(this.config.simulationPlayerDeckIds ?? [])];
             while (deckIds.length <= index) {
                 deckIds.push('');
             }
-            deckIds[index] = value;
+            deckIds[index] = index === 0 ? 'current' : value;
             this.config.simulationPlayerDeckIds = deckIds;
             this.config.simulationGameStarted = false;
             this.config.simulationStepIndex = 0;
@@ -3180,19 +3117,11 @@ export default {
         },
         simulationDeckSelectionForPlayer(index) {
             const deckId = this.simulationPlayerDeckId(index);
-            if (deckId === 'current') {
+            if (index === 0) {
                 return {
                     cards: this.cards,
                     id: 'current',
-                    name: index === 0 ? 'You' : 'Current deck',
-                };
-            }
-
-            if (deckId === '' && index > 0 && this.selectedSimulationMetaDeck) {
-                return {
-                    cards: this.selectedSimulationMetaDeck.state?.cards ?? [],
-                    id: this.selectedSimulationMetaDeck.id,
-                    name: this.selectedSimulationMetaDeck.name,
+                    name: 'You',
                 };
             }
 
@@ -3221,9 +3150,9 @@ export default {
             }
 
             return {
-                cards: this.cards,
-                id: 'current',
-                name: index === 0 ? 'You' : 'Current deck',
+                cards: [],
+                id: '',
+                name: `Player ${index + 1}`,
             };
         },
         visibleSimulationHandCards(player) {
@@ -4971,7 +4900,6 @@ export default {
             this.config.analysisColumnMode = bindStorage('analysisColumnMode', (v) => v ?? "metaDeck");
             this.config.analysisMatchupSessionId = bindStorage('analysisMatchupSessionId', (v) => v ?? "all");
             this.config.activeWorkspaceTab = bindStorage('activeWorkspaceTab', (v) => v ?? "cards");
-            this.config.simulationMatchupSessionId = bindStorage('simulationMatchupSessionId', (v) => v ?? "");
             this.config.simulationPlayerCount = bindStorage('simulationPlayerCount', (v) => {
                 const count = Number(v);
                 return Number.isFinite(count) && count >= 2 ? count : 2;
@@ -5574,10 +5502,6 @@ export default {
     min-width: 5.2rem;
 }
 
-.simulation-toolbar .simulation-control:first-child {
-    flex-basis: 11rem;
-}
-
 .simulation-toolbar .form-select,
 .simulation-toolbar .form-input {
     font-size: 0.68rem;
@@ -5617,8 +5541,28 @@ export default {
     display: grid;
     font-size: 0.66rem;
     gap: 0.22rem;
-    grid-template-columns: auto minmax(5.4rem, 1fr) minmax(4.2rem, 0.65fr);
+    grid-template-columns: 1.3rem minmax(7rem, 1fr) minmax(4.5rem, 0.6fr);
     margin: 0;
+}
+
+.simulation-player-index {
+    color: #3b4351;
+    font-weight: 600;
+}
+
+.simulation-player-deck-source {
+    background: #eef6ff;
+    border: 1px solid #c7def8;
+    border-radius: 4px;
+    color: #23496f;
+    min-height: 1.55rem;
+    padding: 0.22rem 0.35rem;
+}
+
+.simulation-player-role-label .simulation-player-deck,
+.simulation-player-role-label .simulation-player-role,
+.simulation-player-role-label .simulation-player-deck-source {
+    width: 100%;
 }
 
 .simulation-empty {

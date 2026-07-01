@@ -125,6 +125,14 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#play-resource-panel').exists()).toBe(true);
         expect(wrapper.find('#app-sidebar').exists()).toBe(false);
         expect(wrapper.find('#play-setup-panel').exists()).toBe(true);
+        expect(wrapper.find('#simulation-matchup').exists()).toBe(false);
+        expect(wrapper.find('#simulation-turn-count').exists()).toBe(false);
+        expect(wrapper.text()).not.toContain('Current deck');
+        expect(wrapper.text()).not.toContain('Matchup');
+        expect(wrapper.find('.simulation-player-deck-source').text()).toContain('You');
+        expect(wrapper.find('.simulation-player-deck-source').text()).toContain('Loaded deck');
+        expect(wrapper.findAll('.simulation-player-deck')).toHaveLength(1);
+        expect(wrapper.find('.simulation-player-deck').text()).toContain('Izzet Prowess');
         expect(wrapper.find('.simulation-board').exists()).toBe(false);
         expect(wrapper.find('#resource-nav').exists()).toBe(true);
 
@@ -148,7 +156,7 @@ describe('Core Rendering', async () => {
 
         component.data.config.activeWorkspaceTab = 'simulation';
         component.data.config.simulationGameStarted = false;
-        component.data.config.simulationMatchupSessionId = 'meta-one';
+        component.data.config.simulationPlayerDeckIds = ['current', 'meta-one'];
         component.data.cards = [
             {
                 quantity: 8,
@@ -179,6 +187,12 @@ describe('Core Rendering', async () => {
         await wrapper.vm.$nextTick();
 
         expect(wrapper.find('#play-setup-panel').exists()).toBe(true);
+        expect(wrapper.find('#simulation-matchup').exists()).toBe(false);
+        expect(wrapper.find('#simulation-turn-count').exists()).toBe(false);
+        expect(wrapper.find('.simulation-player-deck-source').text()).toContain('Loaded deck');
+        expect(wrapper.find('.simulation-player-deck').text()).toContain('Izzet Mirror');
+        expect(wrapper.find('.simulation-player-deck').text()).not.toContain('Matchup');
+        expect(wrapper.find('.simulation-player-deck').text()).not.toContain('Current deck');
         expect(wrapper.find('.simulation-board').exists()).toBe(false);
         expect(wrapper.find('.simulation-log-panel').exists()).toBe(false);
         expect(document.body.classList.contains('play-board-active')).toBe(false);
@@ -238,7 +252,7 @@ describe('Core Rendering', async () => {
                 },
             },
         ];
-        component.data.config.simulationMatchupSessionId = 'mulligan-meta';
+        component.data.config.simulationPlayerDeckIds = ['current', 'mulligan-meta'];
         await wrapper.vm.$nextTick();
 
         await wrapper.find('#start-simulation-game').trigger('click');
@@ -522,12 +536,11 @@ describe('Core Rendering', async () => {
 
         component.data.config.activeWorkspaceTab = 'simulation';
         component.data.config.simulationGameStarted = true;
-        component.data.config.simulationMatchupSessionId = 'izzet-meta';
         component.data.config.simulationSeed = 2;
         component.data.config.simulationTurnCount = 2;
         component.data.config.simulationPlayerCount = 4;
         component.data.config.simulationPlayerRoles = ['human', 'ai', 'human', 'ai'];
-        component.data.config.simulationPlayerDeckIds = ['current', 'izzet-meta', 'aggro-meta', 'current'];
+        component.data.config.simulationPlayerDeckIds = ['current', 'izzet-meta', 'aggro-meta', 'izzet-meta'];
         component.data.config.simulationShowOpponentHands = false;
         component.data.config.simulationSpeed = 'fast';
         component.data.config.simulationBoardZoom = 1.1;
@@ -632,13 +645,12 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#simulation-matchup').exists()).toBe(false);
         expect(wrapper.findAll('.simulation-player-role')).toHaveLength(0);
         expect(wrapper.find('#play-board-options').exists()).toBe(true);
-        expect(component.data.config.simulationMatchupSessionId).toBe('izzet-meta');
         expect(component.data.config.simulationPlayerCount).toBe(4);
         expect(component.data.config.simulationPlayerDeckIds).toEqual([
             'current',
             'izzet-meta',
             'aggro-meta',
-            'current',
+            'izzet-meta',
         ]);
         expect(component.data.config.simulationShowOpponentHands).toBe(false);
         expect(component.data.config.simulationSpeed).toBe('fast');
@@ -650,7 +662,7 @@ describe('Core Rendering', async () => {
             name: 'forest',
         }));
         expect(component.proxy.gameSimulation.playerList[3].zones.hand).toContainEqual(expect.objectContaining({
-            name: 'mountain',
+            name: 'island',
         }));
         expect(wrapper.findAll('.simulation-player-board')).toHaveLength(4);
         expect(wrapper.findAll('.simulation-player-lane')).toHaveLength(2);
@@ -706,7 +718,7 @@ describe('Core Rendering', async () => {
 
         component.data.config.activeWorkspaceTab = 'simulation';
         component.data.config.simulationGameStarted = true;
-        component.data.config.simulationMatchupSessionId = 'two-player-meta';
+        component.data.config.simulationPlayerDeckIds = ['current', 'two-player-meta'];
         component.data.config.simulationSeed = 1;
         component.data.config.simulationTurnCount = 1;
         component.data.config.simulationPlayerCount = 2;
@@ -799,7 +811,7 @@ describe('Core Rendering', async () => {
 
         component.data.config.activeWorkspaceTab = 'simulation';
         component.data.config.simulationGameStarted = true;
-        component.data.config.simulationMatchupSessionId = 'phase-meta';
+        component.data.config.simulationPlayerDeckIds = ['current', 'phase-meta'];
         component.data.config.simulationSeed = 1;
         component.data.config.simulationTurnCount = 1;
         component.data.config.simulationPlayerCount = 2;
@@ -873,7 +885,7 @@ describe('Core Rendering', async () => {
 
         component.data.config.activeWorkspaceTab = 'simulation';
         component.data.config.simulationGameStarted = true;
-        component.data.config.simulationMatchupSessionId = 'target-meta';
+        component.data.config.simulationPlayerDeckIds = ['current', 'target-meta'];
         component.data.config.simulationSeed = 1;
         component.data.config.simulationTurnCount = 1;
         component.data.config.simulationPlayerCount = 2;
@@ -1195,7 +1207,7 @@ describe('Core Rendering', async () => {
 
         component.data.config.activeWorkspaceTab = 'simulation';
         component.data.config.simulationGameStarted = true;
-        component.data.config.simulationMatchupSessionId = 'ai-meta';
+        component.data.config.simulationPlayerDeckIds = ['current', 'ai-meta'];
         component.data.config.simulationSeed = 1;
         component.data.config.simulationTurnCount = 1;
         component.data.config.simulationPlayerCount = 2;
