@@ -1169,6 +1169,67 @@ describe('Core Rendering', async () => {
         expect(nextStepPlayer.zones.battlefield.lands[0].state.tapped).toBe(true);
     });
 
+    test('Feature: Simulation draw actions move the top library card into hand.', () => {
+        const component = wrapper.getCurrentComponent();
+        const openingCard = {
+            id: 'mountain:0',
+            name: 'mountain',
+            typeLine: 'Basic Land - Mountain',
+        };
+        const topLibraryCard = {
+            id: 'opt:0',
+            manaCost: '{U}',
+            manaValue: 1,
+            name: 'opt',
+            typeLine: 'Instant',
+        };
+        const secondLibraryCard = {
+            id: 'island:0',
+            name: 'island',
+            typeLine: 'Basic Land - Island',
+        };
+        const player = {
+            key: 'you',
+            library: [openingCard, topLibraryCard, secondLibraryCard],
+            zones: {
+                battlefield: {
+                    creatures: [],
+                    lands: [],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, top: null },
+                graveyard: { cards: [], count: 0, top: null },
+                hand: [openingCard],
+                handCount: 1,
+                libraryCount: 2,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [openingCard],
+            },
+        };
+
+        component.ctx.applyResolvedSimulationAction([player], {
+            card: null,
+            option: {
+                kind: 'draw',
+                label: 'Draw',
+            },
+            playerKey: 'you',
+            stepIndex: 0,
+        });
+
+        expect(player.zones.libraryCount).toBe(1);
+        expect(player.zones.handCount).toBe(2);
+        expect(player.zones.hand).toContainEqual(expect.objectContaining({
+            name: 'opt',
+            quantity: 1,
+        }));
+        expect(player.zones.playableHand).toContainEqual(expect.objectContaining({
+            name: 'opt',
+            quantity: 1,
+        }));
+        expect(player.library).toEqual([openingCard, secondLibraryCard]);
+    });
+
     test('Feature: Simulation resolved actions update logs, life payments, and tapped land state.', async () => {
         const component = wrapper.getCurrentComponent();
         const shockLand = {

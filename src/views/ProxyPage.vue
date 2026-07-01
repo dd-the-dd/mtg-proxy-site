@@ -3343,7 +3343,8 @@ export default {
             const step = this.simulationStepForAction(action);
             const targetLabel = this.simulationTargetLabel(action.target);
             const targetText = targetLabel ? ` -> ${targetLabel}` : '';
-            return `T${step.turn} ${step.playerName ?? action.playerName} / ${this.phaseLabel(step.phase)} - ${action.option.label ?? action.option.kind}: ${action.card.name}${targetText}`;
+            const sourceName = action.card?.name ?? action.option.label ?? action.option.kind;
+            return `T${step.turn} ${step.playerName ?? action.playerName} / ${this.phaseLabel(step.phase)} - ${action.option.label ?? action.option.kind}: ${sourceName}${targetText}`;
         },
         recordSimulationHistory() {
             if (!this.gameSimulation) {
@@ -3947,6 +3948,24 @@ export default {
             }
             player.zones.manaPool = nextPool;
         },
+        drawSimulationTopLibraryCard(player) {
+            const libraryCount = Number(player.zones.libraryCount ?? 0);
+            if (!player.library || libraryCount <= 0) {
+                return null;
+            }
+
+            const topIndex = Math.max(0, player.library.length - libraryCount);
+            const [drawnCard] = player.library.splice(topIndex, 1);
+            if (!drawnCard) {
+                return null;
+            }
+
+            this.addSimulationCardGroup(player.zones.hand, drawnCard);
+            this.addSimulationCardGroup(player.zones.playableHand, drawnCard);
+            player.zones.handCount = (player.zones.handCount ?? 0) + 1;
+            player.zones.libraryCount = Math.max(0, libraryCount - 1);
+            return drawnCard;
+        },
         markSimulationCardGroupTapped(cards = [], sourceCard = {}) {
             const index = cards.findIndex(entry => {
                 return entry.name === sourceCard.name &&
@@ -4086,6 +4105,14 @@ export default {
 
             if (action.option.kind === 'attack') {
                 this.markSimulationCardGroupAttacking(player.zones.battlefield.creatures, action.card);
+                return;
+            }
+
+            if (action.option.kind === 'draw' || action.option.kind === 'drawCards') {
+                const amount = Math.max(1, Number(action.option.amount ?? action.option.params?.amount ?? 1) || 1);
+                for (let drawIndex = 0; drawIndex < amount; drawIndex += 1) {
+                    this.drawSimulationTopLibraryCard(player);
+                }
                 return;
             }
 
