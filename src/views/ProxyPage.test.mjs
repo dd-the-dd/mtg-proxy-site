@@ -143,6 +143,63 @@ describe('Core Rendering', async () => {
         await wrapper.vm.$nextTick();
     });
 
+    test('Feature: Play resource opens persisted simulation sessions on setup before showing the board.', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationGameStarted = false;
+        component.data.config.simulationMatchupSessionId = 'meta-one';
+        component.data.cards = [
+            {
+                quantity: 8,
+                name: 'mountain',
+                selectedOption: {
+                    typeLine: 'Basic Land - Mountain',
+                },
+            },
+        ];
+        component.data.metaDeckStates = [
+            {
+                id: 'meta-one',
+                name: 'Izzet Mirror',
+                state: {
+                    cards: [
+                        {
+                            quantity: 8,
+                            name: 'island',
+                            selectedOption: {
+                                typeLine: 'Basic Land - Island',
+                            },
+                        },
+                    ],
+                },
+            },
+        ];
+
+        await wrapper.vm.$nextTick();
+
+        expect(wrapper.find('#play-setup-panel').exists()).toBe(true);
+        expect(wrapper.find('.simulation-board').exists()).toBe(false);
+        expect(wrapper.find('.simulation-log-panel').exists()).toBe(false);
+        expect(document.body.classList.contains('play-board-active')).toBe(false);
+
+        await wrapper.find('#start-simulation-game').trigger('click');
+
+        expect(wrapper.find('#play-setup-panel').exists()).toBe(false);
+        expect(wrapper.find('.simulation-board').exists()).toBe(true);
+        expect(wrapper.find('#play-board-options').exists()).toBe(true);
+        expect(wrapper.find('.simulation-log-panel').exists()).toBe(false);
+        expect(document.body.classList.contains('play-board-active')).toBe(true);
+        expect(component.ctx.captureSessionState().config.simulationGameStarted).toBe(false);
+
+        component.data.config.activeWorkspaceTab = 'deck';
+        component.data.config.simulationGameStarted = false;
+        component.data.cards = [];
+        component.data.metaDeckStates = [];
+        await wrapper.vm.$nextTick();
+        expect(document.body.classList.contains('play-board-active')).toBe(false);
+    });
+
     test('Feature: Hovering a card image opens a fast center-left card preview.', async () => {
         const component = wrapper.getCurrentComponent();
         vi.useFakeTimers();
@@ -391,6 +448,7 @@ describe('Core Rendering', async () => {
         const component = wrapper.getCurrentComponent();
 
         component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationGameStarted = true;
         component.data.config.simulationMatchupSessionId = 'izzet-meta';
         component.data.config.simulationSeed = 2;
         component.data.config.simulationTurnCount = 2;
@@ -497,23 +555,21 @@ describe('Core Rendering', async () => {
         await wrapper.vm.$nextTick();
 
         expect(wrapper.find('#game-simulation-tab').exists()).toBe(true);
-        expect(wrapper.find('#simulation-matchup').element.value).toBe('izzet-meta');
-        expect(wrapper.find('#simulation-matchup').text()).toContain('Unloaded Meta');
-        expect(wrapper.find('#simulation-matchup').text()).not.toContain('Kitchen Table');
-        expect(wrapper.find('#simulation-player-count').element.value).toBe('4');
-        expect(wrapper.findAll('.simulation-player-role')).toHaveLength(4);
-        expect(wrapper.findAll('.simulation-player-deck')).toHaveLength(4);
-        expect(wrapper.findAll('.simulation-player-deck').map(select => select.element.value)).toEqual([
+        expect(wrapper.find('#play-setup-panel').exists()).toBe(false);
+        expect(wrapper.find('#simulation-matchup').exists()).toBe(false);
+        expect(wrapper.findAll('.simulation-player-role')).toHaveLength(0);
+        expect(wrapper.find('#play-board-options').exists()).toBe(true);
+        expect(component.data.config.simulationMatchupSessionId).toBe('izzet-meta');
+        expect(component.data.config.simulationPlayerCount).toBe(4);
+        expect(component.data.config.simulationPlayerDeckIds).toEqual([
             'current',
             'izzet-meta',
             'aggro-meta',
             'current',
         ]);
-        expect(wrapper.findAll('.simulation-player-deck')[0].text()).toContain('Unloaded Meta');
-        expect(wrapper.findAll('.simulation-player-deck')[0].text()).not.toContain('Kitchen Table');
-        expect(wrapper.find('#simulation-show-opponent-hands').element.checked).toBe(false);
-        expect(wrapper.find('#simulation-speed').element.value).toBe('fast');
-        expect(wrapper.find('#simulation-board-zoom').element.value).toBe('1.1');
+        expect(component.data.config.simulationShowOpponentHands).toBe(false);
+        expect(component.data.config.simulationSpeed).toBe('fast');
+        expect(component.data.config.simulationBoardZoom).toBe(1.1);
         expect(component.proxy.gameSimulation.playerList[1].zones.hand).toContainEqual(expect.objectContaining({
             name: 'island',
         }));
@@ -545,17 +601,24 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('.simulation-zone-drawer').exists()).toBe(false);
         await wrapper.find('.simulation-zone-stack-graveyard').trigger('click');
         expect(wrapper.find('.simulation-zone-drawer').exists()).toBe(true);
-        expect(wrapper.find('.simulation-log-panel').exists()).toBe(true);
+        expect(wrapper.find('.simulation-log-panel').exists()).toBe(false);
         expect(wrapper.text()).toContain('Izzet Mirror');
-        expect(wrapper.text()).toContain('mountain');
         expect(wrapper.text()).toContain('T1 You');
-        expect(wrapper.text()).toContain('Land plays 1');
-        expect(wrapper.text()).toContain('mana 0 now, 1 after land');
+        expect(component.proxy.gameSimulation.playerList[0].zones.hand).toContainEqual(expect.objectContaining({
+            name: 'mountain',
+        }));
+        const firstMainStep = component.proxy.gameSimulation.timeline.find(step => {
+            return step.playerName === 'You' && step.phase === 'main';
+        });
+        expect(firstMainStep.landPlaysAvailable).toBe(1);
+        expect(firstMainStep.availableMana).toBe(0);
+        expect(firstMainStep.manaAfterLandPlay).toBe(1);
 
         await wrapper.find('#simulation-reroll').trigger('click');
         expect(component.data.config.simulationSeed).toBe(3);
         expect(component.data.simulationHistory).toHaveLength(1);
-        expect(wrapper.find('.simulation-history-entry').text()).toContain('Izzet Mirror');
+        expect(wrapper.find('.simulation-history-entry').exists()).toBe(false);
+        expect(component.data.simulationHistory[0].matchupName).toBe('Izzet Mirror');
         expect(component.ctx.captureSessionState().simulationHistory).toHaveLength(1);
 
         component.data.config.activeWorkspaceTab = 'cards';
@@ -569,6 +632,7 @@ describe('Core Rendering', async () => {
         const component = wrapper.getCurrentComponent();
 
         component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationGameStarted = true;
         component.data.config.simulationMatchupSessionId = 'two-player-meta';
         component.data.config.simulationSeed = 1;
         component.data.config.simulationTurnCount = 1;
@@ -661,6 +725,7 @@ describe('Core Rendering', async () => {
         const component = wrapper.getCurrentComponent();
 
         component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationGameStarted = true;
         component.data.config.simulationMatchupSessionId = 'phase-meta';
         component.data.config.simulationSeed = 1;
         component.data.config.simulationTurnCount = 1;
@@ -734,6 +799,7 @@ describe('Core Rendering', async () => {
         const component = wrapper.getCurrentComponent();
 
         component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationGameStarted = true;
         component.data.config.simulationMatchupSessionId = 'target-meta';
         component.data.config.simulationSeed = 1;
         component.data.config.simulationTurnCount = 1;
@@ -1044,6 +1110,7 @@ describe('Core Rendering', async () => {
         const component = wrapper.getCurrentComponent();
 
         component.data.config.activeWorkspaceTab = 'simulation';
+        component.data.config.simulationGameStarted = true;
         component.data.config.simulationMatchupSessionId = 'ai-meta';
         component.data.config.simulationSeed = 1;
         component.data.config.simulationTurnCount = 1;

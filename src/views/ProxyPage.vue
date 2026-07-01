@@ -1,5 +1,8 @@
 <template>
-  <div class="section">
+  <div
+    class="section"
+    :class="{ 'section-play-board': isActivePlayBoard }"
+  >
     <HelpModal ref="helpModal" />
 
     <div
@@ -7,6 +10,7 @@
       :class="{
         'app-layout-sidebar-collapsed': leftMenuCollapsed && !isPlayResource,
         'app-layout-play': isPlayResource,
+        'app-layout-play-board': isActivePlayBoard,
       }"
     >
       <aside
@@ -598,7 +602,10 @@
         </div>
       </aside>
 
-      <main class="app-main">
+      <main
+        class="app-main"
+        :class="{ 'app-main-play-board': isActivePlayBoard }"
+      >
         <div
           class="empty"
           v-show="workspaceResource === 'deck' && cards.length === 0 && errors.length === 0"
@@ -814,7 +821,7 @@
             </div>
 
             <div
-              v-if="!gameSimulation"
+              v-if="isPlaySetupVisible && !gameSimulation"
               class="empty simulation-empty"
             >
               <p class="empty-title h5">
@@ -1140,7 +1147,10 @@
                 </div>
               </div>
 
-              <div class="simulation-log-panel">
+              <div
+                v-if="showSimulationBoardLogs"
+                class="simulation-log-panel"
+              >
                 <div class="simulation-section-title">
                   Logs
                 </div>
@@ -1198,7 +1208,10 @@
                 </div>
               </div>
 
-              <div class="simulation-history">
+              <div
+                v-if="showSimulationBoardLogs"
+                class="simulation-history"
+              >
                 <div class="simulation-section-title">
                   History
                 </div>
@@ -1905,7 +1918,11 @@
           </p>
         </div>
 
-        <ArnoldsApproval id="arnold" :cards="cards" />
+        <ArnoldsApproval
+          v-if="!isActivePlayBoard"
+          id="arnold"
+          :cards="cards"
+        />
       </main>
     </div>
 
@@ -2316,6 +2333,12 @@ export default {
         activeSessionIsMetaDeck() {
             this.scheduleSessionSave();
         },
+        isActivePlayBoard: {
+            immediate: true,
+            handler(value) {
+                document.body?.classList.toggle('play-board-active', value);
+            },
+        },
     },
     computed: {
         resourceNavItems() {
@@ -2347,16 +2370,13 @@ export default {
             return this.workspaceResource === 'play';
         },
         isActivePlayBoard() {
-            return this.workspaceResource === 'play' && (
-                this.config.simulationGameStarted ||
-                this.config.activeWorkspaceTab === 'simulation'
-            );
+            return this.workspaceResource === 'play' && this.config.simulationGameStarted;
         },
         isPlaySetupVisible() {
-            return this.workspaceResource === 'play' && (
-                !this.config.simulationGameStarted ||
-                this.config.activeWorkspaceTab === 'simulation'
-            );
+            return this.workspaceResource === 'play' && !this.config.simulationGameStarted;
+        },
+        showSimulationBoardLogs() {
+            return false;
         },
         isAnalysisResource() {
             return this.workspaceResource === 'analysis';
@@ -2797,6 +2817,7 @@ export default {
         clearTimeout(this.sessionSaveTimer);
         clearTimeout(this.analysisQueueTimer);
         this.hideCardPreview();
+        document.body?.classList.remove('play-board-active');
         window.removeEventListener('blur', this.hideCardPreview);
         window.removeEventListener('scroll', this.hideCardPreview, true);
         this.analysisClient?.terminate();
@@ -4151,9 +4172,11 @@ export default {
         captureSessionState() {
             const cards = this.cloneForStorage(this.cards);
             this.applyDeckTextQuantities(cards);
+            const config = this.cloneForStorage(this.config);
+            config.simulationGameStarted = false;
 
             return {
-                config: this.cloneForStorage(this.config),
+                config,
                 cards,
                 errors: this.cloneForStorage(this.errors),
                 sessionSetSelections: this.cloneForStorage(this.sessionSetSelections),
@@ -4177,6 +4200,7 @@ export default {
             for (const [key, value] of Object.entries(config)) {
                 this.config[key] = value;
             }
+            this.config.simulationGameStarted = false;
 
             this.cards = this.cloneForStorage(state?.cards ?? []);
             this.errors = this.cloneForStorage(state?.errors ?? []);
@@ -5089,6 +5113,25 @@ export default {
 
 .app-main {
     min-width: 0;
+}
+
+.section-play-board {
+    padding: 0.35rem;
+}
+
+.app-main-play-board {
+    min-height: 0;
+}
+
+.app-layout-play-board .game-simulation,
+.app-layout-play-board #game-simulation-tab,
+.app-layout-play-board .simulation-board {
+    min-height: 0;
+}
+
+.app-layout-play-board .simulation-play-surface-compact {
+    height: calc(100vh - 4.6rem);
+    max-height: calc(100vh - 4.6rem);
 }
 
 .loading-surface {
