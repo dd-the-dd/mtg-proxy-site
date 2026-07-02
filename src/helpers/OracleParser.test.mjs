@@ -4,7 +4,9 @@ import {
     OracleParseError,
     oracleTargetMatchesCard,
     parseOracleActions,
+    parseOracleConcepts,
     parseOracleDocument,
+    parseOracleTargets,
     parseOracleSegments
 } from './OracleParser.mjs';
 
@@ -291,5 +293,65 @@ describe('OracleParser', () => {
                 }),
             ],
         });
+    });
+
+    test('Feature: Oracle parser exposes high-level concepts before detailed mechanics.', () => {
+        const result = parseOracleDocument([
+            'This land enters tapped unless you control a Plains or an Island.',
+            'Choose one -- Abrade deals 3 damage to target creature.',
+        ].join('\n'), { cardName: 'Abrade' });
+
+        expect(result.segments[0].concepts).toEqual(expect.arrayContaining([
+            expect.objectContaining({ kind: 'hook', name: 'enterBattlefield' }),
+            expect.objectContaining({ kind: 'booleanLogic', name: 'unless' }),
+            expect.objectContaining({ kind: 'condition', name: 'youControlAny' }),
+            expect.objectContaining({ kind: 'action', name: 'modifyPermanent' }),
+        ]));
+        expect(result.segments[1].concepts).toEqual(expect.arrayContaining([
+            expect.objectContaining({ kind: 'choice', name: 'chooseOne' }),
+            expect.objectContaining({ kind: 'action', name: 'dealDamage' }),
+            expect.objectContaining({
+                kind: 'target',
+                selector: 'target',
+                candidates: [expect.objectContaining({ cardTypes: ['creature'] })],
+            }),
+        ]));
+    });
+
+    test('Feature: Oracle target concept detection resolves source-card self references by full name or prefix.', () => {
+        const fullNameTargets = parseOracleTargets('Slickshot Show-Off', { cardName: 'Slickshot Show-Off' });
+        const prefixTargets = parseOracleTargets('Slickshot', { cardName: 'Slickshot Show-Off' });
+        const concepts = parseOracleConcepts('Slickshot gets +2/+0 until end of turn.', {
+            cardName: 'Slickshot Show-Off',
+        });
+
+        expect(fullNameTargets[0]).toMatchObject({
+            selector: 'self',
+            candidates: [
+                expect.objectContaining({
+                    cardName: 'Slickshot Show-Off',
+                    reference: 'source',
+                }),
+            ],
+        });
+        expect(prefixTargets[0]).toMatchObject({
+            selector: 'self',
+            candidates: [
+                expect.objectContaining({
+                    matchedName: 'Slickshot',
+                    reference: 'source',
+                }),
+            ],
+        });
+        expect(concepts).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'target',
+                name: 'selfReference',
+            }),
+            expect.objectContaining({
+                kind: 'action',
+                name: 'modifyPermanent',
+            }),
+        ]));
     });
 });

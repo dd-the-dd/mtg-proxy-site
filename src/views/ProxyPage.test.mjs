@@ -254,6 +254,9 @@ describe('Core Rendering', async () => {
         expect(wrapper.findAll('.card-parser-segment-hook').length).toBeGreaterThan(0);
         expect(wrapper.findAll('.card-parser-segment-option').length).toBeGreaterThan(0);
         expect(wrapper.findAll('.card-parser-segment-unsupported').length).toBeGreaterThan(0);
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('hook: enterBattlefield');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('action: dealDamage');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('target: targetSpec');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Valid target required');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('If all targets are invalid on resolution, the spell fizzles');
         expect(wrapper.find('#card-analysis-rule-definitions').exists()).toBe(true);

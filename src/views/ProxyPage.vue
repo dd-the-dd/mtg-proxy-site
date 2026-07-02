@@ -2103,6 +2103,18 @@
                         {{ segment.text }}
                       </p>
                       <div
+                        v-if="segment.concepts.length"
+                        class="card-parser-concept-list"
+                      >
+                        <span
+                          v-for="concept in segment.concepts"
+                          :key="`${segment.id}-concept-${concept.kind}-${concept.name}-${concept.raw ?? concept.selector ?? ''}`"
+                          class="card-parser-concept-chip"
+                        >
+                          {{ concept.kind }}: {{ concept.name }}
+                        </span>
+                      </div>
+                      <div
                         v-if="segment.hookReports.length"
                         class="card-parser-segment-hooks"
                       >
@@ -7286,6 +7298,25 @@ export default {
     line-height: 1.35;
     margin: 0;
     overflow-wrap: anywhere;
+}
+
+.card-parser-concept-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.22rem;
+    min-width: 0;
+}
+
+.card-parser-concept-chip {
+    background: rgb(255 255 255 / 72%);
+    border: 1px solid #d0d5dd;
+    border-radius: 999px;
+    color: #475467;
+    font-size: 0.58rem;
+    font-weight: 850;
+    line-height: 1;
+    overflow-wrap: anywhere;
+    padding: 0.22rem 0.36rem;
 }
 
 .card-parser-segment-hooks,

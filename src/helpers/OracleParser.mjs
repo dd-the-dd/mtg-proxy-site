@@ -50,7 +50,7 @@ function splitOracleClauses(value) {
 function oracleWordTokens(value) {
     return [...normalizeText(value)
         .replace(/[.;]$/g, '')
-        .matchAll(/\{[^}]+\}:?|[A-Za-z0-9][A-Za-z0-9'’+\-/]*/g)]
+        .matchAll(/\{[^}]+\}:?|[A-Za-z0-9][A-Za-z0-9'+\-/]*/g)]
         .map(match => {
             const raw = match[0];
             return {
@@ -154,6 +154,38 @@ function trimLeadingArticle(value) {
     return normalizeText(value).replace(/^(?:a|an|the)\s+/i, '').trim();
 }
 
+function normalizeCardName(value) {
+    return normalizeText(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function sourceReferenceCandidate(rawBody, context = {}) {
+    const raw = trimLeadingArticle(rawBody);
+    const cardName = context.cardName ?? '';
+    const normalizedRaw = normalizeCardName(raw);
+    const normalizedCardName = normalizeCardName(cardName);
+    if (!normalizedRaw || !normalizedCardName) {
+        return null;
+    }
+
+    const isExplicitThis = /^this(?:\s+(?:card|permanent|spell|creature|artifact|enchantment|land|planeswalker|battle))?$/i.test(raw);
+    const isFullCardName = normalizedRaw === normalizedCardName;
+    const isCardNamePrefix = normalizedRaw.length >= 4 && normalizedCardName.startsWith(normalizedRaw);
+    if (!isExplicitThis && !isFullCardName && !isCardNamePrefix) {
+        return null;
+    }
+
+    return permanentCandidate([], {
+        cardName,
+        matchedName: raw,
+        raw,
+        reference: 'source',
+    });
+}
+
 function extractQualifiers(body) {
     const qualifiers = [];
     let cleaned = body;
@@ -175,7 +207,15 @@ function extractQualifiers(body) {
     };
 }
 
-function parseEntityCandidateDetailed(rawBody) {
+function parseEntityCandidateDetailed(rawBody, context = {}) {
+    const sourceReference = sourceReferenceCandidate(rawBody, context);
+    if (sourceReference) {
+        return {
+            candidate: sourceReference,
+            supported: true,
+        };
+    }
+
     const { body, qualifiers } = extractQualifiers(rawBody.toLowerCase());
     if (/\bopponents?\b/.test(body)) {
         return {
@@ -238,8 +278,8 @@ function parseEntityCandidateDetailed(rawBody) {
     };
 }
 
-function parseSourceEntityReference(rawBody) {
-    const parsed = parseEntityCandidateDetailed(rawBody);
+function parseSourceEntityReference(rawBody, context = {}) {
+    const parsed = parseEntityCandidateDetailed(rawBody, context);
     return {
         ...parsed.candidate,
         reference: 'this',
@@ -247,7 +287,7 @@ function parseSourceEntityReference(rawBody) {
     };
 }
 
-function parseControlledEntityCandidate(rawBody) {
+function parseControlledEntityCandidate(rawBody, context = {}) {
     const raw = trimLeadingArticle(rawBody);
     const named = /^(?:(basic|legendary|snow)\s+)?(?:(artifact|battle|creature|enchantment|land|planeswalker|permanent|card)\s+)?named\s+(.+)$/i.exec(raw);
     if (named) {
@@ -259,7 +299,7 @@ function parseControlledEntityCandidate(rawBody) {
         });
     }
 
-    const parsed = parseEntityCandidateDetailed(raw);
+    const parsed = parseEntityCandidateDetailed(raw, context);
     if (parsed.supported) {
         return {
             ...parsed.candidate,
@@ -277,7 +317,7 @@ function parseControlledEntityCandidate(rawBody) {
     });
 }
 
-function parseYouControlPredicate(rawBody) {
+function parseYouControlPredicate(rawBody, context = {}) {
     const control = /^you control (.+)$/i.exec(normalizeText(rawBody));
     if (!control) {
         return null;
@@ -287,7 +327,7 @@ function parseYouControlPredicate(rawBody) {
         name: 'youControlAny',
         params: {
             controller: 'you',
-            candidates: splitEntityAlternatives(control[1]).map(parseControlledEntityCandidate),
+            candidates: splitEntityAlternatives(control[1]).map(part => parseControlledEntityCandidate(part, context)),
         },
     };
 }
@@ -308,8 +348,8 @@ function buildModifyTappedAction(value) {
     };
 }
 
-function buildEntersBattlefieldStateAction(clause, sourceText, conditionText) {
-    const untappedCondition = conditionText ? parseYouControlPredicate(conditionText) : null;
+function buildEntersBattlefieldStateAction(clause, sourceText, conditionText, context = {}) {
+    const untappedCondition = conditionText ? parseYouControlPredicate(conditionText, context) : null;
     const tappedCondition = untappedCondition
         ? {
             name: 'not',
@@ -346,7 +386,7 @@ function buildEntersBattlefieldStateAction(clause, sourceText, conditionText) {
         type: 'hook',
         raw: clause,
         event: 'enterBattlefield',
-        source: parseSourceEntityReference(sourceText),
+        source: parseSourceEntityReference(sourceText, context),
         destination: 'battlefield',
         timing: 'asEntersBattlefield',
         branches,
@@ -392,7 +432,7 @@ function parseOracleTargetsDetailed(value, clause, context) {
     const each = /^each (.+)$/i.exec(raw);
     if (each) {
         const targets = splitEachTargets(each[1]).map(part => {
-            const parsed = parseEntityCandidateDetailed(part);
+            const parsed = parseEntityCandidateDetailed(part, context);
             if (!parsed.supported) {
                 errors.push(unsupportedTargetDiagnostic(part, clause, context));
             }
@@ -408,7 +448,7 @@ function parseOracleTargetsDetailed(value, clause, context) {
             ? { min: 0, max: 1 }
             : { min: 1, max: 1 };
         const candidates = splitEntityAlternatives(target[2]).map(part => {
-            const parsed = parseEntityCandidateDetailed(part);
+            const parsed = parseEntityCandidateDetailed(part, context);
             if (!parsed.supported) {
                 errors.push(unsupportedTargetDiagnostic(part, clause, context));
             }
@@ -428,7 +468,7 @@ function parseOracleTargetsDetailed(value, clause, context) {
         };
     }
 
-    const parsed = parseEntityCandidateDetailed(raw);
+    const parsed = parseEntityCandidateDetailed(raw, context);
     if (!parsed.supported) {
         errors.push(unsupportedTargetDiagnostic(raw, clause, context));
     }
@@ -436,7 +476,11 @@ function parseOracleTargetsDetailed(value, clause, context) {
     return {
         targets: errors.length > 0
             ? []
-            : [targetObject('implicit', raw, [parsed.candidate])],
+            : [targetObject(
+                parsed.candidate.reference === 'source' ? 'self' : 'implicit',
+                raw,
+                [parsed.candidate],
+            )],
         errors,
     };
 }
@@ -446,6 +490,219 @@ export function parseOracleTargets(value, options = {}) {
     const result = parseOracleTargetsDetailed(value, cleanTargetExpression(value), context);
     throwIfStrict({ actions: [], errors: result.errors }, options);
     return result.targets;
+}
+
+function targetConceptsFromTargets(targets = []) {
+    return targets.map(target => {
+        return {
+            candidates: target.candidates,
+            kind: 'target',
+            name: target.selector === 'self' ? 'selfReference' : 'targetSpec',
+            quantity: target.quantity,
+            raw: target.raw,
+            selector: target.selector,
+        };
+    });
+}
+
+function detectChoiceConcepts(text) {
+    const normalized = normalizeText(text);
+    const concepts = [];
+    if (/\bchoose one\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'choice',
+            name: 'chooseOne',
+            raw: 'choose one',
+        });
+    }
+    if (/\byou may\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'choice',
+            name: 'youMay',
+            raw: 'you may',
+        });
+    }
+
+    return concepts;
+}
+
+function detectHookConcepts(text) {
+    const normalized = normalizeText(text);
+    const concepts = [];
+    if (/^this\b[^.]*\benters\b/i.test(normalized) || /^when this\b[^.]*\benters\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'hook',
+            name: 'enterBattlefield',
+            raw: normalized,
+        });
+    }
+    if (/^whenever you cast\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'hook',
+            name: 'cast',
+            raw: normalized,
+        });
+    }
+    if (/^whenever you gain life\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'hook',
+            name: 'gainLife',
+            raw: normalized,
+        });
+    }
+    if (/^at the beginning of your upkeep\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'hook',
+            name: 'beginningOfUpkeep',
+            raw: normalized,
+        });
+    }
+
+    return concepts;
+}
+
+function detectBooleanLogicConcepts(text, context = {}) {
+    const normalized = normalizeText(text);
+    const concepts = [];
+    if (/\bunless\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'booleanLogic',
+            name: 'unless',
+            raw: 'unless',
+        });
+        const unlessBody = normalized.split(/\bunless\b/i)[1] ?? '';
+        const predicate = parseYouControlPredicate(unlessBody, context);
+        if (predicate) {
+            concepts.push({
+                kind: 'condition',
+                name: predicate.name,
+                params: predicate.params,
+                raw: normalizeText(unlessBody),
+            });
+        }
+    }
+    if (/\band\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'booleanLogic',
+            name: 'and',
+            raw: 'and',
+        });
+    }
+    if (/\bor\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'booleanLogic',
+            name: 'or',
+            raw: 'or',
+        });
+    }
+
+    return concepts;
+}
+
+function detectTargetConcepts(text, context = {}) {
+    const concepts = [];
+    const targetMatches = [...normalizeText(text).matchAll(/\b(?:up to one )?target [^.,;]+/gi)];
+    for (const match of targetMatches) {
+        const result = parseOracleTargetsDetailed(match[0], text, context);
+        if (result.errors.length === 0) {
+            concepts.push(...targetConceptsFromTargets(result.targets));
+        }
+    }
+
+    const selfModifier = /^(.+?)\s+gets?\s+[+-]?\d+\/[+-]?\d+/i.exec(normalizeText(text));
+    if (selfModifier) {
+        const result = parseOracleTargetsDetailed(selfModifier[1], text, context);
+        if (result.errors.length === 0) {
+            concepts.push(...targetConceptsFromTargets(result.targets.filter(target => target.selector === 'self')));
+        }
+    }
+
+    return concepts;
+}
+
+function detectConcreteActionConcepts(text) {
+    const normalized = normalizeText(text);
+    const concepts = [];
+    if (/\bdeals? (?:X|\d+) damage\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'dealDamage',
+            raw: normalized,
+        });
+    }
+    if (/\benters(?: the battlefield)? tapped\b/i.test(normalized) || /\bgets?\s+[+-]?\d+\/[+-]?\d+/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'modifyPermanent',
+            raw: normalized,
+        });
+    }
+    if (/\badd \{[^}]+\}/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'addMana',
+            raw: normalized,
+        });
+    }
+    if (/\bdraw a card\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'drawCards',
+            raw: normalized,
+        });
+    }
+    if (/\bmill a card\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'millCards',
+            raw: normalized,
+        });
+    }
+    if (/\bscry \d+\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'scry',
+            raw: normalized,
+        });
+    }
+    if (/\bcreate\b[^.]*\btoken\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'createToken',
+            raw: normalized,
+        });
+    }
+
+    return concepts;
+}
+
+function conceptKey(concept) {
+    return [
+        concept.kind,
+        concept.name,
+        concept.selector,
+        concept.raw,
+    ].filter(Boolean).join(':');
+}
+
+export function parseOracleConcepts(text, options = {}) {
+    const context = parseContext(options);
+    const concepts = [
+        ...detectChoiceConcepts(text, context),
+        ...detectHookConcepts(text, context),
+        ...detectBooleanLogicConcepts(text, context),
+        ...detectConcreteActionConcepts(text, context),
+        ...detectTargetConcepts(text, context),
+    ];
+    const seen = new Set();
+    return concepts.filter(concept => {
+        const key = conceptKey(concept);
+        if (seen.has(key)) {
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
 }
 
 function parseDamageClause(clause, context) {
@@ -581,7 +838,7 @@ function parseEntersBattlefieldStateSegment(clause, context) {
         }
 
         conditionText = tokens.slice(cursor + 1).map(token => token.raw).join(' ');
-        if (!parseYouControlPredicate(conditionText)) {
+        if (!parseYouControlPredicate(conditionText, context)) {
             const parser = parserState('unparsable', {
                 expected: 'you control predicate',
                 unexpectedToken: tokens[cursor + 1]?.raw ?? '',
@@ -603,7 +860,7 @@ function parseEntersBattlefieldStateSegment(clause, context) {
     }
 
     return {
-        actions: [buildEntersBattlefieldStateAction(clause, sourceText, conditionText)],
+        actions: [buildEntersBattlefieldStateAction(clause, sourceText, conditionText, context)],
         errors: [],
         handled: true,
         parser: parserState('complete', {
@@ -1166,6 +1423,7 @@ function parseOracleSegmentGroup(group, groupIndex, context) {
 
     const actions = parsed.actions ?? [];
     const errors = parsed.errors ?? [];
+    const concepts = parseOracleConcepts(text, context);
     return {
         actions,
         annotationKind: annotationKindFor(actions, errors),
@@ -1179,6 +1437,7 @@ function parseOracleSegmentGroup(group, groupIndex, context) {
             })
             : actions.map(oracleActionAnnotation),
         clauseIndexes: group.map(entry => entry.index),
+        concepts,
         errors,
         id: `oracle-segment:${groupIndex}`,
         parser: parsed.parser ?? parserState('complete'),
