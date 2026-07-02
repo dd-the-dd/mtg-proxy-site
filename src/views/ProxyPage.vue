@@ -4160,6 +4160,10 @@ export default {
                 return `Damage ${amount}`;
             }
 
+            if (action.type === 'entersBattlefieldState') {
+                return action.state?.tapped ? 'ETB tapped state' : 'ETB state modifier';
+            }
+
             return action.type ?? 'Oracle action';
         },
         compactJson(value) {

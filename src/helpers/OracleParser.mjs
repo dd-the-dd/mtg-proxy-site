@@ -120,6 +120,10 @@ function splitEntityAlternatives(body) {
     return body.split(/\s+or\s+/i).map(part => part.trim()).filter(Boolean);
 }
 
+function trimLeadingArticle(value) {
+    return normalizeText(value).replace(/^(?:a|an|the)\s+/i, '').trim();
+}
+
 function extractQualifiers(body) {
     const qualifiers = [];
     let cleaned = body;
@@ -201,6 +205,58 @@ function parseEntityCandidateDetailed(rawBody) {
             supertypes,
         }),
         supported: hasSupportedPermanentScope,
+    };
+}
+
+function parseSourceEntityReference(rawBody) {
+    const parsed = parseEntityCandidateDetailed(rawBody);
+    return {
+        ...parsed.candidate,
+        reference: 'this',
+        raw: normalizeText(rawBody),
+    };
+}
+
+function parseControlledEntityCandidate(rawBody) {
+    const raw = trimLeadingArticle(rawBody);
+    const named = /^(?:(basic|legendary|snow)\s+)?(?:(artifact|battle|creature|enchantment|land|planeswalker|permanent|card)\s+)?named\s+(.+)$/i.exec(raw);
+    if (named) {
+        const type = (named[2] ?? '').toLowerCase();
+        return permanentCandidate(CARD_TYPES.includes(type) ? [type] : [], {
+            cardName: named[3].trim(),
+            raw,
+            supertypes: named[1] ? [named[1].toLowerCase()] : [],
+        });
+    }
+
+    const parsed = parseEntityCandidateDetailed(raw);
+    if (parsed.supported) {
+        return {
+            ...parsed.candidate,
+            raw,
+        };
+    }
+
+    return permanentCandidate([], {
+        identifier: {
+            possibleKinds: ['type', 'subtype', 'cardName'],
+            raw,
+        },
+        raw,
+        subtypes: [raw.toLowerCase()],
+    });
+}
+
+function parseYouControlPredicate(rawBody) {
+    const control = /^you control (.+)$/i.exec(normalizeText(rawBody));
+    if (!control) {
+        return null;
+    }
+
+    return {
+        controller: 'you',
+        name: 'youControlAny',
+        candidates: splitEntityAlternatives(control[1]).map(parseControlledEntityCandidate),
     };
 }
 
@@ -349,11 +405,85 @@ function parseDamageClause(clause, context) {
     };
 }
 
+function parseEntersBattlefieldStateClause(clause, context) {
+    const normalizedClause = normalizeText(clause).replace(/[.;]$/, '');
+    const match = /^this ([a-z0-9 +/\-]+?) enters(?: the battlefield)? tapped(?: unless (.+))?$/i.exec(normalizedClause);
+    if (!match) {
+        return {
+            actions: [],
+            errors: [],
+            handled: false,
+        };
+    }
+
+    const condition = match[2]
+        ? {
+            operator: 'unless',
+            predicate: parseYouControlPredicate(match[2]),
+        }
+        : null;
+    if (condition && !condition.predicate) {
+        return {
+            actions: [],
+            errors: [
+                diagnostic(
+                    'unsupported_enters_tapped_condition',
+                    clause,
+                    'Enters-tapped condition is not supported yet.',
+                    context,
+                    { condition: match[2] },
+                ),
+            ],
+            handled: true,
+        };
+    }
+
+    return {
+        actions: [
+            {
+                type: 'entersBattlefieldState',
+                raw: clause,
+                event: 'enterBattlefield',
+                source: parseSourceEntityReference(match[1]),
+                destination: 'battlefield',
+                state: {
+                    tapped: true,
+                },
+                condition,
+                actions: [
+                    {
+                        name: 'modifyPermanent',
+                        params: {
+                            duration: 'asEntersBattlefield',
+                            modifiers: [
+                                {
+                                    property: 'tapped',
+                                    value: true,
+                                },
+                            ],
+                            target: 'source',
+                        },
+                    },
+                ],
+            },
+        ],
+        errors: [],
+        handled: true,
+    };
+}
+
 export function parseOracleDocument(text, options = {}) {
     const context = parseContext(options);
     const actions = [];
     const errors = [];
     for (const { clause } of splitOracleClauses(text)) {
+        const entersBattlefieldState = parseEntersBattlefieldStateClause(clause, context);
+        actions.push(...entersBattlefieldState.actions);
+        errors.push(...entersBattlefieldState.errors);
+        if (entersBattlefieldState.handled) {
+            continue;
+        }
+
         const damage = parseDamageClause(clause, context);
         actions.push(...damage.actions);
         errors.push(...damage.errors);

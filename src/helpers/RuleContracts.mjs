@@ -124,6 +124,11 @@ export const ruleContractGroups = [
                 signature: 'def condition_target_still_valid(target_ids: list[str], target_requirements: TargetSpec, state: GameState) -> bool',
                 detail: 'At least one chosen target is still legal as a spell or ability resolves.',
             },
+            {
+                name: 'youControlAny',
+                signature: 'def condition_you_control_any(controller: PlayerId, candidates: list[EntitySpec], state: GameState) -> bool',
+                detail: 'The controller has at least one battlefield permanent matching one of the candidate type, subtype, name, or identifier specs.',
+            },
         ],
     },
     {

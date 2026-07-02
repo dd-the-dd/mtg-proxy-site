@@ -145,4 +145,58 @@ describe('OracleParser', () => {
             ]);
         }
     });
+
+    test('Feature: Oracle parser classifies conditional enters-tapped clauses across entity scopes.', () => {
+        const result = parseOracleDocument([
+            'This land enters tapped unless you control a Plains or an Island.',
+            'This artifact enters tapped unless you control a creature or planeswalker.',
+            'This creature enters tapped unless you control a legendary permanent or a permanent named Cori Mountain Monastery.',
+        ].join('\n'), { cardName: 'Conditional ETB Fixture' });
+
+        expect(result.errors).toEqual([]);
+        expect(result.actions).toHaveLength(3);
+        expect(result.actions[0]).toMatchObject({
+            type: 'entersBattlefieldState',
+            source: {
+                reference: 'this',
+                cardTypes: ['land'],
+            },
+            state: {
+                tapped: true,
+            },
+            condition: {
+                operator: 'unless',
+                predicate: {
+                    name: 'youControlAny',
+                    candidates: [
+                        expect.objectContaining({
+                            identifier: expect.objectContaining({
+                                raw: 'Plains',
+                                possibleKinds: expect.arrayContaining(['subtype', 'cardName']),
+                            }),
+                        }),
+                        expect.objectContaining({
+                            identifier: expect.objectContaining({
+                                raw: 'Island',
+                                possibleKinds: expect.arrayContaining(['subtype', 'cardName']),
+                            }),
+                        }),
+                    ],
+                },
+            },
+        });
+        expect(result.actions[1].condition.predicate.candidates).toEqual([
+            expect.objectContaining({ cardTypes: ['creature'] }),
+            expect.objectContaining({ cardTypes: ['planeswalker'] }),
+        ]);
+        expect(result.actions[2].condition.predicate.candidates).toEqual([
+            expect.objectContaining({
+                cardTypes: [],
+                supertypes: ['legendary'],
+            }),
+            expect.objectContaining({
+                cardName: 'Cori Mountain Monastery',
+            }),
+        ]);
+    });
 });
