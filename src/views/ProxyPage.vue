@@ -2075,20 +2075,7 @@
                 <div class="card-parser-panels">
                   <section class="card-parser-panel">
                     <div class="card-parser-panel-title">
-                      Oracle actions
-                    </div>
-                    <div
-                      v-if="report.oracleActions.length"
-                      class="card-parser-mini-list"
-                    >
-                      <div
-                        v-for="(action, actionIndex) in report.oracleActions"
-                        :key="`oracle-action-${report.key}-${actionIndex}`"
-                        class="card-parser-mini-row"
-                      >
-                        <span>{{ oracleActionLabel(action) }}</span>
-                        <code>{{ compactJson(action.targets ?? action.branches ?? []) }}</code>
-                      </div>
+                      Parser gaps
                     </div>
                     <div
                       v-if="report.oracleErrors.length"
@@ -2113,10 +2100,10 @@
                       </div>
                     </div>
                     <div
-                      v-if="!report.oracleActions.length && !report.oracleErrors.length"
+                      v-else
                       class="card-parser-empty"
                     >
-                      No Oracle text to parse.
+                      No parser gaps.
                     </div>
                   </section>
                   <section class="card-parser-panel">
@@ -2139,12 +2126,25 @@
                           >
                             {{ hook.support.label }}
                           </span>
-                          <span>{{ hook.event }}</span>
-                          <span>{{ hook.condition?.name }}</span>
-                          <span>{{ hook.action?.name }}</span>
+                          <span>{{ hook.label ?? hook.event }}</span>
+                          <span>{{ hook.condition?.name ?? hook.branchLabel }}</span>
+                          <span>{{ hook.action?.name ?? hook.actionLabel }}</span>
                         </div>
                         <div class="card-parser-hook-detail">
                           {{ hook.support.detail }}
+                        </div>
+                        <div
+                          v-if="hook.branches?.length"
+                          class="card-parser-hook-branches"
+                        >
+                          <div
+                            v-for="branch in hook.branches"
+                            :key="`${hook.id}-${branch.id}`"
+                            class="card-parser-mini-row"
+                          >
+                            <span>{{ branch.id }}</span>
+                            <code>{{ compactJson({ condition: branch.condition, actions: branch.actions }) }}</code>
+                          </div>
                         </div>
                         <div
                           v-if="config.showRuleDefinitions"
@@ -2207,6 +2207,24 @@
                           <div class="card-parser-option-cell">
                             <span>Resolution</span>
                             <strong>{{ option.resolutionSummary }}</strong>
+                          </div>
+                        </div>
+                        <div
+                          v-if="option.resolutionActions?.length"
+                          class="card-parser-option-actions"
+                        >
+                          <div class="card-parser-option-actions-title">
+                            Resolution actions
+                          </div>
+                          <div class="card-parser-mini-list">
+                            <div
+                              v-for="(action, actionIndex) in option.resolutionActions"
+                              :key="`${option.id}-resolution-action-${actionIndex}`"
+                              class="card-parser-mini-row"
+                            >
+                              <span>{{ oracleActionLabel(action) }}</span>
+                              <code>{{ compactJson(action.targets ?? action.branches ?? []) }}</code>
+                            </div>
                           </div>
                         </div>
                         <label
@@ -3940,6 +3958,7 @@ export default {
                     ? 'Cast spell'
                     : `Cast from ${this.sourceZoneLabel(sourceZone).toLowerCase()}`,
                 resolutionSummary: this.resolutionSummaryForOption('cast', targetSummary, destination),
+                resolutionActions: oracleActions,
                 sourceZone,
                 sourceZoneLabel: this.sourceZoneLabel(sourceZone),
                 stackSummary: this.stackSummaryForOption('cast'),
@@ -4063,6 +4082,35 @@ export default {
 
             return reports;
         },
+        buildOracleHookReport(card, action, index) {
+            const branchActionNames = [
+                ...new Set((action.branches ?? []).flatMap(branch => {
+                    return (branch.actions ?? []).map(branchAction => branchAction.name).filter(Boolean);
+                })),
+            ];
+
+            return {
+                ...action,
+                action: {
+                    name: branchActionNames.length ? branchActionNames.join('/') : 'branchActions',
+                },
+                actionDefinition: branchActionNames.length === 1
+                    ? ruleDefinitionForName(branchActionNames[0])
+                    : null,
+                actionLabel: branchActionNames.length ? branchActionNames.join('/') : 'branch actions',
+                branchLabel: `${action.branches?.length ?? 0} branches`,
+                condition: null,
+                conditionDefinition: null,
+                eventDefinition: ruleDefinitionForName(action.event),
+                id: `oracle-hook:${this.cardRuntimeKey(card)}:${index}`,
+                label: action.event === 'enterBattlefield' ? 'ETB hook' : `${action.event ?? 'Rule'} hook`,
+                support: {
+                    detail: 'The Oracle parser produced a branched hook; the game engine still needs a branch resolver for this hook.',
+                    label: 'Parser-only',
+                    status: 'partial',
+                },
+            };
+        },
         withOptionFeedback(card, option, subject = {}) {
             return {
                 ...option,
@@ -4104,19 +4152,24 @@ export default {
                 cardName: card.name,
             });
             const coverage = this.cardParserCoverage(oracleResult, oracleText);
-            const hooks = parseRuleHooksFromCard(card, {
-                controllerKey: 'you',
-                sourceZone: 'card-analysis',
-            }).map(hook => {
-                const support = this.gameEngineSupportForHook(hook);
-                return {
-                    ...hook,
-                    actionDefinition: ruleDefinitionForName(hook.action?.name),
-                    conditionDefinition: ruleDefinitionForName(hook.condition?.name),
-                    eventDefinition: ruleDefinitionForName(hook.event),
-                    support,
-                };
-            });
+            const oracleHookActions = oracleResult.actions.filter(action => action.type === 'hook');
+            const oracleOptionActions = oracleResult.actions.filter(action => action.type !== 'hook');
+            const hooks = [
+                ...parseRuleHooksFromCard(card, {
+                    controllerKey: 'you',
+                    sourceZone: 'card-analysis',
+                }).map(hook => {
+                    const support = this.gameEngineSupportForHook(hook);
+                    return {
+                        ...hook,
+                        actionDefinition: ruleDefinitionForName(hook.action?.name),
+                        conditionDefinition: ruleDefinitionForName(hook.condition?.name),
+                        eventDefinition: ruleDefinitionForName(hook.event),
+                        support,
+                    };
+                }),
+                ...oracleHookActions.map((action, index) => this.buildOracleHookReport(card, action, index)),
+            ];
             const engineStatus = this.gameEngineStatusForHooks(hooks);
             const oracleErrors = oracleResult.errors.map((error, index) => {
                 return {
@@ -4144,8 +4197,8 @@ export default {
                 imageUrl: selectedData.urlFront ?? selectedData.imageUrl ?? './card_back_border_crop.jpg',
                 key: this.cardRuntimeKey(card),
                 name: card.name ?? selectedData.name ?? 'unknown card',
-                options: this.buildCardOptionReports(card, oracleResult.actions),
-                oracleActions: oracleResult.actions,
+                options: this.buildCardOptionReports(card, oracleOptionActions),
+                oracleActions: oracleOptionActions,
                 oracleErrors,
                 oracleText,
                 quantity: card.quantity ?? 1,
@@ -7070,6 +7123,12 @@ export default {
     line-height: 1.25;
 }
 
+.card-parser-hook-branches {
+    display: grid;
+    gap: 0.24rem;
+    margin-top: 0.12rem;
+}
+
 .card-parser-hook-definitions {
     display: grid;
     gap: 0.2rem;
@@ -7174,6 +7233,22 @@ export default {
         line-height: 1.25;
         overflow-wrap: anywhere;
     }
+}
+
+.card-parser-option-actions {
+    background: #f8f9fa;
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.36rem;
+}
+
+.card-parser-option-actions-title {
+    color: #344054;
+    font-size: 0.6rem;
+    font-weight: 900;
+    text-transform: uppercase;
 }
 
 .card-parser-option-comment {

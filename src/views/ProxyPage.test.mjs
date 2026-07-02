@@ -200,18 +200,46 @@ describe('Core Rendering', async () => {
                 },
                 setOptions: [],
             },
+            {
+                quantity: 1,
+                name: 'burn spell',
+                selectedOption: {
+                    manaCost: '{R}',
+                    oracleText: 'Burn Spell deals 2 damage to target creature.',
+                    typeLine: 'Instant',
+                    urlFront: 'burn-front',
+                },
+                setOptions: [],
+            },
+            {
+                quantity: 1,
+                name: 'cori mountain monastery',
+                selectedOption: {
+                    oracleText: 'This land enters tapped unless you control a Plains or an Island.',
+                    typeLine: 'Land',
+                    urlFront: 'cori-front',
+                },
+                setOptions: [],
+            },
         ];
 
         await wrapper.vm.$nextTick();
 
         expect(wrapper.find('#card-analysis-parser-inspector').exists()).toBe(true);
-        expect(wrapper.findAll('.card-parser-card')).toHaveLength(3);
+        expect(wrapper.findAll('.card-parser-card')).toHaveLength(5);
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('tablet of discovery');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('millCards');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Engine-ready');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Stack only');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Unsupported clause');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).not.toContain('Oracle actions');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Parser gaps');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Possible options');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Resolution actions');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Damage 2');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('ETB hook');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('entersTapped');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('entersUntapped');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Hand');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Mana cost {U}');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Valid target required');
