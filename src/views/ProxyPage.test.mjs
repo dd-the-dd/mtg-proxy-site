@@ -238,6 +238,13 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Resolution actions');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Damage 2');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('ETB hook');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Hook timing');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Activation logic');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('not(youControlAny');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('youControlAny(controller=you');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Hook actions');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Action cost');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('State operation');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('entersTapped');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('entersUntapped');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Hand');
@@ -247,8 +254,12 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('If all targets are invalid on resolution, the spell fizzles');
         expect(wrapper.find('#card-analysis-rule-definitions').exists()).toBe(true);
         expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def on_gain_life');
+        expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def hook_rule');
+        expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def activation_logic');
+        expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def action_step');
         expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def condition_player_life_changed');
         expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def action_move_cards');
+        expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('-> None');
         expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def option_available');
 
         const unsupportedFeedback = wrapper.find('.parser-feedback-input');

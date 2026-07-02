@@ -2133,17 +2133,45 @@
                         <div class="card-parser-hook-detail">
                           {{ hook.support.detail }}
                         </div>
-                        <div
-                          v-if="hook.branches?.length"
-                          class="card-parser-hook-branches"
-                        >
+                        <div class="card-parser-hook-logic">
+                          <div class="card-parser-hook-logic-cell">
+                            <span>Hook timing</span>
+                            <strong>{{ hookTimingLabel(hook) }}</strong>
+                          </div>
+                          <div class="card-parser-hook-logic-cell">
+                            <span>Activation logic</span>
+                            <code>{{ hookActivationExpression(hook) }}</code>
+                          </div>
+                        </div>
+                        <div class="card-parser-hook-actions">
+                          <div class="card-parser-hook-actions-title">
+                            Hook actions
+                          </div>
                           <div
-                            v-for="branch in hook.branches"
-                            :key="`${hook.id}-${branch.id}`"
-                            class="card-parser-mini-row"
+                            v-for="actionRow in hookActionRows(hook)"
+                            :key="`${hook.id}-${actionRow.id}`"
+                            class="card-parser-hook-action-row"
                           >
-                            <span>{{ branch.id }}</span>
-                            <code>{{ compactJson({ condition: branch.condition, actions: branch.actions }) }}</code>
+                            <div class="card-parser-hook-action-scope">
+                              {{ actionRow.scope }}
+                            </div>
+                            <div class="card-parser-hook-action-cell">
+                              <span>Activation logic</span>
+                              <code>{{ actionRow.activationLogic }}</code>
+                            </div>
+                            <div class="card-parser-hook-action-cell">
+                              <span>Action</span>
+                              <strong>{{ actionRow.name }}</strong>
+                              <code v-if="config.showRuleDefinitions && actionRow.definition">{{ actionRow.definition.signature }}</code>
+                            </div>
+                            <div class="card-parser-hook-action-cell">
+                              <span>Action cost</span>
+                              <strong>{{ actionRow.cost }}</strong>
+                            </div>
+                            <div class="card-parser-hook-action-cell">
+                              <span>State operation</span>
+                              <code>{{ actionRow.effect }}</code>
+                            </div>
                           </div>
                         </div>
                         <div
@@ -4110,6 +4138,135 @@ export default {
                     status: 'partial',
                 },
             };
+        },
+        hookTimingLabel(hook) {
+            const timingLabels = {
+                beginningOfUpkeep: 'Beginning of upkeep',
+                beginningOfEndStep: 'Beginning of end step',
+                cast: 'Spell cast',
+                enterBattlefield: 'Enter battlefield',
+                enterGraveyard: 'Enter graveyard',
+                gainLife: 'Life gained',
+                leaveBattlefield: 'Leave battlefield',
+            };
+
+            return timingLabels[hook?.event] ?? hook?.event ?? 'Unknown timing';
+        },
+        hookActivationExpression(hook) {
+            if (hook?.branches?.length) {
+                return hook.branches
+                    .map(branch => `${branch.id}: ${this.conditionExpression(branch.condition)}`)
+                    .join(' or ');
+            }
+
+            return this.conditionExpression(hook?.condition);
+        },
+        conditionExpression(condition) {
+            if (!condition) {
+                return 'always()';
+            }
+
+            const name = condition.name ?? 'condition';
+            const params = condition.params ?? {};
+            if (name === 'not') {
+                return `not(${this.conditionExpression(params.condition)})`;
+            }
+            if (name === 'all' || name === 'any') {
+                const joiner = name === 'all' ? ' and ' : ' or ';
+                const children = params.conditions ?? condition.conditions ?? [];
+                return `(${children.map(child => this.conditionExpression(child)).join(joiner)})`;
+            }
+            if (name === 'youControlAny') {
+                const candidates = (params.candidates ?? [])
+                    .map(candidate => this.entityCandidateLabel(candidate))
+                    .join(' or ');
+                return `youControlAny(controller=${params.controller ?? 'you'}, candidates=[${candidates}])`;
+            }
+
+            const paramText = Object.entries(params)
+                .filter(([, value]) => value !== undefined && value !== null)
+                .map(([key, value]) => `${key}=${this.logicValueLabel(value)}`)
+                .join(', ');
+            return `${name}(${paramText})`;
+        },
+        logicValueLabel(value) {
+            if (Array.isArray(value)) {
+                return `[${value.map(item => this.logicValueLabel(item)).join(', ')}]`;
+            }
+            if (typeof value === 'object' && value !== null) {
+                if (value.name && value.params) {
+                    return this.conditionExpression(value);
+                }
+                return JSON.stringify(value);
+            }
+            return String(value);
+        },
+        entityCandidateLabel(candidate = {}) {
+            if (candidate.cardName) {
+                return `"${candidate.cardName}"`;
+            }
+            if (candidate.identifier?.raw) {
+                return candidate.identifier.raw;
+            }
+
+            const parts = [
+                ...(candidate.supertypes ?? []),
+                ...(candidate.colors ?? []),
+                ...(candidate.cardTypes ?? []),
+                ...(candidate.subtypes ?? []),
+            ].filter(Boolean);
+            return parts.length ? parts.join(' ') : candidate.entity ?? 'permanent';
+        },
+        actionCostLabel(action = {}) {
+            const cost = action.cost ?? action.params?.cost ?? action.params?.costs;
+            if (!cost || (Array.isArray(cost) && cost.length === 0)) {
+                return 'No cost';
+            }
+
+            return this.logicValueLabel(cost);
+        },
+        actionActivationExpression(action = {}, fallbackCondition = null) {
+            return this.conditionExpression(action.activationLogic ?? action.condition ?? fallbackCondition);
+        },
+        actionEffectExpression(action = {}) {
+            const params = Object.entries(action.params ?? {})
+                .filter(([key]) => key !== 'cost' && key !== 'costs')
+                .map(([key, value]) => `${key}=${this.logicValueLabel(value)}`)
+                .join(', ');
+            return `${action.name ?? 'action'}(${params})`;
+        },
+        hookActionRows(hook) {
+            if (hook?.branches?.length) {
+                return hook.branches.flatMap(branch => {
+                    return (branch.actions ?? []).map((action, actionIndex) => {
+                        return {
+                            activationLogic: this.actionActivationExpression(action, branch.condition),
+                            cost: this.actionCostLabel(action),
+                            definition: ruleDefinitionForName(action.name),
+                            effect: this.actionEffectExpression(action),
+                            id: `${branch.id}-${action.name ?? 'action'}-${actionIndex}`,
+                            name: action.name ?? 'action',
+                            scope: branch.id,
+                        };
+                    });
+                });
+            }
+
+            if (!hook?.action) {
+                return [];
+            }
+
+            return [
+                {
+                    activationLogic: this.actionActivationExpression(hook.action, hook.condition),
+                    cost: this.actionCostLabel(hook.action),
+                    definition: ruleDefinitionForName(hook.action.name),
+                    effect: this.actionEffectExpression(hook.action),
+                    id: `${hook.id}-action`,
+                    name: hook.action.name ?? 'action',
+                    scope: 'hook',
+                },
+            ];
         },
         withOptionFeedback(card, option, subject = {}) {
             return {
@@ -7129,6 +7286,84 @@ export default {
     margin-top: 0.12rem;
 }
 
+.card-parser-hook-logic {
+    display: grid;
+    gap: 0.3rem;
+    grid-template-columns: minmax(7rem, 0.55fr) minmax(0, 1.45fr);
+    margin-top: 0.12rem;
+}
+
+.card-parser-hook-logic-cell,
+.card-parser-hook-action-cell {
+    background: #f8f9fa;
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.16rem;
+    min-width: 0;
+    padding: 0.32rem 0.36rem;
+
+    span {
+        color: #667085;
+        font-size: 0.58rem;
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+
+    strong {
+        color: #303742;
+        font-size: 0.64rem;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+    }
+
+    code {
+        color: #3538cd;
+        font-size: 0.6rem;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+    }
+}
+
+.card-parser-hook-actions {
+    display: grid;
+    gap: 0.3rem;
+    margin-top: 0.12rem;
+}
+
+.card-parser-hook-actions-title {
+    color: #344054;
+    font-size: 0.6rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.card-parser-hook-action-row {
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.3rem;
+    grid-template-columns: minmax(5.5rem, 0.7fr) minmax(0, 1.25fr) repeat(3, minmax(0, 1fr));
+    padding: 0.34rem;
+}
+
+.card-parser-hook-action-scope {
+    align-items: center;
+    background: #eef4ff;
+    border: 1px solid #c7d7fe;
+    border-radius: 4px;
+    color: #3538cd;
+    display: inline-flex;
+    font-size: 0.62rem;
+    font-weight: 900;
+    justify-content: center;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 0.28rem 0.34rem;
+    text-align: center;
+}
+
 .card-parser-hook-definitions {
     display: grid;
     gap: 0.2rem;
@@ -7261,6 +7496,8 @@ export default {
 @media (max-width: 760px) {
     .card-parser-card,
     .card-parser-panels,
+    .card-parser-hook-logic,
+    .card-parser-hook-action-row,
     .card-parser-option-grid {
         grid-template-columns: 1fr;
     }

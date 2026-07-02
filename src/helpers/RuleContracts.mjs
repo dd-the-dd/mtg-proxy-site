@@ -1,5 +1,26 @@
 export const ruleContractGroups = [
     {
+        key: 'hookRules',
+        title: 'Hook rule shape',
+        definitions: [
+            {
+                name: 'hookRule',
+                signature: 'def hook_rule(hook_type: HookEvent, source_id: str, activation_logic: ConditionExpr, actions: list[ActionStep]) -> HookRule',
+                detail: 'A serializable trigger or replacement rule with a game timing, a boolean condition expression, and ordered state-changing actions.',
+            },
+            {
+                name: 'activationLogic',
+                signature: 'def activation_logic(expr: ConditionExpr, event: Event, state: GameState) -> bool',
+                detail: 'Evaluate a parenthesized condition tree using not, all/and, any/or, and named condition functions.',
+            },
+            {
+                name: 'actionStep',
+                signature: 'def action_step(action: Action, cost: Cost | None, activation_logic: ConditionExpr | None, state: GameState) -> None',
+                detail: 'One item in a hook action list; it may have its own cost or activation logic before mutating game state.',
+            },
+        ],
+    },
+    {
         key: 'events',
         title: 'Hooks / events',
         definitions: [
@@ -142,57 +163,57 @@ export const ruleContractGroups = [
         definitions: [
             {
                 name: 'drawCards',
-                signature: 'def action_draw_cards(player: PlayerId, amount: int, state: GameState) -> GameState',
+                signature: 'def action_draw_cards(player: PlayerId, amount: int, state: GameState) -> None',
                 detail: 'Move cards from library top to hand.',
             },
             {
                 name: 'millCards',
-                signature: 'def action_mill_cards(player: PlayerId, amount: int, state: GameState) -> GameState',
+                signature: 'def action_mill_cards(player: PlayerId, amount: int, state: GameState) -> None',
                 detail: 'Move cards from library top to graveyard.',
             },
             {
                 name: 'scry',
-                signature: 'def action_scry(player: PlayerId, amount: int, choice: PlayerChoice, state: GameState) -> GameState',
+                signature: 'def action_scry(player: PlayerId, amount: int, choice: PlayerChoice, state: GameState) -> None',
                 detail: 'Ask the player which seen cards stay on top or go to bottom.',
             },
             {
                 name: 'dealDamage',
-                signature: 'def action_deal_damage(targets: list[PlayerId | PermanentId], amount: int, source_id: str, state: GameState) -> GameState',
+                signature: 'def action_deal_damage(targets: list[PlayerId | PermanentId], amount: int, source_id: str, state: GameState) -> None',
                 detail: 'Apply damage to players, creatures, planeswalkers, or battles.',
             },
             {
                 name: 'gainLife',
-                signature: 'def action_gain_life(players: list[PlayerId], amount: int, state: GameState) -> GameState',
+                signature: 'def action_gain_life(players: list[PlayerId], amount: int, state: GameState) -> None',
                 detail: 'Increase player life totals.',
             },
             {
                 name: 'moveCards',
-                signature: 'def action_move_cards(card_ids: list[str], from_zone: Zone, to_zone: Zone, owner: PlayerId, state: GameState) -> GameState',
+                signature: 'def action_move_cards(card_ids: list[str], from_zone: Zone, to_zone: Zone, owner: PlayerId, state: GameState) -> None',
                 detail: 'Move cards between library, hand, graveyard, exile, battlefield, stack, or command zone.',
             },
             {
                 name: 'createToken',
-                signature: 'def action_create_token(controller: PlayerId, token_name: str, state: GameState) -> GameState',
+                signature: 'def action_create_token(controller: PlayerId, token_name: str, state: GameState) -> None',
                 detail: 'Create a token permanent on the battlefield.',
             },
             {
                 name: 'modifyPermanent',
-                signature: 'def action_modify_permanent(target_id: PermanentId, modifiers: list[Modifier], duration: Duration, state: GameState) -> GameState',
+                signature: 'def action_modify_permanent(target_id: PermanentId, modifiers: list[Modifier], duration: Duration, state: GameState) -> None',
                 detail: 'Apply temporary or permanent changes to a permanent.',
             },
             {
                 name: 'modifyPlayer',
-                signature: 'def action_modify_player(player: PlayerId, modifiers: list[Modifier], duration: Duration, state: GameState) -> GameState',
+                signature: 'def action_modify_player(player: PlayerId, modifiers: list[Modifier], duration: Duration, state: GameState) -> None',
                 detail: 'Apply player modifiers such as max hand size changes.',
             },
             {
                 name: 'modifyRule',
-                signature: 'def action_modify_rule(rule_key: str, value: RuleValue, duration: Duration, state: GameState) -> GameState',
+                signature: 'def action_modify_rule(rule_key: str, value: RuleValue, duration: Duration, state: GameState) -> None',
                 detail: 'Change rules such as lands per turn, draw-loss replacement, or no maximum hand size.',
             },
             {
                 name: 'askPlayerChoice',
-                signature: 'def action_ask_player_choice(player: PlayerId, options: list[DecisionOption], prompt: str, state: GameState) -> PendingChoice',
+                signature: 'def action_ask_player_choice(player: PlayerId, options: list[DecisionOption], prompt: str, state: GameState) -> None',
                 detail: 'Pause resolution until a player chooses between legal options.',
             },
         ],
