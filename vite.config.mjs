@@ -122,11 +122,83 @@ function localSessionsPlugin(env) {
     };
 }
 
+function localParserFeedbackPlugin(env) {
+    const enabled = env.VITE_LOCAL_APP === 'true';
+    const storageDir = path.resolve(process.cwd(), '.local-app');
+    const storageFile = path.join(storageDir, 'parser-feedback.json');
+
+    const readJsonBody = async (req) => {
+        const chunks = [];
+        for await (const chunk of req) {
+            chunks.push(chunk);
+        }
+
+        const body = Buffer.concat(chunks).toString('utf8');
+        return body ? JSON.parse(body) : {};
+    };
+
+    const loadStore = async () => {
+        try {
+            const raw = await fs.readFile(storageFile, 'utf8');
+            return JSON.parse(raw);
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                throw error;
+            }
+
+            return { comments: {} };
+        }
+    };
+
+    const saveStore = async (store) => {
+        await fs.mkdir(storageDir, { recursive: true });
+        await fs.writeFile(storageFile, JSON.stringify({ comments: store.comments ?? {} }, null, 2));
+    };
+
+    const sendJson = (res, status, data) => {
+        res.statusCode = status;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(data));
+    };
+
+    return {
+        name: 'local-parser-feedback',
+        configureServer(server) {
+            if (!enabled) {
+                return;
+            }
+
+            server.middlewares.use('/api/parser-feedback', async (req, res) => {
+                try {
+                    if (req.method === 'GET') {
+                        sendJson(res, 200, await loadStore());
+                        return;
+                    }
+
+                    if (req.method === 'PUT') {
+                        const body = await readJsonBody(req);
+                        const store = {
+                            comments: body.comments ?? {},
+                        };
+                        await saveStore(store);
+                        sendJson(res, 200, store);
+                        return;
+                    }
+
+                    sendJson(res, 405, { error: 'Method not allowed' });
+                } catch (error) {
+                    sendJson(res, 500, { error: error.message });
+                }
+            });
+        },
+    };
+}
+
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
 
     return {
-        plugins: [vue(), localSessionsPlugin(env)],
+        plugins: [vue(), localSessionsPlugin(env), localParserFeedbackPlugin(env)],
         build: {
             sourcemap: true,
         },

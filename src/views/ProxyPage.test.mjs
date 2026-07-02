@@ -163,9 +163,11 @@ describe('Core Rendering', async () => {
 
     test('Feature: Card Analysis shows parser output and game-engine support per card.', async () => {
         const component = wrapper.getCurrentComponent();
+        globalThis.__resetParserFeedback?.();
         component.data.config.activeWorkspaceTab = 'card-analysis';
         component.data.config.analysisMode = false;
         component.data.config.simulationGameStarted = false;
+        component.data.config.showRuleDefinitions = true;
         component.data.cards = [
             {
                 quantity: 1,
@@ -215,9 +217,33 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Valid target required');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Stack: spell');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('If all targets are invalid on resolution, the spell fizzles');
+        expect(wrapper.find('#card-analysis-rule-definitions').exists()).toBe(true);
+        expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def on_gain_life');
+        expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def condition_player_life_changed');
+        expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def action_move_cards');
+        expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def option_available');
+
+        const unsupportedFeedback = wrapper.find('.parser-feedback-input');
+        expect(unsupportedFeedback.exists()).toBe(true);
+        await unsupportedFeedback.setValue('Need parser support for tap target creature.');
+        await component.ctx.flushPendingParserFeedbackSave();
+        expect(Object.values(globalThis.__parserFeedbackStore.comments).some(comment => {
+            return comment.note === 'Need parser support for tap target creature.';
+        })).toBe(true);
+
+        await wrapper.find('.card-parser-option-comment-button').trigger('click');
+        await wrapper.vm.$nextTick();
+        const optionFeedback = wrapper.find('.card-parser-option-comment-input');
+        expect(optionFeedback.exists()).toBe(true);
+        await optionFeedback.setValue('This option should ask for a target before costs are paid.');
+        await component.ctx.flushPendingParserFeedbackSave();
+        expect(Object.values(globalThis.__parserFeedbackStore.comments).some(comment => {
+            return comment.note === 'This option should ask for a target before costs are paid.';
+        })).toBe(true);
 
         component.data.cards = [];
         component.data.config.activeWorkspaceTab = 'deck';
+        component.data.config.showRuleDefinitions = false;
         await wrapper.vm.$nextTick();
     });
 

@@ -24,14 +24,52 @@ config.global.mocks = {
 const localSessionStore = {
     sessions: [],
 };
+const parserFeedbackStore = {
+    comments: {},
+};
 
 globalThis.__localSessionStore = localSessionStore;
+globalThis.__parserFeedbackStore = parserFeedbackStore;
 globalThis.__resetLocalSessions = () => {
     localSessionStore.sessions = [];
+};
+globalThis.__resetParserFeedback = () => {
+    parserFeedbackStore.comments = {};
 };
 
 globalThis.fetch = vi.fn(async (url, options = {}) => {
     const parsedUrl = new URL(url, 'http://localhost');
+    if (parsedUrl.pathname.startsWith('/api/parser-feedback')) {
+        const method = options.method ?? 'GET';
+        if (method === 'GET') {
+            return {
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    comments: parserFeedbackStore.comments,
+                }),
+            };
+        }
+
+        if (method === 'PUT') {
+            const body = JSON.parse(options.body ?? '{}');
+            parserFeedbackStore.comments = body.comments ?? {};
+            return {
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    comments: parserFeedbackStore.comments,
+                }),
+            };
+        }
+
+        return {
+            ok: false,
+            status: 405,
+            json: async () => ({ error: 'Method not allowed' }),
+        };
+    }
+
     if (!parsedUrl.pathname.startsWith('/api/local-sessions')) {
         return {
             ok: false,

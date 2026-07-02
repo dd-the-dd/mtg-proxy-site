@@ -519,6 +519,14 @@
                 <div class="text-small text-gray">
                   Oracle parser diagnostics and card-only value analysis will live here.
                 </div>
+                <label class="form-switch card-analysis-definition-switch">
+                  <input
+                    id="card-analysis-rule-definitions-toggle"
+                    type="checkbox"
+                    v-model="config.showRuleDefinitions"
+                  >
+                  <i class="form-icon" /> Show rule definitions
+                </label>
                 <div
                   id="card-analysis-effect-registry"
                   class="card-analysis-effect-registry"
@@ -1987,6 +1995,31 @@
               {{ cardParserReports.length }} cards
             </div>
           </div>
+          <section
+            v-if="config.showRuleDefinitions"
+            id="card-analysis-rule-definitions"
+            class="card-analysis-rule-definitions"
+          >
+            <div
+              v-for="group in ruleContractGroups"
+              :key="`rule-contract-${group.key}`"
+              class="rule-contract-group"
+            >
+              <div class="rule-contract-title">
+                {{ group.title }}
+              </div>
+              <div class="rule-contract-list">
+                <div
+                  v-for="definition in group.definitions"
+                  :key="`rule-contract-${group.key}-${definition.name}`"
+                  class="rule-contract-item"
+                >
+                  <code>{{ definition.signature }}</code>
+                  <span>{{ definition.detail }}</span>
+                </div>
+              </div>
+            </div>
+          </section>
           <div
             v-if="cardParserReports.length"
             id="card-analysis-parser-inspector"
@@ -2068,6 +2101,15 @@
                       >
                         <span>Unsupported clause</span>
                         <code>{{ error.clause }}</code>
+                        <label class="parser-feedback-field">
+                          <span>Parser note</span>
+                          <textarea
+                            class="form-input parser-feedback-input"
+                            :value="parserFeedbackNote(error.feedbackKey)"
+                            placeholder="Explain what this clause should parse into."
+                            @input="updateParserFeedback(error.feedbackKey, error.feedbackSubject, $event.target.value)"
+                          />
+                        </label>
                       </div>
                     </div>
                     <div
@@ -2104,6 +2146,14 @@
                         <div class="card-parser-hook-detail">
                           {{ hook.support.detail }}
                         </div>
+                        <div
+                          v-if="config.showRuleDefinitions"
+                          class="card-parser-hook-definitions"
+                        >
+                          <pre v-if="hook.eventDefinition">{{ hook.eventDefinition.signature }}</pre>
+                          <pre v-if="hook.conditionDefinition">{{ hook.conditionDefinition.signature }}</pre>
+                          <pre v-if="hook.actionDefinition">{{ hook.actionDefinition.signature }}</pre>
+                        </div>
                       </div>
                     </div>
                     <div
@@ -2128,7 +2178,18 @@
                       >
                         <div class="card-parser-option-header">
                           <span class="card-parser-option-name">{{ option.label }}</span>
-                          <span class="card-parser-status card-parser-status-empty">{{ option.sourceZoneLabel }}</span>
+                          <span class="card-parser-option-tools">
+                            <span class="card-parser-status card-parser-status-empty">{{ option.sourceZoneLabel }}</span>
+                            <button
+                              type="button"
+                              class="btn btn-link card-parser-option-comment-button"
+                              title="Comment option"
+                              :aria-label="`Comment ${option.label}`"
+                              @click="toggleParserComment(option.feedbackKey)"
+                            >
+                              <i class="icon icon-edit" />
+                            </button>
+                          </span>
                         </div>
                         <div class="card-parser-option-grid">
                           <div class="card-parser-option-cell">
@@ -2148,6 +2209,18 @@
                             <strong>{{ option.resolutionSummary }}</strong>
                           </div>
                         </div>
+                        <label
+                          v-if="isParserCommentOpen(option.feedbackKey)"
+                          class="parser-feedback-field card-parser-option-comment"
+                        >
+                          <span>Option note</span>
+                          <textarea
+                            class="form-input parser-feedback-input card-parser-option-comment-input"
+                            :value="parserFeedbackNote(option.feedbackKey)"
+                            placeholder="Comment the option, cost, target timing, stack, or resolution."
+                            @input="updateParserFeedback(option.feedbackKey, option.feedbackSubject, $event.target.value)"
+                          />
+                        </label>
                       </div>
                     </div>
                     <div
@@ -2402,6 +2475,8 @@ import {
     ruleEventTypes
 } from "../helpers/GameSimulator.mjs";
 import { parseOracleDocument } from "../helpers/OracleParser.mjs";
+import { createParserFeedbackStorage } from "../helpers/ParserFeedbackStorage.mjs";
+import { ruleContractGroups, ruleDefinitionForName } from "../helpers/RuleContracts.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
 import { bindStorage } from "../helpers/VueLocalStorage.mjs";
 import ImageLoader from "../components/ImageLoader.vue";
@@ -2503,6 +2578,7 @@ function createDefaultConfig() {
         analysisMetric: "count",
         analysisColumnMode: "metaDeck",
         analysisMatchupSessionId: "all",
+        showRuleDefinitions: false,
         activeWorkspaceTab: "deck",
         simulationPlayerDeckIds: ["current", "", "", "", "", ""],
         simulationPlayerCount: 2,
@@ -2589,6 +2665,7 @@ export default {
             collapsedAnalysisDeckIds: {},
             expandedValueRemovalDeckIds: {},
             expandedSimulationZones: {},
+            expandedParserCommentKeys: {},
             simulationActionMenu: null,
             simulationLifeTotals: {},
             simulationMulliganBottomChoices: {},
@@ -2600,6 +2677,11 @@ export default {
             simulationPendingAction: null,
             simulationResolvedActions: [],
             simulationScryChoice: null,
+            parserFeedback: { comments: {} },
+            parserFeedbackDrafts: {},
+            parserFeedbackStorage: createParserFeedbackStorage(),
+            parserFeedbackSaveTimer: null,
+            isLoadingParserFeedback: false,
             cardPreview: {
                 visible: false,
                 src: '',
@@ -2802,6 +2884,9 @@ export default {
                     description: 'Rules that cards can rewrite, such as lands per turn, draw loss, or game-loss conditions.',
                 },
             ];
+        },
+        ruleContractGroups() {
+            return ruleContractGroups;
         },
         cardParserReports() {
             return this.cards
@@ -3167,6 +3252,7 @@ export default {
     async mounted() {
         this.analysisClient = createAnalysisWorkerClient();
         this.initConfig();
+        await this.initParserFeedback();
         await this.initLocalSessions();
         window.addEventListener('blur', this.hideCardPreview);
         window.addEventListener('scroll', this.hideCardPreview, true);
@@ -3177,6 +3263,7 @@ export default {
     beforeUnmount() {
         clearTimeout(this.sessionSaveTimer);
         clearTimeout(this.analysisQueueTimer);
+        clearTimeout(this.parserFeedbackSaveTimer);
         this.hideCardPreview();
         document.body?.classList.remove('play-board-active');
         window.removeEventListener('blur', this.hideCardPreview);
@@ -3489,6 +3576,102 @@ export default {
         selectedCardData(card) {
             return card?.selectedOption ?? card ?? {};
         },
+        parserFeedbackKey(kind, card, subject) {
+            return [
+                kind,
+                card?.name ?? this.selectedCardData(card).name ?? 'unknown card',
+                String(subject ?? '').trim(),
+            ].join('::');
+        },
+        parserFeedbackSubject(kind, card, extra = {}) {
+            return {
+                cardName: card?.name ?? this.selectedCardData(card).name ?? 'unknown card',
+                kind,
+                ...extra,
+            };
+        },
+        normalizeParserFeedbackStore(store = {}) {
+            return {
+                comments: { ...(store.comments ?? {}) },
+            };
+        },
+        async initParserFeedback() {
+            this.isLoadingParserFeedback = true;
+            try {
+                const store = await this.parserFeedbackStorage.loadFeedback();
+                this.parserFeedback = this.normalizeParserFeedbackStore(store);
+                this.parserFeedbackDrafts = Object.fromEntries(
+                    Object.entries(this.parserFeedback.comments).map(([key, comment]) => {
+                        return [key, comment.note ?? ''];
+                    }),
+                );
+            } catch (error) {
+                console.warn('Failed to load parser feedback.', error);
+                this.parserFeedback = { comments: {} };
+                this.parserFeedbackDrafts = {};
+            } finally {
+                this.isLoadingParserFeedback = false;
+            }
+        },
+        parserFeedbackNote(key) {
+            return this.parserFeedbackDrafts[key] ??
+                this.parserFeedback.comments?.[key]?.note ??
+                '';
+        },
+        updateParserFeedback(key, subject, note) {
+            this.parserFeedbackDrafts = {
+                ...this.parserFeedbackDrafts,
+                [key]: note,
+            };
+            this.parserFeedback = {
+                comments: {
+                    ...(this.parserFeedback.comments ?? {}),
+                    [key]: {
+                        ...(this.parserFeedback.comments?.[key] ?? {}),
+                        ...subject,
+                        key,
+                        note,
+                        updatedAt: new Date().toISOString(),
+                    },
+                },
+            };
+            this.scheduleParserFeedbackSave();
+        },
+        toggleParserComment(key) {
+            this.expandedParserCommentKeys = {
+                ...this.expandedParserCommentKeys,
+                [key]: !this.expandedParserCommentKeys[key],
+            };
+        },
+        isParserCommentOpen(key) {
+            return Boolean(this.expandedParserCommentKeys[key] || this.parserFeedbackNote(key));
+        },
+        scheduleParserFeedbackSave() {
+            clearTimeout(this.parserFeedbackSaveTimer);
+            this.parserFeedbackSaveTimer = setTimeout(() => {
+                this.parserFeedbackSaveTimer = null;
+                this.saveParserFeedback();
+            }, 250);
+        },
+        async flushPendingParserFeedbackSave() {
+            if (!this.parserFeedbackSaveTimer) {
+                await this.saveParserFeedback();
+                return;
+            }
+
+            clearTimeout(this.parserFeedbackSaveTimer);
+            this.parserFeedbackSaveTimer = null;
+            await this.saveParserFeedback();
+        },
+        async saveParserFeedback() {
+            try {
+                this.parserFeedback = this.normalizeParserFeedbackStore(
+                    await this.parserFeedbackStorage.saveFeedback(this.parserFeedback),
+                );
+            } catch (error) {
+                console.warn('Failed to save parser feedback.', error);
+            }
+        },
         cardParserCoverage(result, oracleText) {
             if (!oracleText) {
                 return {
@@ -3750,7 +3933,7 @@ export default {
             ];
             const destination = this.castDestinationForCard(card);
 
-            return {
+            return this.withOptionFeedback(card, {
                 costSummary: costs.join('; '),
                 id: `cast:${sourceZone}:${this.cardRuntimeKey(card)}`,
                 label: sourceZone === 'hand'
@@ -3761,7 +3944,11 @@ export default {
                 sourceZoneLabel: this.sourceZoneLabel(sourceZone),
                 stackSummary: this.stackSummaryForOption('cast'),
                 targetSummary,
-            };
+            }, {
+                kind: 'cast',
+                sourceZone,
+                targetSummary,
+            });
         },
         buildLandOptionReports(card) {
             const oracleText = this.cardOracleText(card);
@@ -3778,26 +3965,34 @@ export default {
 
             if (hasPayLifeChoice) {
                 return [
-                    {
+                    this.withOptionFeedback(card, {
                         ...base,
                         costSummary: 'Land play available; active player main phase; choose pay 2 life to enter untapped',
                         id: `${base.id}:pay-life`,
                         label: 'Play untapped',
-                    },
-                    {
+                    }, {
+                        kind: 'playLand',
+                        choice: 'pay-life',
+                    }),
+                    this.withOptionFeedback(card, {
                         ...base,
                         costSummary: 'Land play available; active player main phase; choose enters tapped',
                         id: `${base.id}:tapped`,
                         label: 'Play tapped',
-                    },
+                    }, {
+                        kind: 'playLand',
+                        choice: 'tapped',
+                    }),
                 ];
             }
 
             return [
-                {
+                this.withOptionFeedback(card, {
                     ...base,
                     costSummary: 'Land play available; active player main phase',
-                },
+                }, {
+                    kind: 'playLand',
+                }),
             ];
         },
         activatedAbilityTextParts(card) {
@@ -3810,7 +4005,7 @@ export default {
         buildBattlefieldOptionReports(card, oracleActions) {
             const reports = [];
             for (const ability of manaAbilitiesForCard(card)) {
-                reports.push({
+                reports.push(this.withOptionFeedback(card, {
                     costSummary: 'Tap source; source untapped',
                     id: `mana:${this.cardRuntimeKey(card)}:${ability.manaProduced.join('')}`,
                     label: ability.label,
@@ -3819,7 +4014,10 @@ export default {
                     sourceZoneLabel: this.sourceZoneLabel('battlefield'),
                     stackSummary: this.stackSummaryForOption('mana'),
                     targetSummary: 'No target required',
-                });
+                }, {
+                    kind: 'mana',
+                    manaProduced: ability.manaProduced,
+                }));
             }
 
             for (const [index, abilityText] of this.activatedAbilityTextParts(card).entries()) {
@@ -3827,7 +4025,7 @@ export default {
                 const targetSummary = /\btarget\b/i.test(rawEffect ?? '')
                     ? this.targetSummaryForCard({ ...card, selectedOption: { ...this.selectedCardData(card), oracleText: rawEffect } }, oracleActions)
                     : 'No target required';
-                reports.push({
+                reports.push(this.withOptionFeedback(card, {
                     costSummary: [
                         rawCost?.trim() || 'Activated cost',
                         targetSummary !== 'No target required'
@@ -3841,11 +4039,15 @@ export default {
                     sourceZoneLabel: this.sourceZoneLabel('battlefield'),
                     stackSummary: this.stackSummaryForOption('activate'),
                     targetSummary,
-                });
+                }, {
+                    abilityText,
+                    kind: 'activate',
+                    targetSummary,
+                }));
             }
 
             if (this.cardIsCreature(card)) {
-                reports.push({
+                reports.push(this.withOptionFeedback(card, {
                     costSummary: 'Declare attackers step; creature untapped; no summoning sickness; tap if required',
                     id: `attack:${this.cardRuntimeKey(card)}`,
                     label: 'Attack',
@@ -3854,10 +4056,24 @@ export default {
                     sourceZoneLabel: this.sourceZoneLabel('battlefield'),
                     stackSummary: this.stackSummaryForOption('attack'),
                     targetSummary: 'No target required',
-                });
+                }, {
+                    kind: 'attack',
+                }));
             }
 
             return reports;
+        },
+        withOptionFeedback(card, option, subject = {}) {
+            return {
+                ...option,
+                feedbackKey: this.parserFeedbackKey('option', card, option.id),
+                feedbackSubject: this.parserFeedbackSubject('option', card, {
+                    optionId: option.id,
+                    optionLabel: option.label,
+                    sourceZone: option.sourceZone,
+                    ...subject,
+                }),
+            };
         },
         buildCardOptionReports(card, oracleActions = []) {
             if (this.cardIsLand(card)) {
@@ -3895,10 +4111,28 @@ export default {
                 const support = this.gameEngineSupportForHook(hook);
                 return {
                     ...hook,
+                    actionDefinition: ruleDefinitionForName(hook.action?.name),
+                    conditionDefinition: ruleDefinitionForName(hook.condition?.name),
+                    eventDefinition: ruleDefinitionForName(hook.event),
                     support,
                 };
             });
             const engineStatus = this.gameEngineStatusForHooks(hooks);
+            const oracleErrors = oracleResult.errors.map((error, index) => {
+                return {
+                    ...error,
+                    feedbackKey: this.parserFeedbackKey(
+                        'unsupported-clause',
+                        card,
+                        `${error.code ?? 'unknown'}:${error.clause ?? ''}:${index}`,
+                    ),
+                    feedbackSubject: this.parserFeedbackSubject('unsupportedClause', card, {
+                        clause: error.clause,
+                        code: error.code,
+                        message: error.message,
+                    }),
+                };
+            });
 
             return {
                 card,
@@ -3912,7 +4146,7 @@ export default {
                 name: card.name ?? selectedData.name ?? 'unknown card',
                 options: this.buildCardOptionReports(card, oracleResult.actions),
                 oracleActions: oracleResult.actions,
-                oracleErrors: oracleResult.errors,
+                oracleErrors,
                 oracleText,
                 quantity: card.quantity ?? 1,
                 typeLine: selectedData.typeLine ?? card.typeLine ?? '',
@@ -6545,6 +6779,62 @@ export default {
     white-space: nowrap;
 }
 
+.card-analysis-definition-switch {
+    font-size: 0.68rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.card-analysis-rule-definitions {
+    background: #f8f9fa;
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.55rem;
+}
+
+.rule-contract-group {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+.rule-contract-title {
+    color: #101828;
+    font-size: 0.68rem;
+    font-weight: 900;
+}
+
+.rule-contract-list {
+    display: grid;
+    gap: 0.28rem;
+    grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+}
+
+.rule-contract-item {
+    background: #fff;
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.18rem;
+    min-width: 0;
+    padding: 0.34rem 0.4rem;
+
+    code {
+        color: #3538cd;
+        font-size: 0.62rem;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+    }
+
+    span {
+        color: #667085;
+        font-size: 0.62rem;
+        line-height: 1.25;
+    }
+}
+
 .card-parser-inspector {
     display: grid;
     gap: 0.65rem;
@@ -6729,6 +7019,26 @@ export default {
     white-space: pre-wrap;
 }
 
+.parser-feedback-field {
+    display: grid;
+    gap: 0.2rem;
+    margin: 0.18rem 0 0;
+
+    span {
+        color: #667085;
+        font-size: 0.58rem;
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+}
+
+.parser-feedback-input {
+    font-size: 0.66rem;
+    line-height: 1.25;
+    min-height: 3.2rem;
+    resize: vertical;
+}
+
 .card-parser-hook-main {
     align-items: center;
     display: flex;
@@ -6756,6 +7066,25 @@ export default {
     line-height: 1.25;
 }
 
+.card-parser-hook-definitions {
+    display: grid;
+    gap: 0.2rem;
+    margin-top: 0.12rem;
+
+    pre {
+        background: #f8f9fa;
+        border: 1px solid #e4e7ec;
+        border-radius: 4px;
+        color: #3538cd;
+        font-size: 0.6rem;
+        line-height: 1.25;
+        margin: 0;
+        overflow-wrap: anywhere;
+        padding: 0.3rem 0.36rem;
+        white-space: pre-wrap;
+    }
+}
+
 .card-parser-option-list {
     display: grid;
     gap: 0.42rem;
@@ -6775,12 +7104,42 @@ export default {
     display: flex;
     gap: 0.4rem;
     justify-content: space-between;
+    min-width: 0;
 }
 
 .card-parser-option-name {
     color: #101828;
     font-size: 0.72rem;
     font-weight: 900;
+    overflow-wrap: anywhere;
+}
+
+.card-parser-option-tools {
+    align-items: center;
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 0.18rem;
+}
+
+.card-parser-option-comment-button {
+    align-items: center;
+    border: 1px solid #dadee4;
+    border-radius: 4px;
+    color: #475467;
+    display: inline-flex;
+    height: 1.35rem;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    width: 1.35rem;
+
+    &:hover,
+    &:focus {
+        background: #eef4ff;
+        border-color: #c7d7fe;
+        color: #3538cd;
+        text-decoration: none;
+    }
 }
 
 .card-parser-option-grid {
@@ -6813,10 +7172,21 @@ export default {
     }
 }
 
+.card-parser-option-comment {
+    background: #f8f9fa;
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    padding: 0.36rem;
+}
+
 @media (max-width: 760px) {
     .card-parser-card,
     .card-parser-panels,
     .card-parser-option-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .rule-contract-list {
         grid-template-columns: 1fr;
     }
 
