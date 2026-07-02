@@ -4,7 +4,8 @@ import {
     OracleParseError,
     oracleTargetMatchesCard,
     parseOracleActions,
-    parseOracleDocument
+    parseOracleDocument,
+    parseOracleSegments
 } from './OracleParser.mjs';
 
 const card = (typeLine, oracleText = '') => {
@@ -217,5 +218,78 @@ describe('OracleParser', () => {
                 cardName: 'Cori Mountain Monastery',
             }),
         ]);
+    });
+
+    test('Feature: Oracle analysis parser emits word-state segments with annotations and unparsable states.', () => {
+        const result = parseOracleDocument([
+            'This land enters tapped unless you control a Plains or an Island.',
+            '{T}: Add {U}.',
+            'Tap target creature.',
+        ].join('\n'), { cardName: 'Segment Fixture' });
+
+        expect(result.segments).toEqual([
+            expect.objectContaining({
+                annotationKind: 'hook',
+                annotations: [
+                    expect.objectContaining({
+                        kind: 'hook',
+                        label: 'ETB hook',
+                    }),
+                ],
+                parser: expect.objectContaining({
+                    mode: 'word-state-machine',
+                    state: 'complete',
+                }),
+                text: 'This land enters tapped unless you control a Plains or an Island.',
+            }),
+            expect.objectContaining({
+                annotationKind: 'option',
+                annotations: [
+                    expect.objectContaining({
+                        kind: 'option',
+                        label: 'Mana ability',
+                    }),
+                ],
+                text: '{T}: Add {U}.',
+            }),
+            expect.objectContaining({
+                annotationKind: 'unsupported',
+                annotations: [
+                    expect.objectContaining({
+                        kind: 'unsupported',
+                        label: 'Unsupported clause',
+                    }),
+                ],
+                parser: expect.objectContaining({
+                    mode: 'word-state-machine',
+                    state: 'unparsable',
+                    unexpectedToken: 'Tap',
+                }),
+                text: 'Tap target creature.',
+            }),
+        ]);
+        expect(result.errors[0]).toMatchObject({
+            code: 'unsupported_oracle_clause',
+            details: expect.objectContaining({
+                parserMode: 'word-state-machine',
+                unexpectedToken: 'Tap',
+            }),
+        });
+    });
+
+    test('Feature: Oracle analysis parser can merge multi-sentence ability text into one annotated segment.', () => {
+        const segments = parseOracleSegments('Whenever you cast a spell, draw a card. This ability triggers only once each turn.');
+
+        expect(segments).toHaveLength(1);
+        expect(segments[0]).toMatchObject({
+            annotationKind: 'hook',
+            text: 'Whenever you cast a spell, draw a card. This ability triggers only once each turn.',
+            annotations: [
+                expect.objectContaining({
+                    kind: 'hook',
+                    label: 'Cast trigger',
+                }),
+            ],
+        });
     });
 });

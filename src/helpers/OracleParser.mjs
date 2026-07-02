@@ -47,6 +47,36 @@ function splitOracleClauses(value) {
         .filter(entry => entry.clause.length > 0);
 }
 
+function oracleWordTokens(value) {
+    return [...normalizeText(value)
+        .replace(/[.;]$/g, '')
+        .matchAll(/\{[^}]+\}:?|[A-Za-z0-9][A-Za-z0-9'’+\-/]*/g)]
+        .map(match => {
+            const raw = match[0];
+            return {
+                raw,
+                value: raw.replace(/:$/, '').toLowerCase(),
+            };
+        });
+}
+
+function parserState(state, extra = {}) {
+    return {
+        mode: 'word-state-machine',
+        state,
+        ...extra,
+    };
+}
+
+function attachParserDetails(details = {}, parser = {}) {
+    return {
+        ...details,
+        parserMode: parser.mode,
+        parserState: parser.state,
+        ...parser.unexpectedToken ? { unexpectedToken: parser.unexpectedToken } : {},
+    };
+}
+
 function parseContext(options = {}) {
     return {
         cardName: options.cardName,
@@ -262,6 +292,67 @@ function parseYouControlPredicate(rawBody) {
     };
 }
 
+function buildModifyTappedAction(value) {
+    return {
+        name: 'modifyPermanent',
+        params: {
+            duration: 'asEntersBattlefield',
+            modifiers: [
+                {
+                    property: 'tapped',
+                    value,
+                },
+            ],
+            target: 'source',
+        },
+    };
+}
+
+function buildEntersBattlefieldStateAction(clause, sourceText, conditionText) {
+    const untappedCondition = conditionText ? parseYouControlPredicate(conditionText) : null;
+    const tappedCondition = untappedCondition
+        ? {
+            name: 'not',
+            params: {
+                condition: untappedCondition,
+            },
+        }
+        : {
+            name: 'always',
+            params: {},
+        };
+    const branches = [
+        {
+            id: 'entersTapped',
+            condition: tappedCondition,
+            state: {
+                tapped: true,
+            },
+            actions: [buildModifyTappedAction(true)],
+        },
+    ];
+    if (untappedCondition) {
+        branches.push({
+            id: 'entersUntapped',
+            condition: untappedCondition,
+            state: {
+                tapped: false,
+            },
+            actions: [buildModifyTappedAction(false)],
+        });
+    }
+
+    return {
+        type: 'hook',
+        raw: clause,
+        event: 'enterBattlefield',
+        source: parseSourceEntityReference(sourceText),
+        destination: 'battlefield',
+        timing: 'asEntersBattlefield',
+        branches,
+    };
+}
+
 function targetObject(selector, raw, candidates, quantity = {}) {
     return {
         selector,
@@ -407,124 +498,707 @@ function parseDamageClause(clause, context) {
     };
 }
 
-function parseEntersBattlefieldStateClause(clause, context) {
-    const normalizedClause = normalizeText(clause).replace(/[.;]$/, '');
-    const match = /^this ([a-z0-9 +/\-]+?) enters(?: the battlefield)? tapped(?: unless (.+))?$/i.exec(normalizedClause);
-    if (!match) {
+function parseEntersBattlefieldStateSegment(clause, context) {
+    const tokens = oracleWordTokens(clause);
+    if (tokens[0]?.value !== 'this') {
         return {
-            actions: [],
-            errors: [],
             handled: false,
         };
     }
 
-    const untappedCondition = match[2] ? parseYouControlPredicate(match[2]) : null;
-    if (match[2] && !untappedCondition) {
+    const entersIndex = tokens.findIndex((token, index) => index > 1 && token.value === 'enters');
+    if (entersIndex < 0) {
+        return {
+            errors: [
+                diagnostic(
+                    'unsupported_oracle_clause',
+                    clause,
+                    'Oracle clause is not supported yet.',
+                    context,
+                    attachParserDetails({}, parserState('unparsable', {
+                        expected: 'enters',
+                        unexpectedToken: tokens[1]?.raw ?? tokens[0]?.raw ?? '',
+                    })),
+                ),
+            ],
+            handled: true,
+            parser: parserState('unparsable', {
+                expected: 'enters',
+                unexpectedToken: tokens[1]?.raw ?? tokens[0]?.raw ?? '',
+            }),
+        };
+    }
+
+    const sourceText = tokens.slice(1, entersIndex).map(token => token.raw).join(' ');
+    let cursor = entersIndex + 1;
+    if (tokens[cursor]?.value === 'the' && tokens[cursor + 1]?.value === 'battlefield') {
+        cursor += 2;
+    } else if (tokens[cursor]?.value === 'battlefield') {
+        cursor += 1;
+    }
+
+    if (tokens[cursor]?.value !== 'tapped') {
+        const parser = parserState('unparsable', {
+            expected: 'tapped',
+            unexpectedToken: tokens[cursor]?.raw ?? '',
+        });
+        return {
+            errors: [
+                diagnostic(
+                    'unsupported_oracle_clause',
+                    clause,
+                    'Oracle clause is not supported yet.',
+                    context,
+                    attachParserDetails({}, parser),
+                ),
+            ],
+            handled: true,
+            parser,
+        };
+    }
+    cursor += 1;
+
+    let conditionText = '';
+    if (cursor < tokens.length) {
+        if (tokens[cursor]?.value !== 'unless') {
+            const parser = parserState('unparsable', {
+                expected: 'unless or end of clause',
+                unexpectedToken: tokens[cursor]?.raw ?? '',
+            });
+            return {
+                errors: [
+                    diagnostic(
+                        'unsupported_oracle_clause',
+                        clause,
+                        'Oracle clause is not supported yet.',
+                        context,
+                        attachParserDetails({}, parser),
+                    ),
+                ],
+                handled: true,
+                parser,
+            };
+        }
+
+        conditionText = tokens.slice(cursor + 1).map(token => token.raw).join(' ');
+        if (!parseYouControlPredicate(conditionText)) {
+            const parser = parserState('unparsable', {
+                expected: 'you control predicate',
+                unexpectedToken: tokens[cursor + 1]?.raw ?? '',
+            });
+            return {
+                errors: [
+                    diagnostic(
+                        'unsupported_enters_tapped_condition',
+                        clause,
+                        'Enters-tapped condition is not supported yet.',
+                        context,
+                        attachParserDetails({ condition: conditionText }, parser),
+                    ),
+                ],
+                handled: true,
+                parser,
+            };
+        }
+    }
+
+    return {
+        actions: [buildEntersBattlefieldStateAction(clause, sourceText, conditionText)],
+        errors: [],
+        handled: true,
+        parser: parserState('complete', {
+            finalState: conditionText ? 'conditionParsed' : 'tappedParsed',
+        }),
+    };
+}
+
+function parseManaAbilitySegment(clause, context) {
+    const tokens = oracleWordTokens(clause);
+    if (!tokens[0]?.raw.endsWith(':') && !/:/.test(clause)) {
+        return {
+            handled: false,
+        };
+    }
+    if (tokens[1]?.value !== 'add') {
+        return {
+            handled: false,
+        };
+    }
+
+    const manaProduced = tokens
+        .slice(2)
+        .map(token => /^\{([^}]+)\}$/.exec(token.raw)?.[1])
+        .filter(Boolean);
+    if (manaProduced.length === 0) {
+        const parser = parserState('unparsable', {
+            expected: 'mana symbol after Add',
+            unexpectedToken: tokens[2]?.raw ?? '',
+        });
+        return {
+            errors: [
+                diagnostic(
+                    'unsupported_mana_ability',
+                    clause,
+                    'Mana ability is not supported yet.',
+                    context,
+                    attachParserDetails({}, parser),
+                ),
+            ],
+            handled: true,
+            parser,
+        };
+    }
+
+    return {
+        actions: [
+            {
+                type: 'manaAbility',
+                raw: clause,
+                cost: tokens[0].raw.replace(/:$/, ''),
+                manaProduced,
+            },
+        ],
+        errors: [],
+        handled: true,
+        parser: parserState('complete', {
+            finalState: 'manaProduced',
+        }),
+    };
+}
+
+function parseDamageSegment(clause, context) {
+    const tokens = oracleWordTokens(clause);
+    const dealsIndex = tokens.findIndex(token => token.value === 'deal' || token.value === 'deals');
+    if (dealsIndex < 0) {
+        return {
+            handled: false,
+        };
+    }
+
+    if (!/^(x|\d+)$/i.test(tokens[dealsIndex + 1]?.raw ?? '')) {
+        const parser = parserState('unparsable', {
+            expected: 'damage amount',
+            unexpectedToken: tokens[dealsIndex + 1]?.raw ?? '',
+        });
         return {
             actions: [],
             errors: [
                 diagnostic(
-                    'unsupported_enters_tapped_condition',
+                    'unsupported_damage_amount',
                     clause,
-                    'Enters-tapped condition is not supported yet.',
+                    'Damage amount expression is not supported yet.',
                     context,
-                    { condition: match[2] },
+                    attachParserDetails({}, parser),
                 ),
             ],
             handled: true,
+            parser,
+        };
+    }
+    if (tokens[dealsIndex + 2]?.value !== 'damage') {
+        const parser = parserState('unparsable', {
+            expected: 'damage',
+            unexpectedToken: tokens[dealsIndex + 2]?.raw ?? '',
+        });
+        return {
+            actions: [],
+            errors: [
+                diagnostic(
+                    'unsupported_damage_target',
+                    clause,
+                    'Damage target expression is not supported yet.',
+                    context,
+                    attachParserDetails({}, parser),
+                ),
+            ],
+            handled: true,
+            parser,
+        };
+    }
+    if (tokens[dealsIndex + 3]?.value !== 'to') {
+        const parser = parserState('unparsable', {
+            expected: 'to',
+            unexpectedToken: tokens[dealsIndex + 3]?.raw ?? '',
+        });
+        return {
+            actions: [],
+            errors: [
+                diagnostic(
+                    'unsupported_damage_target',
+                    clause,
+                    'Damage target expression is not supported yet.',
+                    context,
+                    attachParserDetails({}, parser),
+                ),
+            ],
+            handled: true,
+            parser,
         };
     }
 
-    const modifyTappedAction = value => {
-        return {
-            name: 'modifyPermanent',
-            params: {
-                duration: 'asEntersBattlefield',
-                modifiers: [
-                    {
-                        property: 'tapped',
-                        value,
-                    },
-                ],
-                target: 'source',
-            },
-        };
-    };
-    const tappedCondition = untappedCondition
-        ? {
-            name: 'not',
-            params: {
-                condition: untappedCondition,
-            },
-        }
-        : {
-            name: 'always',
-            params: {},
-        };
-    const branches = [
-        {
-            id: 'entersTapped',
-            condition: tappedCondition,
-            state: {
-                tapped: true,
-            },
-            actions: [modifyTappedAction(true)],
-        },
-    ];
-    if (untappedCondition) {
-        branches.push({
-            id: 'entersUntapped',
-            condition: untappedCondition,
-            state: {
-                tapped: false,
-            },
-            actions: [modifyTappedAction(false)],
+    const damage = parseDamageClause(clause, context);
+    const parser = damage.errors.length > 0
+        ? parserState('unparsable', {
+            expected: 'supported damage target',
+            unexpectedToken: tokens[dealsIndex + 4]?.raw ?? '',
+        })
+        : parserState('complete', {
+            finalState: 'damageTargetParsed',
         });
+    return {
+        ...damage,
+        errors: damage.errors.map(error => {
+            return {
+                ...error,
+                details: attachParserDetails(error.details ?? {}, parser),
+            };
+        }),
+        handled: true,
+        parser,
+    };
+}
+
+function parseTriggeredActionTokens(tokens, cursor) {
+    const current = tokens[cursor]?.value;
+    if (current === 'draw' && tokens[cursor + 1]?.value === 'a' && tokens[cursor + 2]?.value === 'card') {
+        return {
+            action: {
+                name: 'drawCards',
+                params: {
+                    amount: 1,
+                    player: 'hookController',
+                },
+            },
+            nextCursor: cursor + 3,
+        };
+    }
+    if (current === 'mill' && tokens[cursor + 1]?.value === 'a' && tokens[cursor + 2]?.value === 'card') {
+        return {
+            action: {
+                name: 'millCards',
+                params: {
+                    amount: 1,
+                    player: 'hookController',
+                },
+            },
+            nextCursor: cursor + 3,
+        };
+    }
+    if (current === 'scry' && /^\d+$/.test(tokens[cursor + 1]?.raw ?? '')) {
+        return {
+            action: {
+                name: 'scry',
+                params: {
+                    amount: parseInt(tokens[cursor + 1].raw, 10),
+                    player: 'hookController',
+                },
+            },
+            nextCursor: cursor + 2,
+        };
+    }
+    if (current === 'create') {
+        const tokenIndex = tokens.findIndex((token, index) => index > cursor && token.value === 'token');
+        if (tokenIndex > cursor) {
+            const tokenName = tokens
+                .slice(cursor + 1, tokenIndex)
+                .filter(token => !['a', 'an'].includes(token.value))
+                .map(token => token.raw)
+                .join(' ');
+            return {
+                action: {
+                    name: 'createToken',
+                    params: {
+                        controller: 'hookController',
+                        tokenName,
+                    },
+                },
+                nextCursor: tokenIndex + 1,
+            };
+        }
+    }
+
+    return null;
+}
+
+function findTriggeredActionStart(tokens, startIndex) {
+    return tokens.findIndex((token, index) => {
+        return index >= startIndex && ['create', 'draw', 'mill', 'scry'].includes(token.value);
+    });
+}
+
+function supportedTriggerRider(tokens) {
+    return tokens.length === 0 ||
+        tokens.map(token => token.value).join(' ') === 'this ability triggers only once each turn';
+}
+
+function parseSimpleTriggeredAbilitySegment(text, context) {
+    const tokens = oracleWordTokens(text);
+    if (!['whenever', 'when', 'at'].includes(tokens[0]?.value)) {
+        return {
+            handled: false,
+        };
+    }
+
+    let parsedTrigger = null;
+    let actionSearchStart = 1;
+    if (tokens[0].value === 'when' && tokens[1]?.value === 'this') {
+        const entersIndex = tokens.findIndex((token, index) => index > 1 && token.value === 'enters');
+        if (entersIndex < 0) {
+            return {
+                handled: false,
+            };
+        }
+        parsedTrigger = {
+            condition: {
+                name: 'sourceEnteredBattlefield',
+                params: {},
+            },
+            event: 'enterBattlefield',
+        };
+        actionSearchStart = entersIndex + 1;
+        if (tokens[actionSearchStart]?.value === 'the' && tokens[actionSearchStart + 1]?.value === 'battlefield') {
+            actionSearchStart += 2;
+        }
+    } else if (tokens[0].value === 'at' &&
+        tokens[1]?.value === 'the' &&
+        tokens[2]?.value === 'beginning' &&
+        tokens[3]?.value === 'of' &&
+        tokens[4]?.value === 'your' &&
+        tokens[5]?.value === 'upkeep') {
+        parsedTrigger = {
+            condition: {
+                name: 'phaseBeginsForController',
+                params: {
+                    player: 'hookController',
+                },
+            },
+            event: 'beginningOfUpkeep',
+        };
+        actionSearchStart = 6;
+    } else if (tokens[0].value === 'whenever' && tokens[1]?.value === 'you' && tokens[2]?.value === 'gain' && tokens[3]?.value === 'life') {
+        parsedTrigger = {
+            condition: {
+                name: 'playerLifeChanged',
+                params: {
+                    change: 'gain',
+                    player: 'hookController',
+                },
+            },
+            event: 'gainLife',
+        };
+        actionSearchStart = 4;
+    } else if (tokens[0].value === 'whenever' && tokens[1]?.value === 'you' && tokens[2]?.value === 'cast') {
+        parsedTrigger = {
+            condition: {
+                name: 'spellCastMatches',
+                params: {
+                    cardTypes: [],
+                    controller: 'hookController',
+                    nonCreature: false,
+                },
+            },
+            event: 'cast',
+        };
+        actionSearchStart = 3;
+    }
+
+    if (!parsedTrigger) {
+        return {
+            handled: false,
+        };
+    }
+
+    const actionStart = findTriggeredActionStart(tokens, actionSearchStart);
+    const parsedAction = actionStart >= 0 ? parseTriggeredActionTokens(tokens, actionStart) : null;
+    if (!parsedAction) {
+        const parser = parserState('unparsable', {
+            expected: 'supported triggered action',
+            unexpectedToken: tokens[actionSearchStart]?.raw ?? '',
+        });
+        return {
+            errors: [
+                diagnostic(
+                    'unsupported_oracle_clause',
+                    text,
+                    'Oracle clause is not supported yet.',
+                    context,
+                    attachParserDetails({}, parser),
+                ),
+            ],
+            handled: true,
+            parser,
+        };
+    }
+
+    const trailing = tokens.slice(parsedAction.nextCursor);
+    if (!supportedTriggerRider(trailing)) {
+        const parser = parserState('unparsable', {
+            expected: 'end of trigger or once each turn rider',
+            unexpectedToken: trailing[0]?.raw ?? '',
+        });
+        return {
+            errors: [
+                diagnostic(
+                    'unsupported_oracle_clause',
+                    text,
+                    'Oracle clause is not supported yet.',
+                    context,
+                    attachParserDetails({}, parser),
+                ),
+            ],
+            handled: true,
+            parser,
+        };
     }
 
     return {
         actions: [
             {
                 type: 'hook',
-                raw: clause,
-                event: 'enterBattlefield',
-                source: parseSourceEntityReference(match[1]),
-                destination: 'battlefield',
-                timing: 'asEntersBattlefield',
-                branches,
+                raw: text,
+                event: parsedTrigger.event,
+                condition: parsedTrigger.condition,
+                action: parsedAction.action,
+                limit: trailing.length > 0 ? 'onceEachTurn' : null,
             },
         ],
         errors: [],
         handled: true,
+        parser: parserState('complete', {
+            finalState: trailing.length > 0 ? 'limitedTriggerParsed' : 'triggerParsed',
+        }),
     };
+}
+
+function parseCastTriggerSegment(text, context) {
+    const tokens = oracleWordTokens(text);
+    if (!['whenever', 'when', 'at'].includes(tokens[0]?.value)) {
+        return {
+            handled: false,
+        };
+    }
+    if (tokens[1]?.value !== 'you' || tokens[2]?.value !== 'cast') {
+        return {
+            handled: false,
+        };
+    }
+
+    const drawIndex = tokens.findIndex((token, index) => index > 2 && token.value === 'draw');
+    if (drawIndex < 0 || tokens[drawIndex + 2]?.value !== 'card') {
+        const parser = parserState('unparsable', {
+            expected: 'draw a card action',
+            unexpectedToken: tokens[drawIndex < 0 ? 3 : drawIndex + 1]?.raw ?? '',
+        });
+        return {
+            errors: [
+                diagnostic(
+                    'unsupported_oracle_clause',
+                    text,
+                    'Oracle clause is not supported yet.',
+                    context,
+                    attachParserDetails({}, parser),
+                ),
+            ],
+            handled: true,
+            parser,
+        };
+    }
+
+    const trailing = tokens.slice(drawIndex + 3).map(token => token.value);
+    const hasSupportedLimit = trailing.length === 0 ||
+        trailing.join(' ') === 'this ability triggers only once each turn';
+    if (!hasSupportedLimit) {
+        const parser = parserState('unparsable', {
+            expected: 'end of trigger or once each turn rider',
+            unexpectedToken: tokens[drawIndex + 3]?.raw ?? '',
+        });
+        return {
+            errors: [
+                diagnostic(
+                    'unsupported_oracle_clause',
+                    text,
+                    'Oracle clause is not supported yet.',
+                    context,
+                    attachParserDetails({}, parser),
+                ),
+            ],
+            handled: true,
+            parser,
+        };
+    }
+
+    return {
+        actions: [
+            {
+                type: 'hook',
+                raw: text,
+                event: 'cast',
+                condition: {
+                    name: 'spellCastMatches',
+                    params: {
+                        cardTypes: [],
+                        controller: 'hookController',
+                        nonCreature: false,
+                    },
+                },
+                action: {
+                    name: 'drawCards',
+                    params: {
+                        amount: 1,
+                        player: 'hookController',
+                    },
+                },
+                limit: trailing.length > 0 ? 'onceEachTurn' : null,
+            },
+        ],
+        errors: [],
+        handled: true,
+        parser: parserState('complete', {
+            finalState: trailing.length > 0 ? 'limitedTriggerParsed' : 'triggerParsed',
+        }),
+    };
+}
+
+function mergeOracleClauseGroups(clauses) {
+    const groups = [];
+    for (let index = 0; index < clauses.length; index += 1) {
+        const current = clauses[index];
+        const next = clauses[index + 1];
+        if (/^(whenever|when|at)\b/i.test(current.clause) && /^this ability\b/i.test(next?.clause ?? '')) {
+            groups.push([current, next]);
+            index += 1;
+        } else {
+            groups.push([current]);
+        }
+    }
+
+    return groups;
+}
+
+function oracleActionAnnotation(action) {
+    if (action.type === 'hook') {
+        return {
+            detail: action.event ?? 'hook',
+            kind: 'hook',
+            label: action.event === 'enterBattlefield'
+                ? 'ETB hook'
+                : action.event === 'cast'
+                    ? 'Cast trigger'
+                    : `${action.event ?? 'Rule'} hook`,
+        };
+    }
+    if (action.type === 'manaAbility') {
+        return {
+            detail: `Adds ${action.manaProduced.map(symbol => `{${symbol}}`).join('')}`,
+            kind: 'option',
+            label: 'Mana ability',
+        };
+    }
+    if (action.type === 'damage') {
+        const amount = action.amount?.kind === 'number'
+            ? action.amount.value
+            : action.amount?.raw ?? '?';
+        return {
+            detail: 'Spell or ability resolution',
+            kind: 'option',
+            label: `Damage ${amount}`,
+        };
+    }
+
+    return {
+        detail: action.type ?? 'Oracle action',
+        kind: 'option',
+        label: action.type ?? 'Oracle action',
+    };
+}
+
+function annotationKindFor(actions, errors) {
+    if (errors.length > 0) {
+        return 'unsupported';
+    }
+    if (actions.some(action => action.type === 'hook')) {
+        return 'hook';
+    }
+    if (actions.length > 0) {
+        return 'option';
+    }
+    return 'plain';
+}
+
+function parseOracleSegmentGroup(group, groupIndex, context) {
+    const text = group.map(entry => entry.clause).join(' ');
+    const parsers = [
+        parseSimpleTriggeredAbilitySegment,
+        parseCastTriggerSegment,
+        parseEntersBattlefieldStateSegment,
+        parseManaAbilitySegment,
+        parseDamageSegment,
+    ];
+    let parsed = null;
+    for (const parser of parsers) {
+        const result = parser(text, context);
+        if (result.handled) {
+            parsed = result;
+            break;
+        }
+    }
+
+    if (!parsed) {
+        const tokens = oracleWordTokens(text);
+        const parser = parserState('unparsable', {
+            expected: 'supported oracle opener',
+            unexpectedToken: tokens[0]?.raw ?? '',
+        });
+        parsed = {
+            actions: [],
+            errors: [
+                diagnostic(
+                    'unsupported_oracle_clause',
+                    text,
+                    'Oracle clause is not supported yet.',
+                    context,
+                    attachParserDetails({}, parser),
+                ),
+            ],
+            parser,
+        };
+    }
+
+    const actions = parsed.actions ?? [];
+    const errors = parsed.errors ?? [];
+    return {
+        actions,
+        annotationKind: annotationKindFor(actions, errors),
+        annotations: errors.length > 0
+            ? errors.map(error => {
+                return {
+                    detail: error.message,
+                    kind: 'unsupported',
+                    label: 'Unsupported clause',
+                };
+            })
+            : actions.map(oracleActionAnnotation),
+        clauseIndexes: group.map(entry => entry.index),
+        errors,
+        id: `oracle-segment:${groupIndex}`,
+        parser: parsed.parser ?? parserState('complete'),
+        text,
+    };
+}
+
+export function parseOracleSegments(text, options = {}) {
+    const context = parseContext(options);
+    return mergeOracleClauseGroups(splitOracleClauses(text)).map((group, index) => {
+        return parseOracleSegmentGroup(group, index, context);
+    });
 }
 
 export function parseOracleDocument(text, options = {}) {
     const context = parseContext(options);
-    const actions = [];
-    const errors = [];
-    for (const { clause } of splitOracleClauses(text)) {
-        const entersBattlefieldState = parseEntersBattlefieldStateClause(clause, context);
-        actions.push(...entersBattlefieldState.actions);
-        errors.push(...entersBattlefieldState.errors);
-        if (entersBattlefieldState.handled) {
-            continue;
-        }
-
-        const damage = parseDamageClause(clause, context);
-        actions.push(...damage.actions);
-        errors.push(...damage.errors);
-        if (!damage.handled) {
-            errors.push(diagnostic(
-                'unsupported_oracle_clause',
-                clause,
-                'Oracle clause is not supported yet.',
-                context,
-            ));
-        }
-    }
-
-    const result = { actions, errors };
+    const segments = parseOracleSegments(text, options);
+    const actions = segments.flatMap(segment => segment.actions ?? []);
+    const errors = segments.flatMap(segment => segment.errors ?? []);
+    const result = { actions, errors, segments };
     throwIfStrict(result, options);
     return result;
 }

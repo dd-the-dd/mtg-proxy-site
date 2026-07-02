@@ -233,9 +233,11 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Stack only');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Unsupported clause');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).not.toContain('Oracle actions');
-        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Parser gaps');
-        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Possible options');
-        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Resolution actions');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Official oracle analysis');
+        const parserPanelTitles = wrapper.findAll('#card-analysis-parser-inspector .card-parser-panel-title').map(title => title.text());
+        expect(parserPanelTitles).not.toContain('Parser gaps');
+        expect(parserPanelTitles).not.toContain('Rule hooks');
+        expect(parserPanelTitles).not.toContain('Possible options');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Damage 2');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('ETB hook');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Hook timing');
@@ -247,10 +249,12 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('State operation');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('entersTapped');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('entersUntapped');
-        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Hand');
-        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Mana cost {U}');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Word parser');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Tap target creature.');
+        expect(wrapper.findAll('.card-parser-segment-hook').length).toBeGreaterThan(0);
+        expect(wrapper.findAll('.card-parser-segment-option').length).toBeGreaterThan(0);
+        expect(wrapper.findAll('.card-parser-segment-unsupported').length).toBeGreaterThan(0);
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Valid target required');
-        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Stack: spell');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('If all targets are invalid on resolution, the spell fizzles');
         expect(wrapper.find('#card-analysis-rule-definitions').exists()).toBe(true);
         expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def on_gain_life');
@@ -262,22 +266,12 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('-> None');
         expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def option_available');
 
-        const unsupportedFeedback = wrapper.find('.parser-feedback-input');
+        const unsupportedFeedback = wrapper.find('.card-parser-segment-note-input');
         expect(unsupportedFeedback.exists()).toBe(true);
         await unsupportedFeedback.setValue('Need parser support for tap target creature.');
         await component.ctx.flushPendingParserFeedbackSave();
         expect(Object.values(globalThis.__parserFeedbackStore.comments).some(comment => {
             return comment.note === 'Need parser support for tap target creature.';
-        })).toBe(true);
-
-        await wrapper.find('.card-parser-option-comment-button').trigger('click');
-        await wrapper.vm.$nextTick();
-        const optionFeedback = wrapper.find('.card-parser-option-comment-input');
-        expect(optionFeedback.exists()).toBe(true);
-        await optionFeedback.setValue('This option should ask for a target before costs are paid.');
-        await component.ctx.flushPendingParserFeedbackSave();
-        expect(Object.values(globalThis.__parserFeedbackStore.comments).some(comment => {
-            return comment.note === 'This option should ask for a target before costs are paid.';
         })).toBe(true);
 
         component.data.cards = [];

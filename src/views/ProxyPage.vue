@@ -2072,154 +2072,111 @@
                 >
                   {{ report.oracleText }}
                 </div>
-                <div class="card-parser-panels">
-                  <section class="card-parser-panel">
-                    <div class="card-parser-panel-title">
-                      Parser gaps
-                    </div>
+                <section class="card-parser-panel card-parser-panel-oracle">
+                  <div class="card-parser-panel-title">
+                    Official oracle analysis
+                  </div>
+                  <div
+                    v-if="report.oracleSegments.length"
+                    class="card-parser-segment-list"
+                  >
                     <div
-                      v-if="report.oracleErrors.length"
-                      class="card-parser-mini-list"
+                      v-for="segment in report.oracleSegments"
+                      :key="segment.id"
+                      class="card-parser-segment"
+                      :class="`card-parser-segment-${segment.annotationKind}`"
                     >
-                      <div
-                        v-for="(error, errorIndex) in report.oracleErrors"
-                        :key="`oracle-error-${report.key}-${errorIndex}`"
-                        class="card-parser-mini-row card-parser-mini-row-warning"
-                      >
-                        <span>Unsupported clause</span>
-                        <code>{{ error.clause }}</code>
-                        <label class="parser-feedback-field">
-                          <span>Parser note</span>
-                          <textarea
-                            class="form-input parser-feedback-input"
-                            :value="parserFeedbackNote(error.feedbackKey)"
-                            placeholder="Explain what this clause should parse into."
-                            @input="updateParserFeedback(error.feedbackKey, error.feedbackSubject, $event.target.value)"
-                          />
-                        </label>
-                      </div>
-                    </div>
-                    <div
-                      v-else
-                      class="card-parser-empty"
-                    >
-                      No parser gaps.
-                    </div>
-                  </section>
-                  <section class="card-parser-panel">
-                    <div class="card-parser-panel-title">
-                      Rule hooks
-                    </div>
-                    <div
-                      v-if="report.hooks.length"
-                      class="card-parser-hook-list"
-                    >
-                      <div
-                        v-for="hook in report.hooks"
-                        :key="hook.id"
-                        class="card-parser-hook"
-                      >
-                        <div class="card-parser-hook-main">
-                          <span
-                            class="card-parser-status"
-                            :class="`card-parser-status-${hook.support.status}`"
-                          >
-                            {{ hook.support.label }}
-                          </span>
-                          <span>{{ hook.label ?? hook.event }}</span>
-                          <span>{{ hook.condition?.name ?? hook.branchLabel }}</span>
-                          <span>{{ hook.action?.name ?? hook.actionLabel }}</span>
-                        </div>
-                        <div class="card-parser-hook-detail">
-                          {{ hook.support.detail }}
-                        </div>
-                        <div class="card-parser-hook-logic">
-                          <div class="card-parser-hook-logic-cell">
-                            <span>Hook timing</span>
-                            <strong>{{ hookTimingLabel(hook) }}</strong>
-                          </div>
-                          <div class="card-parser-hook-logic-cell">
-                            <span>Activation logic</span>
-                            <code>{{ hookActivationExpression(hook) }}</code>
-                          </div>
-                        </div>
-                        <div class="card-parser-hook-actions">
-                          <div class="card-parser-hook-actions-title">
-                            Hook actions
-                          </div>
-                          <div
-                            v-for="actionRow in hookActionRows(hook)"
-                            :key="`${hook.id}-${actionRow.id}`"
-                            class="card-parser-hook-action-row"
-                          >
-                            <div class="card-parser-hook-action-scope">
-                              {{ actionRow.scope }}
-                            </div>
-                            <div class="card-parser-hook-action-cell">
-                              <span>Activation logic</span>
-                              <code>{{ actionRow.activationLogic }}</code>
-                            </div>
-                            <div class="card-parser-hook-action-cell">
-                              <span>Action</span>
-                              <strong>{{ actionRow.name }}</strong>
-                              <code v-if="config.showRuleDefinitions && actionRow.definition">{{ actionRow.definition.signature }}</code>
-                            </div>
-                            <div class="card-parser-hook-action-cell">
-                              <span>Action cost</span>
-                              <strong>{{ actionRow.cost }}</strong>
-                            </div>
-                            <div class="card-parser-hook-action-cell">
-                              <span>State operation</span>
-                              <code>{{ actionRow.effect }}</code>
-                            </div>
-                          </div>
-                        </div>
-                        <div
-                          v-if="config.showRuleDefinitions"
-                          class="card-parser-hook-definitions"
+                      <div class="card-parser-segment-header">
+                        <span
+                          v-for="annotation in segment.annotations"
+                          :key="`${segment.id}-${annotation.kind}-${annotation.label}`"
+                          class="card-parser-segment-chip"
+                          :class="`card-parser-segment-chip-${annotation.kind}`"
                         >
-                          <pre v-if="hook.eventDefinition">{{ hook.eventDefinition.signature }}</pre>
-                          <pre v-if="hook.conditionDefinition">{{ hook.conditionDefinition.signature }}</pre>
-                          <pre v-if="hook.actionDefinition">{{ hook.actionDefinition.signature }}</pre>
+                          {{ annotation.label }}
+                        </span>
+                        <span class="card-parser-segment-parser">
+                          Word parser: {{ segment.parser.state }}
+                        </span>
+                      </div>
+                      <p class="card-parser-segment-text">
+                        {{ segment.text }}
+                      </p>
+                      <div
+                        v-if="segment.hookReports.length"
+                        class="card-parser-segment-hooks"
+                      >
+                        <div
+                          v-for="hook in segment.hookReports"
+                          :key="hook.id"
+                          class="card-parser-hook"
+                        >
+                          <div class="card-parser-hook-main">
+                            <span
+                              class="card-parser-status"
+                              :class="`card-parser-status-${hook.support.status}`"
+                            >
+                              {{ hook.support.label }}
+                            </span>
+                            <span>{{ hook.label ?? hook.event }}</span>
+                            <span>{{ hook.condition?.name ?? hook.branchLabel }}</span>
+                            <span>{{ hook.action?.name ?? hook.actionLabel }}</span>
+                          </div>
+                          <div class="card-parser-hook-detail">
+                            {{ hook.support.detail }}
+                          </div>
+                          <div class="card-parser-hook-logic">
+                            <div class="card-parser-hook-logic-cell">
+                              <span>Hook timing</span>
+                              <strong>{{ hookTimingLabel(hook) }}</strong>
+                            </div>
+                            <div class="card-parser-hook-logic-cell">
+                              <span>Activation logic</span>
+                              <code>{{ hookActivationExpression(hook) }}</code>
+                            </div>
+                          </div>
+                          <div class="card-parser-hook-actions">
+                            <div class="card-parser-hook-actions-title">
+                              Hook actions
+                            </div>
+                            <div
+                              v-for="actionRow in hookActionRows(hook)"
+                              :key="`${hook.id}-${actionRow.id}`"
+                              class="card-parser-hook-action-row"
+                            >
+                              <div class="card-parser-hook-action-scope">
+                                {{ actionRow.scope }}
+                              </div>
+                              <div class="card-parser-hook-action-cell">
+                                <span>Activation logic</span>
+                                <code>{{ actionRow.activationLogic }}</code>
+                              </div>
+                              <div class="card-parser-hook-action-cell">
+                                <span>Action</span>
+                                <strong>{{ actionRow.name }}</strong>
+                                <code v-if="config.showRuleDefinitions && actionRow.definition">{{ actionRow.definition.signature }}</code>
+                              </div>
+                              <div class="card-parser-hook-action-cell">
+                                <span>Action cost</span>
+                                <strong>{{ actionRow.cost }}</strong>
+                              </div>
+                              <div class="card-parser-hook-action-cell">
+                                <span>State operation</span>
+                                <code>{{ actionRow.effect }}</code>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div
-                      v-else
-                      class="card-parser-empty"
-                    >
-                      No rule-trigger hook parsed.
-                    </div>
-                  </section>
-                  <section class="card-parser-panel card-parser-panel-options">
-                    <div class="card-parser-panel-title">
-                      Possible options
-                    </div>
-                    <div
-                      v-if="report.options.length"
-                      class="card-parser-option-list"
-                    >
                       <div
-                        v-for="option in report.options"
-                        :key="option.id"
-                        class="card-parser-option"
+                        v-if="segment.optionDetails.length"
+                        class="card-parser-segment-options"
                       >
-                        <div class="card-parser-option-header">
-                          <span class="card-parser-option-name">{{ option.label }}</span>
-                          <span class="card-parser-option-tools">
-                            <span class="card-parser-status card-parser-status-empty">{{ option.sourceZoneLabel }}</span>
-                            <button
-                              type="button"
-                              class="btn btn-link card-parser-option-comment-button"
-                              title="Comment option"
-                              :aria-label="`Comment ${option.label}`"
-                              @click="toggleParserComment(option.feedbackKey)"
-                            >
-                              <i class="icon icon-edit" />
-                            </button>
-                          </span>
-                        </div>
-                        <div class="card-parser-option-grid">
+                        <div
+                          v-for="option in segment.optionDetails"
+                          :key="`${segment.id}-${option.id}`"
+                          class="card-parser-option-grid"
+                        >
                           <div class="card-parser-option-cell">
                             <span>Cost / condition</span>
                             <strong>{{ option.costSummary }}</strong>
@@ -2237,46 +2194,25 @@
                             <strong>{{ option.resolutionSummary }}</strong>
                           </div>
                         </div>
-                        <div
-                          v-if="option.resolutionActions?.length"
-                          class="card-parser-option-actions"
-                        >
-                          <div class="card-parser-option-actions-title">
-                            Resolution actions
-                          </div>
-                          <div class="card-parser-mini-list">
-                            <div
-                              v-for="(action, actionIndex) in option.resolutionActions"
-                              :key="`${option.id}-resolution-action-${actionIndex}`"
-                              class="card-parser-mini-row"
-                            >
-                              <span>{{ oracleActionLabel(action) }}</span>
-                              <code>{{ compactJson(action.targets ?? action.branches ?? []) }}</code>
-                            </div>
-                          </div>
-                        </div>
-                        <label
-                          v-if="isParserCommentOpen(option.feedbackKey)"
-                          class="parser-feedback-field card-parser-option-comment"
-                        >
-                          <span>Option note</span>
-                          <textarea
-                            class="form-input parser-feedback-input card-parser-option-comment-input"
-                            :value="parserFeedbackNote(option.feedbackKey)"
-                            placeholder="Comment the option, cost, target timing, stack, or resolution."
-                            @input="updateParserFeedback(option.feedbackKey, option.feedbackSubject, $event.target.value)"
-                          />
-                        </label>
                       </div>
+                      <label class="parser-feedback-field card-parser-segment-note">
+                        <span>Line note</span>
+                        <textarea
+                          class="form-input parser-feedback-input card-parser-segment-note-input"
+                          :value="parserFeedbackNote(segment.feedbackKey)"
+                          placeholder="Comment how this official text should parse."
+                          @input="updateParserFeedback(segment.feedbackKey, segment.feedbackSubject, $event.target.value)"
+                        />
+                      </label>
                     </div>
-                    <div
-                      v-else
-                      class="card-parser-empty"
-                    >
-                      No player option inferred yet.
-                    </div>
-                  </section>
-                </div>
+                  </div>
+                  <div
+                    v-else
+                    class="card-parser-empty"
+                  >
+                    No oracle text to analyze.
+                  </div>
+                </section>
               </div>
             </article>
           </div>
@@ -4111,6 +4047,25 @@ export default {
             return reports;
         },
         buildOracleHookReport(card, action, index) {
+            if (!action.branches?.length) {
+                const support = this.gameEngineSupportForHook({
+                    action: action.action,
+                    condition: action.condition,
+                    event: action.event,
+                });
+                return {
+                    ...action,
+                    actionDefinition: ruleDefinitionForName(action.action?.name),
+                    actionLabel: action.action?.name ?? 'hook action',
+                    branchLabel: action.condition?.name ?? 'condition',
+                    conditionDefinition: ruleDefinitionForName(action.condition?.name),
+                    eventDefinition: ruleDefinitionForName(action.event),
+                    id: `oracle-hook:${this.cardRuntimeKey(card)}:${index}`,
+                    label: action.event === 'enterBattlefield' ? 'ETB hook' : `${action.event ?? 'Rule'} hook`,
+                    support,
+                };
+            }
+
             const branchActionNames = [
                 ...new Set((action.branches ?? []).flatMap(branch => {
                     return (branch.actions ?? []).map(branchAction => branchAction.name).filter(Boolean);
@@ -4138,6 +4093,41 @@ export default {
                     status: 'partial',
                 },
             };
+        },
+        buildOracleSegmentHookReports(card, segment) {
+            return (segment.actions ?? [])
+                .filter(action => action.type === 'hook')
+                .map((action, index) => this.buildOracleHookReport(card, action, index));
+        },
+        buildOracleSegmentOptionDetails(segment, options = []) {
+            const hasOptionAnnotation = (segment.annotations ?? []).some(annotation => annotation.kind === 'option');
+            const hasTargetText = /\btarget\b/i.test(segment.text ?? '');
+            if (!hasOptionAnnotation && !hasTargetText) {
+                return [];
+            }
+
+            const preferred = options.find(option => option.sourceZone === 'hand') ?? options[0];
+            return preferred ? [preferred] : [];
+        },
+        buildOracleSegmentReports(card, segments = [], options = []) {
+            return segments.map((segment, index) => {
+                const hookReports = this.buildOracleSegmentHookReports(card, segment);
+                return {
+                    ...segment,
+                    feedbackKey: this.parserFeedbackKey(
+                        'oracle-segment',
+                        card,
+                        `${segment.text ?? ''}:${index}`,
+                    ),
+                    feedbackSubject: this.parserFeedbackSubject('oracleSegment', card, {
+                        annotationKind: segment.annotationKind,
+                        parserState: segment.parser?.state,
+                        text: segment.text,
+                    }),
+                    hookReports,
+                    optionDetails: this.buildOracleSegmentOptionDetails(segment, options),
+                };
+            });
         },
         hookTimingLabel(hook) {
             const timingLabels = {
@@ -4311,6 +4301,7 @@ export default {
             const coverage = this.cardParserCoverage(oracleResult, oracleText);
             const oracleHookActions = oracleResult.actions.filter(action => action.type === 'hook');
             const oracleOptionActions = oracleResult.actions.filter(action => action.type !== 'hook');
+            const options = this.buildCardOptionReports(card, oracleOptionActions);
             const hooks = [
                 ...parseRuleHooksFromCard(card, {
                     controllerKey: 'you',
@@ -4354,9 +4345,10 @@ export default {
                 imageUrl: selectedData.urlFront ?? selectedData.imageUrl ?? './card_back_border_crop.jpg',
                 key: this.cardRuntimeKey(card),
                 name: card.name ?? selectedData.name ?? 'unknown card',
-                options: this.buildCardOptionReports(card, oracleOptionActions),
+                options,
                 oracleActions: oracleOptionActions,
                 oracleErrors,
+                oracleSegments: this.buildOracleSegmentReports(card, oracleResult.segments ?? [], options),
                 oracleText,
                 quantity: card.quantity ?? 1,
                 typeLine: selectedData.typeLine ?? card.typeLine ?? '',
@@ -7198,10 +7190,116 @@ export default {
     grid-column: 1 / -1;
 }
 
+.card-parser-panel-oracle {
+    background: #fff;
+}
+
 .card-parser-panel-title {
     color: #101828;
     font-size: 0.68rem;
     font-weight: 900;
+}
+
+.card-parser-segment-list {
+    display: grid;
+    gap: 0.42rem;
+}
+
+.card-parser-segment {
+    border: 1px solid #e4e7ec;
+    border-left-width: 0.28rem;
+    border-radius: 5px;
+    display: grid;
+    gap: 0.36rem;
+    min-width: 0;
+    padding: 0.48rem;
+}
+
+.card-parser-segment-hook {
+    background: #f5f8ff;
+    border-color: #c7d7fe;
+    border-left-color: #3538cd;
+}
+
+.card-parser-segment-option {
+    background: #f6fef9;
+    border-color: #abefc6;
+    border-left-color: #079455;
+}
+
+.card-parser-segment-unsupported {
+    background: #fff6f5;
+    border-color: #fecdca;
+    border-left-color: #d92d20;
+}
+
+.card-parser-segment-plain {
+    background: #f8f9fa;
+    border-left-color: #98a2b3;
+}
+
+.card-parser-segment-header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+    min-width: 0;
+}
+
+.card-parser-segment-chip,
+.card-parser-segment-parser {
+    border: 1px solid #dadee4;
+    border-radius: 999px;
+    font-size: 0.58rem;
+    font-weight: 900;
+    line-height: 1;
+    padding: 0.22rem 0.38rem;
+}
+
+.card-parser-segment-chip-hook {
+    background: #eef4ff;
+    border-color: #c7d7fe;
+    color: #3538cd;
+}
+
+.card-parser-segment-chip-option {
+    background: #ecfdf3;
+    border-color: #abefc6;
+    color: #067647;
+}
+
+.card-parser-segment-chip-unsupported {
+    background: #fef3f2;
+    border-color: #fecdca;
+    color: #b42318;
+}
+
+.card-parser-segment-parser {
+    background: rgb(255 255 255 / 72%);
+    color: #667085;
+}
+
+.card-parser-segment-text {
+    color: #101828;
+    font-size: 0.78rem;
+    font-weight: 750;
+    line-height: 1.35;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.card-parser-segment-hooks,
+.card-parser-segment-options {
+    display: grid;
+    gap: 0.34rem;
+}
+
+.card-parser-segment-note {
+    background: rgb(255 255 255 / 68%);
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    margin-top: 0;
+    padding: 0.36rem;
 }
 
 .card-parser-mini-list,
