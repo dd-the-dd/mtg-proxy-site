@@ -2113,6 +2113,50 @@
                       No rule-trigger hook parsed.
                     </div>
                   </section>
+                  <section class="card-parser-panel card-parser-panel-options">
+                    <div class="card-parser-panel-title">
+                      Possible options
+                    </div>
+                    <div
+                      v-if="report.options.length"
+                      class="card-parser-option-list"
+                    >
+                      <div
+                        v-for="option in report.options"
+                        :key="option.id"
+                        class="card-parser-option"
+                      >
+                        <div class="card-parser-option-header">
+                          <span class="card-parser-option-name">{{ option.label }}</span>
+                          <span class="card-parser-status card-parser-status-empty">{{ option.sourceZoneLabel }}</span>
+                        </div>
+                        <div class="card-parser-option-grid">
+                          <div class="card-parser-option-cell">
+                            <span>Cost / condition</span>
+                            <strong>{{ option.costSummary }}</strong>
+                          </div>
+                          <div class="card-parser-option-cell">
+                            <span>Target</span>
+                            <strong>{{ option.targetSummary }}</strong>
+                          </div>
+                          <div class="card-parser-option-cell">
+                            <span>Stack</span>
+                            <strong>{{ option.stackSummary }}</strong>
+                          </div>
+                          <div class="card-parser-option-cell">
+                            <span>Resolution</span>
+                            <strong>{{ option.resolutionSummary }}</strong>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      v-else
+                      class="card-parser-empty"
+                    >
+                      No player option inferred yet.
+                    </div>
+                  </section>
                 </div>
               </div>
             </article>
@@ -2352,6 +2396,8 @@ import {
     buildGameSimulation,
     buildPlayerDecisionOptions,
     findNextInteractiveStepIndex,
+    manaAbilitiesForCard,
+    parseManaCost,
     parseRuleHooksFromCard,
     ruleEventTypes
 } from "../helpers/GameSimulator.mjs";
@@ -3548,6 +3594,293 @@ export default {
                 status: 'partial',
             };
         },
+        cardTypeLine(card) {
+            const selectedData = this.selectedCardData(card);
+            return selectedData.typeLine ?? card?.typeLine ?? '';
+        },
+        cardOracleText(card) {
+            const selectedData = this.selectedCardData(card);
+            return selectedData.oracleText ?? card?.oracleText ?? '';
+        },
+        cardManaCost(card) {
+            const selectedData = this.selectedCardData(card);
+            return selectedData.manaCost ?? card?.manaCost ?? '';
+        },
+        cardIsLand(card) {
+            return /\bland\b/i.test(this.cardTypeLine(card));
+        },
+        cardIsCreature(card) {
+            return /\bcreature\b/i.test(this.cardTypeLine(card));
+        },
+        cardIsInstant(card) {
+            return /\binstant\b/i.test(this.cardTypeLine(card));
+        },
+        cardIsSorcery(card) {
+            return /\bsorcery\b/i.test(this.cardTypeLine(card));
+        },
+        cardIsPermanent(card) {
+            return !this.cardIsInstant(card) && !this.cardIsSorcery(card);
+        },
+        cardCanUseFromGraveyard(card) {
+            const oracleText = this.cardOracleText(card);
+            return /\b(?:cast|play|return)\b[^.]*\bfrom your graveyard\b/i.test(oracleText) ||
+                /\b(?:flashback|jump-start|escape|disturb|aftermath)\b/i.test(oracleText);
+        },
+        cardCanUseFromExile(card) {
+            const oracleText = this.cardOracleText(card);
+            return /\b(?:cast|play)\b[^.]*\bfrom exile\b/i.test(oracleText) ||
+                /\b(?:adventure|plot|foretell|suspend)\b/i.test(oracleText);
+        },
+        sourceZoneLabel(sourceZone) {
+            const labels = {
+                battlefield: 'Battlefield',
+                exile: 'Exile',
+                graveyard: 'Graveyard',
+                hand: 'Hand',
+            };
+
+            return labels[sourceZone] ?? sourceZone;
+        },
+        manaCostText(card) {
+            const manaCost = this.cardManaCost(card);
+            const parsed = parseManaCost(manaCost);
+            const hasCost = parsed.generic > 0 ||
+                ['W', 'U', 'B', 'R', 'G', 'C'].some(symbol => parsed.colored[symbol] > 0);
+            return hasCost ? `Mana cost ${manaCost}` : 'Mana cost {0}';
+        },
+        targetSummaryForCard(card, oracleActions = []) {
+            const targets = oracleActions.flatMap(action => action.targets ?? []);
+            if (targets.length > 0) {
+                const targetNames = [...new Set(targets.flatMap(target => {
+                    return (target.candidates ?? []).map(candidate => {
+                        if (candidate.entity === 'player') {
+                            return candidate.role === 'opponent' ? 'opponent' : 'player';
+                        }
+
+                        const types = candidate.cardTypes?.length
+                            ? candidate.cardTypes.join('/')
+                            : 'permanent';
+                        return [
+                            ...(candidate.supertypes ?? []),
+                            ...(candidate.colors ?? []),
+                            types,
+                        ].filter(Boolean).join(' ');
+                    });
+                }))];
+                return `Valid target required: ${targetNames.join(', ')}`;
+            }
+
+            const oracleText = this.cardOracleText(card);
+            const targetMatch = /\btarget ([^.]+?)(?:\.|,|$)/i.exec(oracleText);
+            if (targetMatch) {
+                return `Valid target required: ${targetMatch[1].trim()}`;
+            }
+
+            return 'No target required';
+        },
+        additionalCastCosts(card) {
+            const oracleText = this.cardOracleText(card);
+            const costs = [];
+            if (/\bas an additional cost to cast (?:this spell|it)[^.]*discard a card\b/i.test(oracleText)) {
+                costs.push('Discard a card');
+            }
+            if (/\bas an additional cost to cast (?:this spell|it)[^.]*sacrifice\b/i.test(oracleText)) {
+                costs.push('Sacrifice requirement');
+            }
+
+            return costs;
+        },
+        stackSummaryForOption(kind) {
+            if (kind === 'playLand') {
+                return 'Special action: no stack';
+            }
+            if (kind === 'mana') {
+                return 'Mana ability: no stack';
+            }
+            if (kind === 'attack') {
+                return 'Combat action: no stack';
+            }
+            if (kind === 'activate') {
+                return 'Stack: ability';
+            }
+
+            return 'Stack: spell';
+        },
+        resolutionSummaryForOption(kind, targetSummary, destination) {
+            const hasTarget = targetSummary !== 'No target required';
+            if (kind === 'playLand') {
+                return 'Land enters the battlefield immediately.';
+            }
+            if (kind === 'mana') {
+                return 'Mana is added immediately and empties at the next step.';
+            }
+            if (kind === 'attack') {
+                return 'Creature becomes attacking and taps if required.';
+            }
+            if (kind === 'activate') {
+                return hasTarget
+                    ? 'If all targets are invalid on resolution, the ability fizzles; costs stay paid.'
+                    : 'Ability resolves after all players pass priority.';
+            }
+
+            if (hasTarget) {
+                return destination === 'battlefield'
+                    ? 'If all targets are invalid on resolution, the spell fizzles; otherwise it resolves as a permanent.'
+                    : 'If all targets are invalid on resolution, the spell fizzles and still moves to graveyard.';
+            }
+
+            return destination === 'battlefield'
+                ? 'Resolves as a permanent on the battlefield.'
+                : 'Resolves its effect, then moves to graveyard.';
+        },
+        castDestinationForCard(card) {
+            return this.cardIsPermanent(card) ? 'battlefield' : 'graveyard';
+        },
+        buildCastOptionReport(card, sourceZone, oracleActions) {
+            const targetSummary = this.targetSummaryForCard(card, oracleActions);
+            const costs = [
+                this.manaCostText(card),
+                ...this.additionalCastCosts(card),
+                targetSummary !== 'No target required'
+                    ? 'Valid target required before paying costs'
+                    : 'No target choice while paying costs',
+                this.cardIsInstant(card)
+                    ? 'Instant timing'
+                    : 'Sorcery timing / main phase',
+            ];
+            const destination = this.castDestinationForCard(card);
+
+            return {
+                costSummary: costs.join('; '),
+                id: `cast:${sourceZone}:${this.cardRuntimeKey(card)}`,
+                label: sourceZone === 'hand'
+                    ? 'Cast spell'
+                    : `Cast from ${this.sourceZoneLabel(sourceZone).toLowerCase()}`,
+                resolutionSummary: this.resolutionSummaryForOption('cast', targetSummary, destination),
+                sourceZone,
+                sourceZoneLabel: this.sourceZoneLabel(sourceZone),
+                stackSummary: this.stackSummaryForOption('cast'),
+                targetSummary,
+            };
+        },
+        buildLandOptionReports(card) {
+            const oracleText = this.cardOracleText(card);
+            const hasPayLifeChoice = /\bpay 2 life\b/i.test(oracleText) && /\benters? tapped\b/i.test(oracleText);
+            const base = {
+                id: `play-land:${this.cardRuntimeKey(card)}`,
+                label: 'Play land',
+                resolutionSummary: this.resolutionSummaryForOption('playLand', 'No target required'),
+                sourceZone: 'hand',
+                sourceZoneLabel: this.sourceZoneLabel('hand'),
+                stackSummary: this.stackSummaryForOption('playLand'),
+                targetSummary: 'No target required',
+            };
+
+            if (hasPayLifeChoice) {
+                return [
+                    {
+                        ...base,
+                        costSummary: 'Land play available; active player main phase; choose pay 2 life to enter untapped',
+                        id: `${base.id}:pay-life`,
+                        label: 'Play untapped',
+                    },
+                    {
+                        ...base,
+                        costSummary: 'Land play available; active player main phase; choose enters tapped',
+                        id: `${base.id}:tapped`,
+                        label: 'Play tapped',
+                    },
+                ];
+            }
+
+            return [
+                {
+                    ...base,
+                    costSummary: 'Land play available; active player main phase',
+                },
+            ];
+        },
+        activatedAbilityTextParts(card) {
+            return this.cardOracleText(card)
+                .split(/\n+/)
+                .map(line => line.trim())
+                .filter(line => line.includes(':'))
+                .filter(line => !/\badd\b/i.test(line));
+        },
+        buildBattlefieldOptionReports(card, oracleActions) {
+            const reports = [];
+            for (const ability of manaAbilitiesForCard(card)) {
+                reports.push({
+                    costSummary: 'Tap source; source untapped',
+                    id: `mana:${this.cardRuntimeKey(card)}:${ability.manaProduced.join('')}`,
+                    label: ability.label,
+                    resolutionSummary: this.resolutionSummaryForOption('mana', 'No target required'),
+                    sourceZone: 'battlefield',
+                    sourceZoneLabel: this.sourceZoneLabel('battlefield'),
+                    stackSummary: this.stackSummaryForOption('mana'),
+                    targetSummary: 'No target required',
+                });
+            }
+
+            for (const [index, abilityText] of this.activatedAbilityTextParts(card).entries()) {
+                const [rawCost, rawEffect] = abilityText.split(/:\s*/, 2);
+                const targetSummary = /\btarget\b/i.test(rawEffect ?? '')
+                    ? this.targetSummaryForCard({ ...card, selectedOption: { ...this.selectedCardData(card), oracleText: rawEffect } }, oracleActions)
+                    : 'No target required';
+                reports.push({
+                    costSummary: [
+                        rawCost?.trim() || 'Activated cost',
+                        targetSummary !== 'No target required'
+                            ? 'Valid target required before paying costs'
+                            : null,
+                    ].filter(Boolean).join('; '),
+                    id: `activate:${this.cardRuntimeKey(card)}:${index}`,
+                    label: 'Activate ability',
+                    resolutionSummary: this.resolutionSummaryForOption('activate', targetSummary),
+                    sourceZone: 'battlefield',
+                    sourceZoneLabel: this.sourceZoneLabel('battlefield'),
+                    stackSummary: this.stackSummaryForOption('activate'),
+                    targetSummary,
+                });
+            }
+
+            if (this.cardIsCreature(card)) {
+                reports.push({
+                    costSummary: 'Declare attackers step; creature untapped; no summoning sickness; tap if required',
+                    id: `attack:${this.cardRuntimeKey(card)}`,
+                    label: 'Attack',
+                    resolutionSummary: this.resolutionSummaryForOption('attack', 'No target required'),
+                    sourceZone: 'battlefield',
+                    sourceZoneLabel: this.sourceZoneLabel('battlefield'),
+                    stackSummary: this.stackSummaryForOption('attack'),
+                    targetSummary: 'No target required',
+                });
+            }
+
+            return reports;
+        },
+        buildCardOptionReports(card, oracleActions = []) {
+            if (this.cardIsLand(card)) {
+                return [
+                    ...this.buildLandOptionReports(card),
+                    ...this.buildBattlefieldOptionReports(card, oracleActions),
+                ];
+            }
+
+            const reports = [
+                this.buildCastOptionReport(card, 'hand', oracleActions),
+                ...this.buildBattlefieldOptionReports(card, oracleActions),
+            ];
+
+            if (this.cardCanUseFromGraveyard(card)) {
+                reports.push(this.buildCastOptionReport(card, 'graveyard', oracleActions));
+            }
+            if (this.cardCanUseFromExile(card)) {
+                reports.push(this.buildCastOptionReport(card, 'exile', oracleActions));
+            }
+
+            return reports;
+        },
         buildCardParserReport(card) {
             const selectedData = this.selectedCardData(card);
             const oracleText = selectedData.oracleText ?? card.oracleText ?? '';
@@ -3577,6 +3910,7 @@ export default {
                 imageUrl: selectedData.urlFront ?? selectedData.imageUrl ?? './card_back_border_crop.jpg',
                 key: this.cardRuntimeKey(card),
                 name: card.name ?? selectedData.name ?? 'unknown card',
+                options: this.buildCardOptionReports(card, oracleResult.actions),
                 oracleActions: oracleResult.actions,
                 oracleErrors: oracleResult.errors,
                 oracleText,
@@ -6356,6 +6690,10 @@ export default {
     padding: 0.48rem;
 }
 
+.card-parser-panel-options {
+    grid-column: 1 / -1;
+}
+
 .card-parser-panel-title {
     color: #101828;
     font-size: 0.68rem;
@@ -6418,9 +6756,67 @@ export default {
     line-height: 1.25;
 }
 
+.card-parser-option-list {
+    display: grid;
+    gap: 0.42rem;
+}
+
+.card-parser-option {
+    background: #fff;
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.42rem;
+    padding: 0.46rem;
+}
+
+.card-parser-option-header {
+    align-items: center;
+    display: flex;
+    gap: 0.4rem;
+    justify-content: space-between;
+}
+
+.card-parser-option-name {
+    color: #101828;
+    font-size: 0.72rem;
+    font-weight: 900;
+}
+
+.card-parser-option-grid {
+    display: grid;
+    gap: 0.35rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.card-parser-option-cell {
+    background: #f8f9fa;
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    display: grid;
+    gap: 0.18rem;
+    min-width: 0;
+    padding: 0.34rem 0.38rem;
+
+    span {
+        color: #667085;
+        font-size: 0.58rem;
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+
+    strong {
+        color: #303742;
+        font-size: 0.64rem;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+    }
+}
+
 @media (max-width: 760px) {
     .card-parser-card,
-    .card-parser-panels {
+    .card-parser-panels,
+    .card-parser-option-grid {
         grid-template-columns: 1fr;
     }
 

@@ -191,6 +191,7 @@ describe('Core Rendering', async () => {
                 quantity: 1,
                 name: 'tap spell',
                 selectedOption: {
+                    manaCost: '{U}',
                     oracleText: 'Tap target creature.',
                     typeLine: 'Instant',
                     urlFront: 'tap-front',
@@ -208,6 +209,12 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Engine-ready');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Stack only');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Unsupported clause');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Possible options');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Hand');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Mana cost {U}');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Valid target required');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Stack: spell');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('If all targets are invalid on resolution, the spell fizzles');
 
         component.data.cards = [];
         component.data.config.activeWorkspaceTab = 'deck';
