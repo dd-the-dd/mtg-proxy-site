@@ -10,10 +10,13 @@
     "lint:fix": "eslint --fix",
     "cards": "node download-scryfall-cards.mjs",
     "cards:update": "node download-scryfall-cards.mjs --update",
+    "engine:dev": "cargo run --manifest-path rust/mtg-engine/Cargo.toml --bin mtg-engine-server",
+    "engine:test": "cargo test --manifest-path rust/mtg-engine/Cargo.toml",
     "test": "vitest run",
     "test:watch": "vitest watch"
   },
   "dependencies": {
+    "mana-font": "^1.18.0",
     "spectre.css": "^0.5.9",
     "vue": "^3.5.31",
     "vue-i18n": "^11.2.8"
