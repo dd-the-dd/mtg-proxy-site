@@ -2087,7 +2087,7 @@
                         class="card-parser-mini-row"
                       >
                         <span>{{ oracleActionLabel(action) }}</span>
-                        <code>{{ compactJson(action.targets ?? []) }}</code>
+                        <code>{{ compactJson(action.targets ?? action.branches ?? []) }}</code>
                       </div>
                     </div>
                     <div
@@ -4160,8 +4160,8 @@ export default {
                 return `Damage ${amount}`;
             }
 
-            if (action.type === 'entersBattlefieldState') {
-                return action.state?.tapped ? 'ETB tapped state' : 'ETB state modifier';
+            if (action.type === 'hook') {
+                return action.event === 'enterBattlefield' ? 'ETB hook' : `${action.event ?? 'Rule'} hook`;
             }
 
             return action.type ?? 'Oracle action';

@@ -156,40 +156,59 @@ describe('OracleParser', () => {
         expect(result.errors).toEqual([]);
         expect(result.actions).toHaveLength(3);
         expect(result.actions[0]).toMatchObject({
-            type: 'entersBattlefieldState',
+            type: 'hook',
+            event: 'enterBattlefield',
             source: {
                 reference: 'this',
                 cardTypes: ['land'],
             },
-            state: {
-                tapped: true,
-            },
-            condition: {
-                operator: 'unless',
-                predicate: {
-                    name: 'youControlAny',
-                    candidates: [
-                        expect.objectContaining({
-                            identifier: expect.objectContaining({
-                                raw: 'Plains',
-                                possibleKinds: expect.arrayContaining(['subtype', 'cardName']),
-                            }),
-                        }),
-                        expect.objectContaining({
-                            identifier: expect.objectContaining({
-                                raw: 'Island',
-                                possibleKinds: expect.arrayContaining(['subtype', 'cardName']),
-                            }),
-                        }),
-                    ],
+            branches: [
+                {
+                    id: 'entersTapped',
+                    condition: {
+                        name: 'not',
+                        params: {
+                            condition: {
+                                name: 'youControlAny',
+                                params: {
+                                    candidates: [
+                                        expect.objectContaining({
+                                            identifier: expect.objectContaining({
+                                                raw: 'Plains',
+                                                possibleKinds: expect.arrayContaining(['subtype', 'cardName']),
+                                            }),
+                                        }),
+                                        expect.objectContaining({
+                                            identifier: expect.objectContaining({
+                                                raw: 'Island',
+                                                possibleKinds: expect.arrayContaining(['subtype', 'cardName']),
+                                            }),
+                                        }),
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                    state: {
+                        tapped: true,
+                    },
                 },
-            },
+                {
+                    id: 'entersUntapped',
+                    condition: {
+                        name: 'youControlAny',
+                    },
+                    state: {
+                        tapped: false,
+                    },
+                },
+            ],
         });
-        expect(result.actions[1].condition.predicate.candidates).toEqual([
+        expect(result.actions[1].branches[1].condition.params.candidates).toEqual([
             expect.objectContaining({ cardTypes: ['creature'] }),
             expect.objectContaining({ cardTypes: ['planeswalker'] }),
         ]);
-        expect(result.actions[2].condition.predicate.candidates).toEqual([
+        expect(result.actions[2].branches[1].condition.params.candidates).toEqual([
             expect.objectContaining({
                 cardTypes: [],
                 supertypes: ['legendary'],

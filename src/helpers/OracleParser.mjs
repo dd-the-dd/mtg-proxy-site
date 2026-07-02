@@ -254,9 +254,11 @@ function parseYouControlPredicate(rawBody) {
     }
 
     return {
-        controller: 'you',
         name: 'youControlAny',
-        candidates: splitEntityAlternatives(control[1]).map(parseControlledEntityCandidate),
+        params: {
+            controller: 'you',
+            candidates: splitEntityAlternatives(control[1]).map(parseControlledEntityCandidate),
+        },
     };
 }
 
@@ -416,13 +418,8 @@ function parseEntersBattlefieldStateClause(clause, context) {
         };
     }
 
-    const condition = match[2]
-        ? {
-            operator: 'unless',
-            predicate: parseYouControlPredicate(match[2]),
-        }
-        : null;
-    if (condition && !condition.predicate) {
+    const untappedCondition = match[2] ? parseYouControlPredicate(match[2]) : null;
+    if (match[2] && !untappedCondition) {
         return {
             actions: [],
             errors: [
@@ -438,33 +435,63 @@ function parseEntersBattlefieldStateClause(clause, context) {
         };
     }
 
+    const modifyTappedAction = value => {
+        return {
+            name: 'modifyPermanent',
+            params: {
+                duration: 'asEntersBattlefield',
+                modifiers: [
+                    {
+                        property: 'tapped',
+                        value,
+                    },
+                ],
+                target: 'source',
+            },
+        };
+    };
+    const tappedCondition = untappedCondition
+        ? {
+            name: 'not',
+            params: {
+                condition: untappedCondition,
+            },
+        }
+        : {
+            name: 'always',
+            params: {},
+        };
+    const branches = [
+        {
+            id: 'entersTapped',
+            condition: tappedCondition,
+            state: {
+                tapped: true,
+            },
+            actions: [modifyTappedAction(true)],
+        },
+    ];
+    if (untappedCondition) {
+        branches.push({
+            id: 'entersUntapped',
+            condition: untappedCondition,
+            state: {
+                tapped: false,
+            },
+            actions: [modifyTappedAction(false)],
+        });
+    }
+
     return {
         actions: [
             {
-                type: 'entersBattlefieldState',
+                type: 'hook',
                 raw: clause,
                 event: 'enterBattlefield',
                 source: parseSourceEntityReference(match[1]),
                 destination: 'battlefield',
-                state: {
-                    tapped: true,
-                },
-                condition,
-                actions: [
-                    {
-                        name: 'modifyPermanent',
-                        params: {
-                            duration: 'asEntersBattlefield',
-                            modifiers: [
-                                {
-                                    property: 'tapped',
-                                    value: true,
-                                },
-                            ],
-                            target: 'source',
-                        },
-                    },
-                ],
+                timing: 'asEntersBattlefield',
+                branches,
             },
         ],
         errors: [],

@@ -75,6 +75,11 @@ export const ruleContractGroups = [
         title: 'Conditions',
         definitions: [
             {
+                name: 'always',
+                signature: 'def condition_always(event: Event, state: GameState) -> bool',
+                detail: 'Unconditional branch that always applies.',
+            },
+            {
                 name: 'all',
                 signature: 'def condition_all(conditions: list[Condition], event: Event, state: GameState) -> bool',
                 detail: 'Logical AND over child conditions.',
