@@ -279,6 +279,37 @@ describe('OracleParser', () => {
         });
     });
 
+    test('Feature: Oracle parser treats tap mana abilities as battlefield options.', () => {
+        const result = parseOracleDocument('{T}: Add {R}.', { cardName: 'Cori Mountain Monastery' });
+
+        expect(result.errors).toEqual([]);
+        expect(result.actions).toEqual([
+            expect.objectContaining({
+                type: 'manaAbility',
+                sourceZone: 'battlefield',
+                costs: [
+                    expect.objectContaining({
+                        target: 'source',
+                        type: 'tap',
+                    }),
+                ],
+                conditions: [
+                    expect.objectContaining({ name: 'sourceOnBattlefield' }),
+                    expect.objectContaining({ name: 'sourceUntapped' }),
+                ],
+                actions: [
+                    expect.objectContaining({
+                        name: 'addMana',
+                        params: expect.objectContaining({
+                            mana: ['R'],
+                            player: 'controller',
+                        }),
+                    }),
+                ],
+            }),
+        ]);
+    });
+
     test('Feature: Oracle analysis parser can merge multi-sentence ability text into one annotated segment.', () => {
         const segments = parseOracleSegments('Whenever you cast a spell, draw a card. This ability triggers only once each turn.');
 

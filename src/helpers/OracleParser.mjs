@@ -933,7 +933,32 @@ function parseManaAbilitySegment(clause, context) {
                 type: 'manaAbility',
                 raw: clause,
                 cost: tokens[0].raw.replace(/:$/, ''),
+                costs: parseActivatedCostText(tokens[0].raw.replace(/:$/, '')),
+                sourceZone: 'battlefield',
                 manaProduced,
+                conditions: [
+                    {
+                        name: 'sourceOnBattlefield',
+                        params: {
+                            source: 'source',
+                        },
+                    },
+                    {
+                        name: 'sourceUntapped',
+                        params: {
+                            source: 'source',
+                        },
+                    },
+                ],
+                actions: [
+                    {
+                        name: 'addMana',
+                        params: {
+                            mana: manaProduced,
+                            player: 'controller',
+                        },
+                    },
+                ],
             },
         ],
         errors: [],

@@ -4118,6 +4118,28 @@ export default {
                 return [];
             }
 
+            const actions = segment.actions ?? [];
+            const manaAction = actions.find(action => action.type === 'manaAbility');
+            if (manaAction) {
+                const manaKey = (manaAction.manaProduced ?? []).join('');
+                const matchingMana = options.find(option => {
+                    return option.sourceZone === 'battlefield' &&
+                        option.feedbackSubject?.kind === 'mana' &&
+                        (option.feedbackSubject?.manaProduced ?? []).join('') === manaKey;
+                });
+                return matchingMana ? [matchingMana] : [];
+            }
+
+            if (actions.some(action => action.type === 'temporaryExilePlayPermission') || /:\s*/.test(segment.text ?? '')) {
+                const activated = options.find(option => {
+                    return option.sourceZone === 'battlefield' &&
+                        option.feedbackSubject?.kind === 'activate';
+                });
+                if (activated) {
+                    return [activated];
+                }
+            }
+
             const preferred = options.find(option => option.sourceZone === 'hand') ?? options[0];
             return preferred ? [preferred] : [];
         },

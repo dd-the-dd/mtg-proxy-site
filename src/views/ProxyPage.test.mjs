@@ -215,7 +215,7 @@ describe('Core Rendering', async () => {
                 quantity: 1,
                 name: 'cori mountain monastery',
                 selectedOption: {
-                    oracleText: 'This land enters tapped unless you control a Plains or an Island.',
+                    oracleText: 'This land enters tapped unless you control a Plains or an Island.\n{T}: Add {R}.',
                     typeLine: 'Land',
                     urlFront: 'cori-front',
                 },
@@ -259,6 +259,17 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('target: targetSpec');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Valid target required');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('If all targets are invalid on resolution, the spell fizzles');
+        const coriReport = component.proxy.cardParserReports.find(report => report.name === 'cori mountain monastery');
+        const manaSegment = coriReport.oracleSegments.find(segment => segment.text === '{T}: Add {R}.');
+        expect(manaSegment.optionDetails).toEqual([
+            expect.objectContaining({
+                costSummary: 'Tap source; source untapped',
+                label: 'Tap: Add {R}',
+                resolutionSummary: 'Mana is added immediately and empties at the next step.',
+                sourceZone: 'battlefield',
+            }),
+        ]);
+        expect(manaSegment.optionDetails[0].label).not.toBe('Play land');
         expect(wrapper.find('#card-analysis-rule-definitions').exists()).toBe(true);
         expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def on_gain_life');
         expect(wrapper.find('#card-analysis-rule-definitions').text()).toContain('def hook_rule');
