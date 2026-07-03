@@ -126,6 +126,16 @@ export const ruleContractGroups = [
                 detail: 'The hook source itself entered the battlefield.',
             },
             {
+                name: 'sourceOnStack',
+                signature: 'def condition_source_on_stack(source_id: str, state: GameState) -> bool',
+                detail: 'The spell object represented by this card is currently on the stack.',
+            },
+            {
+                name: 'spellCastByPlayer',
+                signature: 'def condition_spell_cast_by_player(player: PlayerId, event: Event) -> bool',
+                detail: 'The cast event belongs to the specified player.',
+            },
+            {
                 name: 'permanentEnteredMatches',
                 signature: 'def condition_permanent_entered_matches(card_types: list[str], controller: PlayerScope, nontoken: bool, exclude_source: bool, event: Event) -> bool',
                 detail: 'A permanent entered and matches type/token/source constraints.',
@@ -182,6 +192,11 @@ export const ruleContractGroups = [
                 detail: 'Apply damage to players, creatures, planeswalkers, or battles.',
             },
             {
+                name: 'destroyPermanent',
+                signature: 'def action_destroy_permanent(target_ids: list[PermanentId], source_id: str, state: GameState) -> None',
+                detail: 'Destroy target permanents if they are still legal when the spell or ability resolves.',
+            },
+            {
                 name: 'gainLife',
                 signature: 'def action_gain_life(players: list[PlayerId], amount: int, state: GameState) -> None',
                 detail: 'Increase player life totals.',
@@ -202,6 +217,11 @@ export const ruleContractGroups = [
                 detail: 'Apply temporary or permanent changes to a permanent.',
             },
             {
+                name: 'modifyStackObject',
+                signature: 'def action_modify_stack_object(target_id: StackObjectId, modifiers: list[Modifier], duration: Duration, state: GameState) -> None',
+                detail: 'Apply changes to a spell or ability while it is on the stack, such as making it unable to be countered.',
+            },
+            {
                 name: 'modifyPlayer',
                 signature: 'def action_modify_player(player: PlayerId, modifiers: list[Modifier], duration: Duration, state: GameState) -> None',
                 detail: 'Apply player modifiers such as max hand size changes.',
@@ -215,6 +235,11 @@ export const ruleContractGroups = [
                 name: 'askPlayerChoice',
                 signature: 'def action_ask_player_choice(player: PlayerId, options: list[DecisionOption], prompt: str, state: GameState) -> None',
                 detail: 'Pause resolution until a player chooses between legal options.',
+            },
+            {
+                name: 'addDelayedHook',
+                signature: 'def action_add_delayed_hook(event: HookEvent, condition: ConditionExpr, actions: list[ActionStep], duration: Duration, limit: str, state: GameState) -> None',
+                detail: 'Register a temporary hook created by a resolving spell or ability, such as modifying the next spell a player casts this turn.',
             },
         ],
     },

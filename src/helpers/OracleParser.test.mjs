@@ -3,6 +3,7 @@ import {
     damageActionAmountValue,
     OracleParseError,
     oracleTargetMatchesCard,
+    parseDamageActions,
     parseOracleActions,
     parseOracleConcepts,
     parseOracleDocument,
@@ -392,6 +393,170 @@ describe('OracleParser', () => {
                 }),
             ],
         });
+    });
+
+    test('Feature: Oracle parser exposes stack protection from uncounterable spells and delayed land abilities.', () => {
+        const staticResult = parseOracleDocument("This spell can't be countered.", {
+            cardName: 'Inevitable Defeat',
+        });
+        const delayedResult = parseOracleDocument("{U}, {T}: The next spell you cast this turn can't be countered.", {
+            cardName: 'Mistrise Village',
+        });
+
+        expect(staticResult.errors).toEqual([]);
+        expect(staticResult.actions).toEqual([
+            expect.objectContaining({
+                type: 'spellStaticAbility',
+                property: 'cantBeCountered',
+                sourceZone: 'stack',
+                actions: [
+                    expect.objectContaining({
+                        name: 'modifyStackObject',
+                        params: expect.objectContaining({
+                            duration: 'whileOnStack',
+                            target: 'sourceSpell',
+                            modifiers: [
+                                expect.objectContaining({
+                                    property: 'cantBeCountered',
+                                    value: true,
+                                }),
+                            ],
+                        }),
+                    }),
+                ],
+            }),
+        ]);
+        expect(staticResult.segments[0]).toMatchObject({
+            annotationKind: 'option',
+            annotations: [
+                expect.objectContaining({
+                    label: "Can't be countered",
+                }),
+            ],
+        });
+        expect(staticResult.segments[0].concepts).toEqual(expect.arrayContaining([
+            expect.objectContaining({ kind: 'action', name: 'modifyStackObject' }),
+        ]));
+
+        expect(delayedResult.errors).toEqual([]);
+        expect(delayedResult.actions).toEqual([
+            expect.objectContaining({
+                type: 'nextSpellCantBeCountered',
+                sourceZone: 'battlefield',
+                costs: [
+                    expect.objectContaining({ type: 'mana', value: '{U}' }),
+                    expect.objectContaining({ type: 'tap', target: 'source' }),
+                ],
+                actions: [
+                    expect.objectContaining({
+                        name: 'addDelayedHook',
+                        params: expect.objectContaining({
+                            duration: 'thisTurn',
+                            event: 'cast',
+                            limit: 'nextSpellYouCast',
+                            actions: [
+                                expect.objectContaining({
+                                    name: 'modifyStackObject',
+                                    params: expect.objectContaining({
+                                        target: 'event.spell',
+                                    }),
+                                }),
+                            ],
+                        }),
+                    }),
+                ],
+            }),
+        ]);
+        expect(delayedResult.segments[0].concepts).toEqual(expect.arrayContaining([
+            expect.objectContaining({ kind: 'hook', name: 'cast' }),
+            expect.objectContaining({ kind: 'action', name: 'addDelayedHook' }),
+            expect.objectContaining({ kind: 'action', name: 'modifyStackObject' }),
+        ]));
+    });
+
+    test('Feature: Oracle parser merges choose-one modal choices with target requirements.', () => {
+        const result = parseOracleDocument([
+            'Choose one \u2014',
+            '\u2022 Abrade deals 3 damage to target creature.',
+            '\u2022 Destroy target artifact.',
+        ].join('\n'), { cardName: 'Abrade' });
+        const modal = result.actions[0];
+        const modalDamage = parseDamageActions([
+            'Choose one \u2014',
+            '\u2022 Abrade deals 3 damage to target creature.',
+            '\u2022 Destroy target artifact.',
+        ].join('\n'), { cardName: 'Abrade' });
+
+        expect(result.errors).toEqual([]);
+        expect(result.segments).toHaveLength(1);
+        expect(result.segments[0]).toMatchObject({
+            annotationKind: 'option',
+            annotations: [
+                expect.objectContaining({
+                    label: 'Choose one',
+                }),
+            ],
+            text: 'Choose one \u2014 Abrade deals 3 damage to target creature. Destroy target artifact.',
+        });
+        expect(modal).toMatchObject({
+            type: 'modalSpell',
+            mode: 'chooseOne',
+            sourceZone: 'stack',
+            choices: [
+                expect.objectContaining({
+                    actions: [
+                        expect.objectContaining({
+                            type: 'damage',
+                            amount: expect.objectContaining({ value: 3 }),
+                        }),
+                    ],
+                    targets: [
+                        expect.objectContaining({
+                            candidates: [
+                                expect.objectContaining({ cardTypes: ['creature'] }),
+                            ],
+                        }),
+                    ],
+                }),
+                expect.objectContaining({
+                    actions: [
+                        expect.objectContaining({
+                            type: 'destroyPermanent',
+                        }),
+                    ],
+                    targets: [
+                        expect.objectContaining({
+                            candidates: [
+                                expect.objectContaining({ cardTypes: ['artifact'] }),
+                            ],
+                        }),
+                    ],
+                }),
+            ],
+            targets: expect.arrayContaining([
+                expect.objectContaining({
+                    candidates: [
+                        expect.objectContaining({ cardTypes: ['creature'] }),
+                    ],
+                }),
+                expect.objectContaining({
+                    candidates: [
+                        expect.objectContaining({ cardTypes: ['artifact'] }),
+                    ],
+                }),
+            ]),
+        });
+        expect(result.segments[0].concepts).toEqual(expect.arrayContaining([
+            expect.objectContaining({ kind: 'choice', name: 'chooseOne' }),
+            expect.objectContaining({ kind: 'action', name: 'dealDamage' }),
+            expect.objectContaining({ kind: 'action', name: 'destroyPermanent' }),
+            expect.objectContaining({ kind: 'target', name: 'targetSpec' }),
+        ]));
+        expect(modalDamage).toEqual([
+            expect.objectContaining({
+                amount: expect.objectContaining({ value: 3 }),
+            }),
+        ]);
     });
 
     test('Feature: Oracle parser exposes high-level concepts before detailed mechanics.', () => {

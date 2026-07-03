@@ -34,17 +34,28 @@ function normalizeText(value) {
 }
 
 function splitOracleClauses(value) {
-    return [...String(value ?? '')
-        .replace(/\r/g, '\n')
-        .replace(/\u2022/g, '\n')
-        .matchAll(/[^.;\n]+[.;]?/g)]
-        .map(match => {
-            return {
-                clause: normalizeText(match[0]),
-                index: match.index ?? 0,
-            };
-        })
-        .filter(entry => entry.clause.length > 0);
+    const clauses = [];
+    const lines = String(value ?? '').replace(/\r/g, '\n').split('\n');
+    let offset = 0;
+    for (const line of lines) {
+        const bullet = /^\s*(?:\u2022|\*)\s*/u.exec(line);
+        const isChoiceLine = Boolean(bullet);
+        const cleanedLine = isChoiceLine ? line.slice(bullet[0].length) : line;
+        const lineOffset = offset + (isChoiceLine ? bullet[0].length : 0);
+        for (const match of cleanedLine.matchAll(/[^.;\n]+[.;]?/g)) {
+            const clause = normalizeText(match[0]);
+            if (clause.length > 0) {
+                clauses.push({
+                    clause,
+                    index: lineOffset + (match.index ?? 0),
+                    isChoiceLine,
+                });
+            }
+        }
+        offset += line.length + 1;
+    }
+
+    return clauses;
 }
 
 function oracleWordTokens(value) {
@@ -543,6 +554,13 @@ function detectHookConcepts(text) {
             raw: normalized,
         });
     }
+    if (/\bnext spell you cast\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'hook',
+            name: 'cast',
+            raw: 'next spell you cast',
+        });
+    }
     if (/^whenever you gain life\b/i.test(normalized)) {
         concepts.push({
             kind: 'hook',
@@ -693,6 +711,31 @@ function detectConcreteActionConcepts(text) {
             raw: 'you may play that card',
         });
     }
+    if (/\bdestroy target\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'destroyPermanent',
+            raw: normalized,
+        });
+    }
+    if (/\bnext spell you cast\b.*\bcan(?:not|['\u2019]?t) be countered\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'addDelayedHook',
+            raw: 'next spell you cast this turn cannot be countered',
+        });
+        concepts.push({
+            kind: 'action',
+            name: 'modifyStackObject',
+            raw: 'next spell you cast this turn cannot be countered',
+        });
+    } else if (/\bthis spell can(?:not|['\u2019]?t) be countered\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'modifyStackObject',
+            raw: 'this spell cannot be countered',
+        });
+    }
 
     return concepts;
 }
@@ -776,6 +819,79 @@ function parseDamageClause(clause, context) {
     };
 }
 
+function parseDestroyClause(clause, context) {
+    const destroy = /\bdestroy target ([^.]+)/i.exec(clause);
+    if (!destroy) {
+        return {
+            actions: [],
+            errors: [],
+            handled: false,
+        };
+    }
+
+    const targetResult = parseOracleTargetsDetailed(`target ${destroy[1]}`, clause, context);
+    if (targetResult.errors.length > 0) {
+        return {
+            actions: [],
+            errors: targetResult.errors,
+            handled: true,
+        };
+    }
+
+    return {
+        actions: [
+            {
+                type: 'destroyPermanent',
+                raw: destroy[0],
+                targets: targetResult.targets,
+            },
+        ],
+        errors: [],
+        handled: true,
+    };
+}
+
+function stackCantBeCounteredModifier(target) {
+    return {
+        name: 'modifyStackObject',
+        params: {
+            duration: 'whileOnStack',
+            modifiers: [
+                {
+                    property: 'cantBeCountered',
+                    value: true,
+                },
+            ],
+            target,
+        },
+    };
+}
+
+function modalChoiceModeFromOpener(clause) {
+    const match = /^choose\s+(one|two|three)\s*(?:--|-|\u2014)?$/i.exec(normalizeText(clause));
+    if (!match) {
+        return null;
+    }
+
+    return {
+        chooseCount: {
+            one: 1,
+            two: 2,
+            three: 3,
+        }[match[1].toLowerCase()],
+        mode: `choose${match[1][0].toUpperCase()}${match[1].slice(1).toLowerCase()}`,
+    };
+}
+
+function parseModalChoiceActions(clause, context) {
+    const damage = parseDamageClause(clause, context);
+    if (damage.handled) {
+        return damage;
+    }
+
+    return parseDestroyClause(clause, context);
+}
+
 function parseEntersBattlefieldStateSegment(clause, context) {
     const tokens = oracleWordTokens(clause);
     if (tokens[0]?.value !== 'this') {
@@ -787,23 +903,7 @@ function parseEntersBattlefieldStateSegment(clause, context) {
     const entersIndex = tokens.findIndex((token, index) => index > 1 && token.value === 'enters');
     if (entersIndex < 0) {
         return {
-            errors: [
-                diagnostic(
-                    'unsupported_oracle_clause',
-                    clause,
-                    'Oracle clause is not supported yet.',
-                    context,
-                    attachParserDetails({}, parserState('unparsable', {
-                        expected: 'enters',
-                        unexpectedToken: tokens[1]?.raw ?? tokens[0]?.raw ?? '',
-                    })),
-                ),
-            ],
-            handled: true,
-            parser: parserState('unparsable', {
-                expected: 'enters',
-                unexpectedToken: tokens[1]?.raw ?? tokens[0]?.raw ?? '',
-            }),
+            handled: false,
         };
     }
 
@@ -1095,6 +1195,195 @@ function parseActivatedCostText(rawCost) {
         });
 }
 
+function parseModalChoiceSegment(text, context, group = []) {
+    const modal = modalChoiceModeFromOpener(group[0]?.clause ?? '');
+    if (!modal) {
+        return {
+            handled: false,
+        };
+    }
+
+    const choiceEntries = group.slice(1).filter(entry => entry.isChoiceLine);
+    if (choiceEntries.length === 0) {
+        const tokens = oracleWordTokens(text);
+        const parser = parserState('unparsable', {
+            expected: 'modal choice bullet',
+            unexpectedToken: tokens[tokens.length - 1]?.raw ?? '',
+        });
+        return {
+            actions: [],
+            errors: [
+                diagnostic(
+                    'unsupported_modal_choice',
+                    text,
+                    'Modal choice text is not supported yet.',
+                    context,
+                    attachParserDetails({}, parser),
+                ),
+            ],
+            handled: true,
+            parser,
+        };
+    }
+
+    const choices = [];
+    const errors = [];
+    choiceEntries.forEach((entry, index) => {
+        const parsed = parseModalChoiceActions(entry.clause, context);
+        if (!parsed.handled || parsed.errors.length > 0) {
+            const parser = parserState('unparsable', {
+                expected: 'supported modal choice action',
+                unexpectedToken: oracleWordTokens(entry.clause)[0]?.raw ?? '',
+            });
+            errors.push(...(parsed.errors.length > 0
+                ? parsed.errors
+                : [
+                    diagnostic(
+                        'unsupported_modal_choice',
+                        entry.clause,
+                        'Modal choice text is not supported yet.',
+                        context,
+                        attachParserDetails({}, parser),
+                    ),
+                ]));
+            return;
+        }
+
+        const actions = parsed.actions ?? [];
+        choices.push({
+            actions,
+            id: `choice-${index + 1}`,
+            text: entry.clause,
+            targets: actions.flatMap(action => action.targets ?? []),
+        });
+    });
+
+    if (errors.length > 0) {
+        return {
+            actions: [],
+            errors,
+            handled: true,
+            parser: parserState('unparsable', {
+                expected: 'supported modal choices',
+                unexpectedToken: choiceEntries[choices.length]?.clause ?? '',
+            }),
+        };
+    }
+
+    return {
+        actions: [
+            {
+                type: 'modalSpell',
+                raw: text,
+                chooseCount: modal.chooseCount,
+                choices,
+                choicesCanRepeat: false,
+                mode: modal.mode,
+                sourceZone: 'stack',
+                targets: choices.flatMap(choice => choice.targets),
+            },
+        ],
+        errors: [],
+        handled: true,
+        parser: parserState('complete', {
+            finalState: 'modalChoicesParsed',
+        }),
+    };
+}
+
+function parseSpellCantBeCounteredSegment(clause, context) {
+    if (!/^this spell can(?:not|['\u2019]?t) be countered\.$/i.test(normalizeText(clause))) {
+        return {
+            handled: false,
+        };
+    }
+
+    return {
+        actions: [
+            {
+                type: 'spellStaticAbility',
+                raw: clause,
+                property: 'cantBeCountered',
+                sourceZone: 'stack',
+                conditions: [
+                    {
+                        name: 'sourceOnStack',
+                        params: {
+                            source: 'sourceSpell',
+                        },
+                    },
+                ],
+                actions: [
+                    stackCantBeCounteredModifier('sourceSpell'),
+                ],
+            },
+        ],
+        errors: [],
+        handled: true,
+        parser: parserState('complete', {
+            finalState: 'stackModifierParsed',
+        }),
+    };
+}
+
+function parseNextSpellCantBeCounteredSegment(clause, context) {
+    const activatedAbility = /^(.+?):\s*The next spell you cast this turn can(?:not|['\u2019]?t) be countered\.$/i.exec(normalizeText(clause));
+    if (!activatedAbility) {
+        return {
+            handled: false,
+        };
+    }
+
+    return {
+        actions: [
+            {
+                type: 'nextSpellCantBeCountered',
+                raw: clause,
+                sourceZone: 'battlefield',
+                costs: parseActivatedCostText(activatedAbility[1]),
+                conditions: [
+                    {
+                        name: 'sourceOnBattlefield',
+                        params: {
+                            source: 'source',
+                        },
+                    },
+                    {
+                        name: 'sourceUntapped',
+                        params: {
+                            source: 'source',
+                        },
+                    },
+                ],
+                actions: [
+                    {
+                        name: 'addDelayedHook',
+                        params: {
+                            event: 'cast',
+                            duration: 'thisTurn',
+                            limit: 'nextSpellYouCast',
+                            condition: {
+                                name: 'spellCastByPlayer',
+                                params: {
+                                    player: 'controller',
+                                },
+                            },
+                            actions: [
+                                stackCantBeCounteredModifier('event.spell'),
+                            ],
+                        },
+                    },
+                ],
+            },
+        ],
+        errors: [],
+        handled: true,
+        parser: parserState('complete', {
+            finalState: 'delayedCastHookParsed',
+        }),
+    };
+}
+
 function parseTemporaryExilePlayPermissionSegment(clause, context) {
     const tokens = oracleWordTokens(clause);
     const colonIndex = tokens.findIndex(token => token.raw.endsWith(':'));
@@ -1201,6 +1490,28 @@ function parseTemporaryExilePlayPermissionSegment(clause, context) {
         parser: parserState('complete', {
             finalState: 'temporaryExilePlayPermissionParsed',
         }),
+    };
+}
+
+function parseDestroySegment(clause, context) {
+    const destroy = parseDestroyClause(clause, context);
+    if (!destroy.handled) {
+        return {
+            handled: false,
+        };
+    }
+
+    return {
+        ...destroy,
+        handled: true,
+        parser: destroy.errors.length > 0
+            ? parserState('unparsable', {
+                expected: 'supported destroy target',
+                unexpectedToken: oracleWordTokens(clause)[2]?.raw ?? '',
+            })
+            : parserState('complete', {
+                finalState: 'destroyTargetParsed',
+            }),
     };
 }
 
@@ -1513,6 +1824,15 @@ function mergeOracleClauseGroups(clauses) {
         if (/^(whenever|when|at)\b/i.test(current.clause) && /^this ability\b/i.test(next?.clause ?? '')) {
             groups.push([current, next]);
             index += 1;
+        } else if (modalChoiceModeFromOpener(current.clause) && next?.isChoiceLine) {
+            const modalGroup = [current];
+            let cursor = index + 1;
+            while (clauses[cursor]?.isChoiceLine) {
+                modalGroup.push(clauses[cursor]);
+                cursor += 1;
+            }
+            groups.push(modalGroup);
+            index = cursor - 1;
         } else if (
             /^.+?:\s*Exile the top card of your library\.$/i.test(current.clause) &&
             /^Until the end of your next turn, you may play that card\.$/i.test(next?.clause ?? '')
@@ -1563,6 +1883,34 @@ function oracleActionAnnotation(action) {
             label: 'Play exiled top card',
         };
     }
+    if (action.type === 'nextSpellCantBeCountered') {
+        return {
+            detail: 'Adds a delayed cast hook for the next spell this turn',
+            kind: 'option',
+            label: 'Protect next spell',
+        };
+    }
+    if (action.type === 'spellStaticAbility' && action.property === 'cantBeCountered') {
+        return {
+            detail: 'Modifies this spell while it is on the stack',
+            kind: 'option',
+            label: "Can't be countered",
+        };
+    }
+    if (action.type === 'modalSpell') {
+        return {
+            detail: `${action.choices?.length ?? 0} modal choices`,
+            kind: 'option',
+            label: action.mode === 'chooseOne' ? 'Choose one' : action.mode ?? 'Modal spell',
+        };
+    }
+    if (action.type === 'destroyPermanent') {
+        return {
+            detail: 'Spell or ability resolution',
+            kind: 'option',
+            label: 'Destroy permanent',
+        };
+    }
 
     return {
         detail: action.type ?? 'Oracle action',
@@ -1587,16 +1935,20 @@ function annotationKindFor(actions, errors) {
 function parseOracleSegmentGroup(group, groupIndex, context) {
     const text = group.map(entry => entry.clause).join(' ');
     const parsers = [
+        parseModalChoiceSegment,
         parseSimpleTriggeredAbilitySegment,
         parseCastTriggerSegment,
         parseEntersBattlefieldStateSegment,
+        parseSpellCantBeCounteredSegment,
+        parseNextSpellCantBeCounteredSegment,
         parseTemporaryExilePlayPermissionSegment,
         parseManaAbilitySegment,
         parseDamageSegment,
+        parseDestroySegment,
     ];
     let parsed = null;
     for (const parser of parsers) {
-        const result = parser(text, context);
+        const result = parser(text, context, group);
         if (result.handled) {
             parsed = result;
             break;
@@ -1667,7 +2019,15 @@ export function parseOracleDocument(text, options = {}) {
 
 export function parseDamageActions(text, options = {}) {
     const result = parseOracleDocument(text, options);
-    return result.actions.filter(action => action.type === 'damage');
+    return result.actions.flatMap(action => {
+        if (action.type === 'damage') {
+            return [action];
+        }
+
+        return (action.choices ?? []).flatMap(choice => {
+            return (choice.actions ?? []).filter(choiceAction => choiceAction.type === 'damage');
+        });
+    });
 }
 
 export function parseOracleActions(text, options = {}) {
