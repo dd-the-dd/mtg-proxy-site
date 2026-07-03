@@ -295,6 +295,74 @@ describe('OracleParser', () => {
         });
     });
 
+    test('Feature: Oracle parser merges exile-top play-permission abilities from parser feedback.', () => {
+        const result = parseOracleDocument([
+            'This land enters tapped unless you control a Plains or an Island.',
+            '{T}: Add {R}.',
+            '{3}{R}, {T}: Exile the top card of your library.',
+            'Until the end of your next turn, you may play that card.',
+        ].join('\n'), { cardName: 'Cori Mountain Monastery' });
+        const impulseSegment = result.segments.find(segment => segment.text.includes('Exile the top card'));
+        const impulseAction = result.actions.find(action => action.type === 'temporaryExilePlayPermission');
+
+        expect(result.errors).toEqual([]);
+        expect(result.segments).toHaveLength(3);
+        expect(impulseSegment).toMatchObject({
+            annotationKind: 'option',
+            annotations: [
+                expect.objectContaining({
+                    kind: 'option',
+                    label: 'Play exiled top card',
+                }),
+            ],
+            parser: expect.objectContaining({
+                mode: 'word-state-machine',
+                state: 'complete',
+            }),
+            text: '{3}{R}, {T}: Exile the top card of your library. Until the end of your next turn, you may play that card.',
+        });
+        expect(impulseSegment.concepts).toEqual(expect.arrayContaining([
+            expect.objectContaining({ kind: 'choice', name: 'youMay' }),
+            expect.objectContaining({ kind: 'hook', name: 'endOfNextTurn' }),
+            expect.objectContaining({ kind: 'action', name: 'moveCards' }),
+            expect.objectContaining({ kind: 'action', name: 'grantZonePlayPermission' }),
+        ]));
+        expect(impulseAction).toMatchObject({
+            costs: [
+                expect.objectContaining({ type: 'mana', value: '{3}{R}' }),
+                expect.objectContaining({ type: 'tap', target: 'source' }),
+            ],
+            actions: [
+                expect.objectContaining({
+                    name: 'moveCards',
+                    params: expect.objectContaining({
+                        amount: 1,
+                        fromZone: 'library',
+                        owner: 'controller',
+                        position: 'top',
+                        toZone: 'exile',
+                    }),
+                }),
+                expect.objectContaining({
+                    name: 'grantZonePlayPermission',
+                    params: expect.objectContaining({
+                        cardRef: 'thatCard',
+                        duration: 'untilEndOfNextTurn',
+                        player: 'controller',
+                        zone: 'exile',
+                    }),
+                }),
+                expect.objectContaining({
+                    name: 'schedulePermissionCleanup',
+                    params: expect.objectContaining({
+                        at: 'endOfNextTurn',
+                        permission: 'playFromExile',
+                    }),
+                }),
+            ],
+        });
+    });
+
     test('Feature: Oracle parser exposes high-level concepts before detailed mechanics.', () => {
         const result = parseOracleDocument([
             'This land enters tapped unless you control a Plains or an Island.',

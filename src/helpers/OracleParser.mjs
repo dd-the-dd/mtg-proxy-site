@@ -557,6 +557,13 @@ function detectHookConcepts(text) {
             raw: normalized,
         });
     }
+    if (/\buntil the end of your next turn\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'hook',
+            name: 'endOfNextTurn',
+            raw: 'until the end of your next turn',
+        });
+    }
 
     return concepts;
 }
@@ -670,6 +677,20 @@ function detectConcreteActionConcepts(text) {
             kind: 'action',
             name: 'createToken',
             raw: normalized,
+        });
+    }
+    if (/\bexile the top card of your library\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'moveCards',
+            raw: 'exile the top card of your library',
+        });
+    }
+    if (/\byou may play that card\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'grantZonePlayPermission',
+            raw: 'you may play that card',
         });
     }
 
@@ -1015,6 +1036,149 @@ function parseDamageSegment(clause, context) {
     };
 }
 
+function parseActivatedCostText(rawCost) {
+    return String(rawCost ?? '')
+        .split(',')
+        .map(part => normalizeText(part))
+        .filter(Boolean)
+        .map(part => {
+            if (/^\{T}$/.test(part)) {
+                return {
+                    type: 'tap',
+                    target: 'source',
+                    value: part,
+                };
+            }
+            if (/^\{Q}$/.test(part)) {
+                return {
+                    type: 'untap',
+                    target: 'source',
+                    value: part,
+                };
+            }
+            if (/^(?:\{[^}]+\})+$/.test(part)) {
+                return {
+                    type: 'mana',
+                    value: part,
+                };
+            }
+
+            return {
+                type: 'cost',
+                value: part,
+            };
+        });
+}
+
+function parseTemporaryExilePlayPermissionSegment(clause, context) {
+    const tokens = oracleWordTokens(clause);
+    const colonIndex = tokens.findIndex(token => token.raw.endsWith(':'));
+    if (colonIndex < 0) {
+        return {
+            handled: false,
+        };
+    }
+
+    const activatedAbility = /^(.+?):\s*Exile the top card of your library\.\s*Until the end of your next turn, you may play that card\.$/i.exec(normalizeText(clause));
+    if (!activatedAbility) {
+        return {
+            handled: false,
+        };
+    }
+
+    const costs = parseActivatedCostText(activatedAbility[1]);
+    const costTypes = new Set(costs.map(cost => cost.type));
+    if (!costTypes.has('mana') || !costTypes.has('tap')) {
+        const parser = parserState('unparsable', {
+            expected: 'mana and tap activation cost',
+            unexpectedToken: tokens[0]?.raw ?? '',
+        });
+        return {
+            actions: [],
+            errors: [
+                diagnostic(
+                    'unsupported_activation_cost',
+                    clause,
+                    'Activated exile-play cost is not supported yet.',
+                    context,
+                    attachParserDetails({ costs }, parser),
+                ),
+            ],
+            handled: true,
+            parser,
+        };
+    }
+
+    return {
+        actions: [
+            {
+                type: 'temporaryExilePlayPermission',
+                raw: clause,
+                sourceZone: 'battlefield',
+                costs,
+                conditions: [
+                    {
+                        name: 'sourceOnBattlefield',
+                        params: {
+                            source: 'source',
+                        },
+                    },
+                    {
+                        name: 'sourceUntapped',
+                        params: {
+                            source: 'source',
+                        },
+                    },
+                    {
+                        name: 'libraryHasCards',
+                        params: {
+                            amount: 1,
+                            player: 'controller',
+                        },
+                    },
+                ],
+                actions: [
+                    {
+                        name: 'moveCards',
+                        params: {
+                            amount: 1,
+                            cardRef: 'thatCard',
+                            fromZone: 'library',
+                            owner: 'controller',
+                            position: 'top',
+                            toZone: 'exile',
+                        },
+                    },
+                    {
+                        name: 'grantZonePlayPermission',
+                        params: {
+                            cardRef: 'thatCard',
+                            duration: 'untilEndOfNextTurn',
+                            player: 'controller',
+                            permission: 'playFromExile',
+                            zone: 'exile',
+                        },
+                    },
+                    {
+                        name: 'schedulePermissionCleanup',
+                        params: {
+                            at: 'endOfNextTurn',
+                            cardRef: 'thatCard',
+                            permission: 'playFromExile',
+                            player: 'controller',
+                        },
+                    },
+                ],
+            },
+        ],
+        errors: [],
+        handled: true,
+        parser: parserState('complete', {
+            finalState: 'temporaryExilePlayPermissionParsed',
+        }),
+    };
+}
+
 function parseTriggeredActionTokens(tokens, cursor) {
     const current = tokens[cursor]?.value;
     if (current === 'draw' && tokens[cursor + 1]?.value === 'a' && tokens[cursor + 2]?.value === 'card') {
@@ -1324,6 +1488,12 @@ function mergeOracleClauseGroups(clauses) {
         if (/^(whenever|when|at)\b/i.test(current.clause) && /^this ability\b/i.test(next?.clause ?? '')) {
             groups.push([current, next]);
             index += 1;
+        } else if (
+            /^.+?:\s*Exile the top card of your library\.$/i.test(current.clause) &&
+            /^Until the end of your next turn, you may play that card\.$/i.test(next?.clause ?? '')
+        ) {
+            groups.push([current, next]);
+            index += 1;
         } else {
             groups.push([current]);
         }
@@ -1361,6 +1531,13 @@ function oracleActionAnnotation(action) {
             label: `Damage ${amount}`,
         };
     }
+    if (action.type === 'temporaryExilePlayPermission') {
+        return {
+            detail: 'Exiles the top library card and grants a temporary play permission',
+            kind: 'option',
+            label: 'Play exiled top card',
+        };
+    }
 
     return {
         detail: action.type ?? 'Oracle action',
@@ -1388,6 +1565,7 @@ function parseOracleSegmentGroup(group, groupIndex, context) {
         parseSimpleTriggeredAbilitySegment,
         parseCastTriggerSegment,
         parseEntersBattlefieldStateSegment,
+        parseTemporaryExilePlayPermissionSegment,
         parseManaAbilitySegment,
         parseDamageSegment,
     ];
