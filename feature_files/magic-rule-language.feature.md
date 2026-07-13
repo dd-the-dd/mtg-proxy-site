@@ -88,6 +88,7 @@
 
 - The Oracle parser is layered so high-level structure is detected before low-level Magic vocabulary is expanded.
 - The entity-extraction state machine runs first and emits semantic word and phrase tokens before any ability classification happens.
+- The ability-entity state machine consumes extracted entities and simplifies them into engine-readable ability language such as `selfRef`, `hook`, `setTapped`, `logicOperator`, `measureState`, `quantity`, `subtype`, and `booleanOperator`.
 - The document-level state machine splits official Oracle text into clauses, preserves modal bullet lines, and merges adjacent clauses that form one ability.
 - The ability-level state machine classifies a segment as an option, triggered ability, static modifier, replacement effect, spell effect, or unsupported clause.
 - The boolean-level state machine parses condition expressions with explicit `not`, `and`, `or`, comparisons, and grouped predicate calls.
@@ -143,6 +144,41 @@ stateDiagram-v2
     EmitEntity --> PhraseMerge: adjacent tokens form known phrase
     PhraseMerge --> StartToken: continue scanning
     PhraseMerge --> [*]: end of text
+```
+
+### Ability Entity FSM
+
+```mermaid
+stateDiagram-v2
+    [*] --> StartEntity
+    StartEntity --> SelfReference: relative reference + type word
+    StartEntity --> HookMoment: zone transition word
+    StartEntity --> StateAction: permanent state word
+    StartEntity --> LogicOperator: if / unless
+    StartEntity --> PlayerSelf: you / your
+    StartEntity --> MeasureState: control / controls
+    StartEntity --> Quantity: a / an / number
+    StartEntity --> Subtype: name or subtype entity
+    StartEntity --> BooleanOperator: and / or / not
+    StartEntity --> CostEntity: mana/tap/cost symbols
+    StartEntity --> AbilitySeparator: ":"
+    StartEntity --> MagicVocabulary: add / draw / scry / destroy / exile
+
+    SelfReference --> EmitOperation: selfRef
+    HookMoment --> EmitOperation: hook
+    StateAction --> EmitOperation: setTapped / setUntapped
+    LogicOperator --> EmitOperation: logicOperator
+    PlayerSelf --> EmitOperation: selfRef(role=player)
+    MeasureState --> EmitOperation: measureState
+    Quantity --> EmitOperation: quantity
+    Subtype --> EmitOperation: subtype
+    BooleanOperator --> EmitOperation: booleanOperator
+    CostEntity --> EmitOperation: cost / manaSymbol
+    AbilitySeparator --> EmitOperation: abilitySeparator
+    MagicVocabulary --> EmitOperation: vocabulary action
+
+    EmitOperation --> StartEntity: continue scanning
+    EmitOperation --> [*]: end of entities
 ```
 
 ### Document FSM
@@ -323,6 +359,6 @@ stateDiagram-v2
 ## Section 12: Parser Audit Output
 
 - Card Analysis can expose the rule graph for each oracle segment using the shared color legend.
-- Each card can show collapsible parser-stage sections for entity retrieval, document grouping, ability classification, reference extraction, vocabulary expansion, primitive expansion, parser state, unsupported tokens, and user feedback.
+- Each card can show collapsible parser-stage sections for entity retrieval, ability-entity simplification, document grouping, ability classification, reference extraction, vocabulary expansion, primitive expansion, parser state, unsupported tokens, and user feedback.
 - The simulator consumes target requirements and supported effect metadata from the parser instead of duplicating target regexes in UI code.
 - Representative project cards used as parser fixtures include conditional lands, tap mana lands, modal spells such as Abrade, can-not-be-countered spells, nonland permanent exile, linked life changes, Opt-style scry/draw effects, and Slickshot-style cast-pump triggers.

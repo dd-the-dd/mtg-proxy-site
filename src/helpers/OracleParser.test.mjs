@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+    buildOracleAbilityEntities,
     buildOracleRuleGraph,
     extractOracleEntities,
     ruleLanguagePalette
@@ -674,6 +675,7 @@ describe('OracleParser', () => {
         expect(graph.errors).toEqual([]);
         expect(graph.stateMachines.map(machine => machine.level)).toEqual([
             'entityExtraction',
+            'abilityEntity',
             'document',
             'ability',
             'boolean',
@@ -683,6 +685,7 @@ describe('OracleParser', () => {
         ]);
         expect(graph.stages.map(stage => stage.key)).toEqual([
             'entityRetrieval',
+            'abilityEntityFsm',
             'documentFsm',
             'abilityClassifier',
             'referenceExtraction',
@@ -805,6 +808,86 @@ describe('OracleParser', () => {
                 category: 'magicVocabulary',
                 label: 'scry 2',
                 type: 'vocabularyAction',
+            }),
+        ]));
+    });
+
+    test('Feature: Oracle ability entity FSM simplifies extracted entities into engine-readable ability language.', () => {
+        const extraction = extractOracleEntities([
+            'This land enters tapped unless you control a Plains or an Island.',
+            '{T}: Add {R}.',
+        ].join('\n'), { cardName: 'Cori Mountain Monastery' });
+        const abilityEntities = buildOracleAbilityEntities(extraction);
+
+        expect(abilityEntities.errors).toEqual([]);
+        expect(abilityEntities.operations.map(operation => operation.type)).toEqual([
+            'selfRef',
+            'hook',
+            'setTapped',
+            'logicOperator',
+            'selfRef',
+            'measureState',
+            'quantity',
+            'subtype',
+            'booleanOperator',
+            'quantity',
+            'subtype',
+            'cost',
+            'abilitySeparator',
+            'addMana',
+            'manaSymbol',
+        ]);
+        expect(abilityEntities.operations).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                label: 'This land',
+                params: expect.objectContaining({ cardTypes: ['land'] }),
+                role: 'source',
+                type: 'selfRef',
+            }),
+            expect.objectContaining({
+                event: 'enterBattlefield',
+                label: 'enters',
+                type: 'hook',
+            }),
+            expect.objectContaining({
+                label: 'setTapped',
+                params: expect.objectContaining({ state: 'tapped', value: true }),
+                type: 'setTapped',
+            }),
+            expect.objectContaining({
+                label: 'unless',
+                operator: 'unless',
+                type: 'logicOperator',
+            }),
+            expect.objectContaining({
+                label: 'you',
+                role: 'player',
+                type: 'selfRef',
+            }),
+            expect.objectContaining({
+                label: 'control',
+                measure: 'control',
+                type: 'measureState',
+            }),
+            expect.objectContaining({
+                label: 'a',
+                params: expect.objectContaining({ amount: 1 }),
+                type: 'quantity',
+            }),
+            expect.objectContaining({
+                label: 'Plains',
+                params: expect.objectContaining({ subtype: 'Plains' }),
+                type: 'subtype',
+            }),
+            expect.objectContaining({
+                label: 'or',
+                operator: 'or',
+                type: 'booleanOperator',
+            }),
+            expect.objectContaining({
+                label: 'Island',
+                params: expect.objectContaining({ subtype: 'Island' }),
+                type: 'subtype',
             }),
         ]));
     });

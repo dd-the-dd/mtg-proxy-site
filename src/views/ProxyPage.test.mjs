@@ -241,7 +241,8 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Vocabulary expansion');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('abilitySeparator');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('target creature');
-        expect(wrapper.findAll('#card-analysis-parser-inspector .card-parser-stage-section')).toHaveLength(30);
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Ability Entity FSM');
+        expect(wrapper.findAll('#card-analysis-parser-inspector .card-parser-stage-section')).toHaveLength(35);
         expect(wrapper.findAll('#card-analysis-parser-inspector details.card-parser-stage-section').length).toBeGreaterThan(0);
         const parserPanelTitles = wrapper.findAll('#card-analysis-parser-inspector .card-parser-panel-title').map(title => title.text());
         expect(parserPanelTitles).not.toContain('Parser gaps');

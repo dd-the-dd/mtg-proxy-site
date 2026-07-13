@@ -60,6 +60,11 @@ export const oracleRuleStateMachines = [
         summary: 'Turns words and short phrases into semantic entities before document and ability parsing.',
     },
     {
+        level: 'abilityEntity',
+        states: ['start', 'selfReference', 'hookMoment', 'stateAction', 'logicOperator', 'measureState', 'quantity', 'subtype', 'booleanOperator', 'cost', 'accepted'],
+        summary: 'Simplifies extracted entities into an engine-readable ability language before primitive expansion.',
+    },
+    {
         level: 'document',
         states: ['start', 'scanClause', 'mergeLinkedClauses', 'segmentAccepted', 'unsupported'],
         summary: 'Splits official Oracle text into clause groups and merges clauses that form one ability.',
@@ -133,6 +138,59 @@ const relativeReferenceWords = new Set(['it', 'its', 'source', 'that', 'them', '
 const triggerWords = new Set(['at', 'when', 'whenever']);
 const zoneTransitionWords = new Set(['enter', 'entered', 'enters']);
 const zoneWords = new Set(['battlefield', 'exile', 'graveyard', 'hand', 'library', 'stack']);
+
+export const abilityEntityOperationTypes = [
+    {
+        category: 'entityReference',
+        description: 'Current card, source object, or player reference that later rules can bind.',
+        type: 'selfRef',
+    },
+    {
+        category: 'trigger',
+        description: 'Game moment observed by a hook, such as entering the battlefield or graveyard.',
+        type: 'hook',
+    },
+    {
+        category: 'magicVocabulary',
+        description: 'State-setting action vocabulary that has not yet expanded to primitives.',
+        type: 'setTapped',
+    },
+    {
+        category: 'logic',
+        description: 'Conditional branch operator such as if or unless.',
+        type: 'logicOperator',
+    },
+    {
+        category: 'readPrimitive',
+        description: 'State measurement such as control, count, or compare.',
+        type: 'measureState',
+    },
+    {
+        category: 'logic',
+        description: 'Quantity read from articles, numbers, X, or number words.',
+        type: 'quantity',
+    },
+    {
+        category: 'entityReference',
+        description: 'Subtype or card-name-like entity before exact Scryfall identity is resolved.',
+        type: 'subtype',
+    },
+    {
+        category: 'logic',
+        description: 'Boolean connector such as and, or, or not.',
+        type: 'booleanOperator',
+    },
+    {
+        category: 'cost',
+        description: 'Cost-side entity such as tap source or mana payment.',
+        type: 'cost',
+    },
+    {
+        category: 'magicVocabulary',
+        description: 'Mana vocabulary before mana-pool primitive expansion.',
+        type: 'addMana',
+    },
+];
 
 function normalizeExtractionText(value) {
     return String(value ?? '')
@@ -421,6 +479,191 @@ export function extractOracleEntities(text, options = {}) {
         phrases: extractPhrases(tokens),
         sourceText: normalizeExtractionText(text),
         tokens,
+    };
+}
+
+function entityOperation(type, category, token, extra = {}) {
+    return {
+        category,
+        label: token?.label ?? type,
+        sourceTokenIndexes: token ? [token.index] : [],
+        type,
+        ...extra,
+    };
+}
+
+function entityOperationFromPhrase(type, category, tokens, extra = {}) {
+    return {
+        category,
+        label: tokens.map(token => token.label).join(' '),
+        sourceTokenIndexes: tokens.map(token => token.index),
+        type,
+        ...extra,
+    };
+}
+
+function quantityAmount(token) {
+    const numberWordValues = {
+        eight: 8,
+        five: 5,
+        four: 4,
+        nine: 9,
+        one: 1,
+        seven: 7,
+        six: 6,
+        ten: 10,
+        three: 3,
+        two: 2,
+    };
+
+    if (token.type === 'articleWord') {
+        return 1;
+    }
+    if (/^\d+$/.test(token.value)) {
+        return Number(token.value);
+    }
+    return numberWordValues[token.value] ?? token.value;
+}
+
+function enterEventForToken(tokens, index) {
+    const next = tokens[index + 1];
+    const secondNext = tokens[index + 2];
+    if (next?.type === 'articleWord' && secondNext?.type === 'zoneWord') {
+        const zoneEvents = {
+            battlefield: 'enterBattlefield',
+            exile: 'enterExile',
+            graveyard: 'enterGraveyard',
+            hand: 'enterHand',
+            library: 'enterLibrary',
+            stack: 'enterStack',
+        };
+        return zoneEvents[secondNext.value] ?? 'enterZone';
+    }
+    return 'enterBattlefield';
+}
+
+export function buildOracleAbilityEntities(entityExtractionOrText, options = {}) {
+    const entityExtraction = typeof entityExtractionOrText === 'string'
+        ? extractOracleEntities(entityExtractionOrText, options)
+        : entityExtractionOrText;
+    const tokens = entityExtraction?.tokens ?? [];
+    const operations = [];
+
+    for (let index = 0; index < tokens.length; index += 1) {
+        const token = tokens[index];
+        const next = tokens[index + 1];
+
+        if (token.type === 'relativeReference' && next?.type === 'typeWord') {
+            operations.push(entityOperationFromPhrase('selfRef', 'entityReference', [token, next], {
+                params: {
+                    cardTypes: [next.value],
+                },
+                role: 'source',
+            }));
+            index += 1;
+            continue;
+        }
+
+        if (token.type === 'zoneTransitionWord') {
+            operations.push(entityOperation('hook', 'trigger', token, {
+                event: enterEventForToken(tokens, index),
+            }));
+            continue;
+        }
+
+        if (token.type === 'permanentStateWord') {
+            const tapped = token.value === 'tapped';
+            operations.push(entityOperation(tapped ? 'setTapped' : 'setUntapped', 'magicVocabulary', token, {
+                label: tapped ? 'setTapped' : 'setUntapped',
+                params: {
+                    state: token.value,
+                    value: tapped,
+                },
+            }));
+            continue;
+        }
+
+        if (token.type === 'conditionalBranchWord') {
+            operations.push(entityOperation('logicOperator', 'logic', token, {
+                operator: token.value,
+            }));
+            continue;
+        }
+
+        if (token.type === 'playerReference' && ['you', 'your'].includes(token.value)) {
+            operations.push(entityOperation('selfRef', 'entityReference', token, {
+                role: 'player',
+            }));
+            continue;
+        }
+
+        if (token.type === 'predicateVerb' && ['control', 'controls'].includes(token.value)) {
+            operations.push(entityOperation('measureState', 'readPrimitive', token, {
+                measure: 'control',
+            }));
+            continue;
+        }
+
+        if (token.type === 'articleWord' || token.type === 'quantity') {
+            operations.push(entityOperation('quantity', 'logic', token, {
+                params: {
+                    amount: quantityAmount(token),
+                },
+            }));
+            continue;
+        }
+
+        if (token.type === 'nameOrSubtype') {
+            operations.push(entityOperation('subtype', 'entityReference', token, {
+                params: {
+                    subtype: token.raw,
+                },
+            }));
+            continue;
+        }
+
+        if (token.type === 'logicWord' && ['and', 'or', 'not'].includes(token.value)) {
+            operations.push(entityOperation('booleanOperator', 'logic', token, {
+                operator: token.value,
+            }));
+            continue;
+        }
+
+        if (token.type === 'tapSymbol') {
+            operations.push(entityOperation('cost', 'cost', token, {
+                cost: 'tapSource',
+            }));
+            continue;
+        }
+
+        if (token.type === 'abilitySeparator') {
+            operations.push(entityOperation('abilitySeparator', 'cost', token));
+            continue;
+        }
+
+        if (token.type === 'actionWord' && token.value === 'add') {
+            operations.push(entityOperation('addMana', 'magicVocabulary', token));
+            continue;
+        }
+
+        if (token.type === 'manaSymbol') {
+            operations.push(entityOperation('manaSymbol', 'cost', token, {
+                mana: token.raw,
+            }));
+            continue;
+        }
+
+        if (token.type === 'actionWord') {
+            operations.push(entityOperation(token.value, 'magicVocabulary', token));
+        }
+    }
+
+    return {
+        cardName: entityExtraction?.cardName,
+        errors: [],
+        operationTypes: abilityEntityOperationTypes,
+        operations,
+        sourceText: entityExtraction?.sourceText ?? '',
     };
 }
 
@@ -747,6 +990,15 @@ function stageItemFromToken(token) {
     };
 }
 
+function stageItemFromAbilityOperation(operation) {
+    return {
+        category: operation.category,
+        label: operation.label,
+        status: operation.event ?? operation.operator ?? operation.measure ?? operation.role ?? '',
+        type: operation.type,
+    };
+}
+
 function stageItemFromSegment(segment) {
     return {
         category: segment.annotationKind === 'unsupported' ? 'unsupported' : 'effectBlock',
@@ -789,7 +1041,7 @@ function stageItemFromPrimitive(step) {
     };
 }
 
-function buildRuleGraphStages(entityExtraction, segments) {
+function buildRuleGraphStages(entityExtraction, abilityEntities, segments) {
     const blocks = segments.flatMap(segment => segment.effectBlocks ?? []);
     const vocabularySteps = blocks.flatMap(block => {
         if (block.choices?.length) {
@@ -808,6 +1060,12 @@ function buildRuleGraphStages(entityExtraction, segments) {
             key: 'entityRetrieval',
             status: entityExtraction.errors.length ? 'unsupported' : 'ready',
             title: 'Entity retrieval',
+        },
+        {
+            items: (abilityEntities.operations ?? []).map(stageItemFromAbilityOperation),
+            key: 'abilityEntityFsm',
+            status: abilityEntities.errors.length ? 'unsupported' : 'ready',
+            title: 'Ability Entity FSM',
         },
         {
             items: segments.map(stageItemFromSegment),
@@ -847,14 +1105,16 @@ function buildRuleGraphStages(entityExtraction, segments) {
 export function buildOracleRuleGraph(text, options = {}) {
     const document = parseOracleDocument(text, options);
     const entityExtraction = extractOracleEntities(text, options);
+    const abilityEntities = buildOracleAbilityEntities(entityExtraction);
     const segments = document.segments.map(graphSegment);
     return {
         actions: document.actions,
+        abilityEntities,
         entityExtraction,
         errors: document.errors,
         palette: ruleLanguagePalette,
         segments,
-        stages: buildRuleGraphStages(entityExtraction, segments),
+        stages: buildRuleGraphStages(entityExtraction, abilityEntities, segments),
         stateMachines: oracleRuleStateMachines,
     };
 }
