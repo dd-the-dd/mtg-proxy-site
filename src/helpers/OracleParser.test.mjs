@@ -786,7 +786,7 @@ describe('OracleParser', () => {
             expect.objectContaining({ category: 'magicVocabulary', raw: 'Copy', type: 'actionWord' }),
             expect.objectContaining({ category: 'entityReference', raw: 'target', type: 'targetMarker' }),
             expect.objectContaining({ category: 'entityReference', raw: 'you', type: 'playerReference' }),
-            expect.objectContaining({ category: 'logic', raw: 'If', type: 'logicWord' }),
+            expect.objectContaining({ category: 'logic', raw: 'If', type: 'conditionalBranchWord' }),
             expect.objectContaining({ category: 'entityReference', raw: 'it', type: 'relativeReference' }),
             expect.objectContaining({ category: 'magicVocabulary', raw: 'scry', type: 'actionWord' }),
         ]));
@@ -805,6 +805,39 @@ describe('OracleParser', () => {
                 category: 'magicVocabulary',
                 label: 'scry 2',
                 type: 'vocabularyAction',
+            }),
+        ]));
+    });
+
+    test('Feature: Oracle entity extraction classifies conditional ETB idioms for Cori Mountain Monastery.', () => {
+        const extraction = extractOracleEntities([
+            'This land enters tapped unless you control a Plains or an Island.',
+            '{T}: Add {R}.',
+        ].join('\n'), { cardName: 'Cori Mountain Monastery' });
+
+        expect(extraction.tokens).toEqual(expect.arrayContaining([
+            expect.objectContaining({ category: 'trigger', raw: 'enters', type: 'zoneTransitionWord' }),
+            expect.objectContaining({ category: 'predicate', raw: 'tapped', type: 'permanentStateWord' }),
+            expect.objectContaining({ category: 'logic', raw: 'unless', type: 'conditionalBranchWord' }),
+            expect.objectContaining({ category: 'logic', raw: 'a', type: 'articleWord' }),
+            expect.objectContaining({ category: 'logic', raw: 'an', type: 'articleWord' }),
+        ]));
+        expect(extraction.tokens.filter(token => token.type === 'unknownWord')).toEqual([]);
+        expect(extraction.phrases).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                category: 'entityReference',
+                label: 'This land',
+                type: 'selfTypeReference',
+            }),
+            expect.objectContaining({
+                category: 'trigger',
+                label: 'enters tapped',
+                type: 'battlefieldEnterState',
+            }),
+            expect.objectContaining({
+                category: 'logic',
+                label: 'unless you control a Plains or an Island',
+                type: 'conditionalBranch',
             }),
         ]));
     });

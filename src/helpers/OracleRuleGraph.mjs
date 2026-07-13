@@ -118,15 +118,20 @@ const actionWords = new Set([
     'tap',
     'untap',
 ]);
+const articleWords = new Set(['a', 'an', 'the']);
+const branchWords = new Set(['if', 'unless']);
 const cardTypeWords = new Set(['artifact', 'battle', 'card', 'creature', 'enchantment', 'land', 'permanent', 'planeswalker', 'spell']);
 const choiceWords = new Set(['choose', 'may', 'modal']);
 const costWords = new Set(['discard', 'pay', 'sacrifice']);
-const logicWords = new Set(['and', 'if', 'instead', 'not', 'or', 'then', 'unless', 'where']);
-const numberWords = new Set(['a', 'an', 'any', 'eight', 'five', 'four', 'nine', 'one', 'seven', 'six', 'ten', 'three', 'two', 'x']);
+const logicWords = new Set(['and', 'instead', 'not', 'or', 'then', 'where']);
+const numberWords = new Set(['eight', 'five', 'four', 'nine', 'one', 'seven', 'six', 'ten', 'three', 'two', 'x']);
+const permanentStateWords = new Set(['tapped', 'untapped']);
 const playerReferenceWords = new Set(['controller', 'controllers', 'opponent', 'opponents', 'owner', 'owners', 'their', 'you', 'your']);
 const predicateWords = new Set(['control', 'controls', 'is', 'was']);
+const quantifierWords = new Set(['all', 'any', 'each']);
 const relativeReferenceWords = new Set(['it', 'its', 'source', 'that', 'them', 'this']);
 const triggerWords = new Set(['at', 'when', 'whenever']);
+const zoneTransitionWords = new Set(['enter', 'entered', 'enters']);
 const zoneWords = new Set(['battlefield', 'exile', 'graveyard', 'hand', 'library', 'stack']);
 
 function normalizeExtractionText(value) {
@@ -192,6 +197,20 @@ function tokenEntity(rawToken, index) {
             type: 'triggerWord',
         };
     }
+    if (zoneTransitionWords.has(value)) {
+        return {
+            ...base,
+            category: 'trigger',
+            type: 'zoneTransitionWord',
+        };
+    }
+    if (branchWords.has(value)) {
+        return {
+            ...base,
+            category: 'logic',
+            type: 'conditionalBranchWord',
+        };
+    }
     if (logicWords.has(value)) {
         return {
             ...base,
@@ -211,6 +230,20 @@ function tokenEntity(rawToken, index) {
             ...base,
             category: 'entityReference',
             type: 'targetMarker',
+        };
+    }
+    if (articleWords.has(value)) {
+        return {
+            ...base,
+            category: 'logic',
+            type: 'articleWord',
+        };
+    }
+    if (quantifierWords.has(value)) {
+        return {
+            ...base,
+            category: 'logic',
+            type: 'quantifierWord',
         };
     }
     if (/^\d+$/.test(value) || numberWords.has(value)) {
@@ -246,6 +279,13 @@ function tokenEntity(rawToken, index) {
             ...base,
             category: 'entityReference',
             type: 'typeWord',
+        };
+    }
+    if (permanentStateWords.has(value)) {
+        return {
+            ...base,
+            category: 'predicate',
+            type: 'permanentStateWord',
         };
     }
     if (predicateWords.has(value)) {
@@ -313,6 +353,42 @@ function extractPhrases(tokens = []) {
             }
             phrases.push(phraseEntity('targetReference', 'entityReference', phraseTokens, {
                 isTarget: true,
+            }));
+        }
+
+        if (token.type === 'relativeReference' && next?.type === 'typeWord') {
+            phrases.push(phraseEntity('selfTypeReference', 'entityReference', [token, next]));
+        }
+
+        if (token.type === 'zoneTransitionWord' && next?.type === 'permanentStateWord') {
+            phrases.push(phraseEntity('battlefieldEnterState', 'trigger', [token, next], {
+                inferredZone: 'battlefield',
+                state: next.value,
+            }));
+        }
+
+        if (
+            token.type === 'zoneTransitionWord' &&
+            next?.type === 'articleWord' &&
+            third?.type === 'zoneWord'
+        ) {
+            phrases.push(phraseEntity('zoneTransition', 'trigger', [token, next, third], {
+                zone: third.value,
+            }));
+        }
+
+        if (token.type === 'conditionalBranchWord') {
+            const phraseTokens = [token];
+            let cursor = index + 1;
+            while (
+                cursor < tokens.length &&
+                !['actionSeparator', 'sentenceBoundary'].includes(tokens[cursor].type)
+            ) {
+                phraseTokens.push(tokens[cursor]);
+                cursor += 1;
+            }
+            phrases.push(phraseEntity('conditionalBranch', 'logic', phraseTokens, {
+                operator: token.value,
             }));
         }
 

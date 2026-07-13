@@ -105,7 +105,10 @@ stateDiagram-v2
     StartToken --> AbilitySeparator: ":"
     StartToken --> Boundary: "." / ";" / newline
     StartToken --> TriggerWord: when / whenever / at
-    StartToken --> LogicWord: if / unless / and / or / not
+    StartToken --> ZoneTransitionWord: enter / enters / entered
+    StartToken --> ConditionalBranchWord: if / unless
+    StartToken --> LogicWord: and / or / not / then
+    StartToken --> ArticleWord: a / an / the
     StartToken --> ChoiceWord: choose / may
     StartToken --> TargetWord: target
     StartToken --> QuantityWord: X / number / number word
@@ -113,6 +116,7 @@ stateDiagram-v2
     StartToken --> RelativeReference: this / that / it / them
     StartToken --> ZoneWord: library / graveyard / exile / battlefield / hand / stack
     StartToken --> TypeWord: creature / artifact / enchantment / land / planeswalker / battle / spell
+    StartToken --> PermanentStateWord: tapped / untapped
     StartToken --> ActionWord: draw / scry / exile / destroy / copy / deal / add / tap / untap
     StartToken --> NameOrUnknown: fallback word or phrase
 
@@ -121,7 +125,10 @@ stateDiagram-v2
     AbilitySeparator --> EmitEntity
     Boundary --> EmitEntity
     TriggerWord --> EmitEntity
+    ZoneTransitionWord --> EmitEntity
+    ConditionalBranchWord --> EmitEntity
     LogicWord --> EmitEntity
+    ArticleWord --> EmitEntity
     ChoiceWord --> EmitEntity
     TargetWord --> EmitEntity
     QuantityWord --> EmitEntity
@@ -129,6 +136,7 @@ stateDiagram-v2
     RelativeReference --> EmitEntity
     ZoneWord --> EmitEntity
     TypeWord --> EmitEntity
+    PermanentStateWord --> EmitEntity
     ActionWord --> EmitEntity
     NameOrUnknown --> EmitEntity
 

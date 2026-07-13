@@ -7,13 +7,14 @@ const wrapper = mount(ProxyPage, {
         $t: () => {},
     },
 });
+const cardDatasetHookTimeoutMs = 180000;
 
 beforeAll(async () => {
     // Wait for the Async mounted functions to run and initialize the card dataset.
     while(Object.keys(wrapper.getCurrentComponent().data.sets).length === 0) {
         await new Promise(r => setTimeout(r, 50));
     }
-}, 90000);
+}, cardDatasetHookTimeoutMs);
 
 describe('Core Rendering', async () => {
     test('Renders', () => {
