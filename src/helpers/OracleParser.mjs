@@ -61,7 +61,7 @@ function splitOracleClauses(value) {
 function oracleWordTokens(value) {
     return [...normalizeText(value)
         .replace(/[.;]$/g, '')
-        .matchAll(/\{[^}]+\}:?|[A-Za-z0-9][A-Za-z0-9'+\-/]*/g)]
+        .matchAll(/\{[^}]+\}:?|[+-]?\d+\/[+-]?\d+|[A-Za-z0-9][A-Za-z0-9'+\-/]*/g)]
         .map(match => {
             const raw = match[0];
             return {
@@ -122,6 +122,30 @@ function parseAmount(raw) {
             raw,
             value: parseInt(raw, 10),
         };
+}
+
+function parseNumberWord(value) {
+    const normalized = String(value ?? '').toLowerCase();
+    const words = {
+        a: 1,
+        an: 1,
+        eight: 8,
+        five: 5,
+        four: 4,
+        nine: 9,
+        one: 1,
+        seven: 7,
+        six: 6,
+        ten: 10,
+        three: 3,
+        two: 2,
+    };
+
+    if (/^\d+$/.test(normalized)) {
+        return Number(normalized);
+    }
+
+    return words[normalized] ?? null;
 }
 
 function permanentCandidate(cardTypes, extra = {}) {
@@ -718,6 +742,27 @@ function detectConcreteActionConcepts(text) {
             raw: normalized,
         });
     }
+    if (/\bexile target\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'exilePermanent',
+            raw: normalized,
+        });
+    }
+    if (/\bloses? \d+ life\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'loseLife',
+            raw: normalized,
+        });
+    }
+    if (/\bgain \d+ life\b/i.test(normalized)) {
+        concepts.push({
+            kind: 'action',
+            name: 'gainLife',
+            raw: normalized,
+        });
+    }
     if (/\bnext spell you cast\b.*\bcan(?:not|['\u2019]?t) be countered\b/i.test(normalized)) {
         concepts.push({
             kind: 'action',
@@ -843,6 +888,38 @@ function parseDestroyClause(clause, context) {
             {
                 type: 'destroyPermanent',
                 raw: destroy[0],
+                targets: targetResult.targets,
+            },
+        ],
+        errors: [],
+        handled: true,
+    };
+}
+
+function parseExileClause(clause, context) {
+    const exile = /\bexile target ([^.]+)/i.exec(clause);
+    if (!exile) {
+        return {
+            actions: [],
+            errors: [],
+            handled: false,
+        };
+    }
+
+    const targetResult = parseOracleTargetsDetailed(`target ${exile[1]}`, clause, context);
+    if (targetResult.errors.length > 0) {
+        return {
+            actions: [],
+            errors: targetResult.errors,
+            handled: true,
+        };
+    }
+
+    return {
+        actions: [
+            {
+                type: 'exilePermanent',
+                raw: exile[0],
                 targets: targetResult.targets,
             },
         ],
@@ -1515,8 +1592,164 @@ function parseDestroySegment(clause, context) {
     };
 }
 
+function parseExileSegment(clause, context) {
+    const exile = parseExileClause(clause, context);
+    if (!exile.handled) {
+        return {
+            handled: false,
+        };
+    }
+
+    return {
+        ...exile,
+        handled: true,
+        parser: exile.errors.length > 0
+            ? parserState('unparsable', {
+                expected: 'supported exile target',
+                unexpectedToken: oracleWordTokens(clause)[2]?.raw ?? '',
+            })
+            : parserState('complete', {
+                finalState: 'exileTargetParsed',
+            }),
+    };
+}
+
+function parseLifeChangeSegment(clause, context) {
+    const linked = /^its controller loses (\d+) life and you gain (\d+) life\.$/i.exec(normalizeText(clause));
+    if (linked) {
+        return {
+            actions: [
+                {
+                    type: 'lifeChange',
+                    raw: clause,
+                    changes: [
+                        {
+                            amount: Number(linked[1]),
+                            direction: 'lose',
+                            player: {
+                                reference: 'controllerOf',
+                                targetRef: 'it',
+                            },
+                        },
+                        {
+                            amount: Number(linked[2]),
+                            direction: 'gain',
+                            player: {
+                                reference: 'you',
+                            },
+                        },
+                    ],
+                },
+            ],
+            errors: [],
+            handled: true,
+            parser: parserState('complete', {
+                finalState: 'lifeChangeParsed',
+            }),
+        };
+    }
+
+    const gain = /^you gain (a|one|two|three|four|five|six|seven|eight|nine|ten|\d+) life\.$/i.exec(normalizeText(clause));
+    if (gain) {
+        return {
+            actions: [
+                {
+                    type: 'lifeChange',
+                    raw: clause,
+                    changes: [
+                        {
+                            amount: parseNumberWord(gain[1]),
+                            direction: 'gain',
+                            player: {
+                                reference: 'you',
+                            },
+                        },
+                    ],
+                },
+            ],
+            errors: [],
+            handled: true,
+            parser: parserState('complete', {
+                finalState: 'lifeChangeParsed',
+            }),
+        };
+    }
+
+    return {
+        handled: false,
+    };
+}
+
+function parseStandaloneSpellActionSegment(clause, context) {
+    const normalized = normalizeText(clause);
+    const scry = /^scry (one|two|three|four|five|six|seven|eight|nine|ten|\d+)\.$/i.exec(normalized);
+    if (scry) {
+        return {
+            actions: [
+                {
+                    type: 'scry',
+                    raw: clause,
+                    amount: {
+                        kind: 'number',
+                        raw: scry[1],
+                        value: parseNumberWord(scry[1]),
+                    },
+                    player: 'controller',
+                },
+            ],
+            errors: [],
+            handled: true,
+            parser: parserState('complete', {
+                finalState: 'scryParsed',
+            }),
+        };
+    }
+
+    const draw = /^draw (a|one|two|three|four|five|six|seven|eight|nine|ten|\d+) cards?\.$/i.exec(normalized);
+    if (draw) {
+        return {
+            actions: [
+                {
+                    type: 'drawCards',
+                    raw: clause,
+                    amount: {
+                        kind: 'number',
+                        raw: draw[1],
+                        value: parseNumberWord(draw[1]),
+                    },
+                    player: 'controller',
+                },
+            ],
+            errors: [],
+            handled: true,
+            parser: parserState('complete', {
+                finalState: 'drawParsed',
+            }),
+        };
+    }
+
+    return {
+        handled: false,
+    };
+}
+
 function parseTriggeredActionTokens(tokens, cursor) {
     const current = tokens[cursor]?.value;
+    if (current === 'gets' && /^[+-]?\d+\/[+-]?\d+$/.test(tokens[cursor + 1]?.raw ?? '')) {
+        const [powerDelta, toughnessDelta] = tokens[cursor + 1].raw.split('/').map(Number);
+        return {
+            action: {
+                name: 'modifyPermanent',
+                params: {
+                    duration: 'untilEndOfTurn',
+                    powerDelta,
+                    target: 'hookSource',
+                    toughnessDelta,
+                },
+            },
+            nextCursor: cursor + 2,
+        };
+    }
     if (current === 'draw' && tokens[cursor + 1]?.value === 'a' && tokens[cursor + 2]?.value === 'card') {
         return {
             action: {
@@ -1579,13 +1812,18 @@ function parseTriggeredActionTokens(tokens, cursor) {
 
 function findTriggeredActionStart(tokens, startIndex) {
     return tokens.findIndex((token, index) => {
-        return index >= startIndex && ['create', 'draw', 'mill', 'scry'].includes(token.value);
+        return index >= startIndex && ['create', 'draw', 'gets', 'mill', 'scry'].includes(token.value);
     });
 }
 
 function supportedTriggerRider(tokens) {
-    return tokens.length === 0 ||
-        tokens.map(token => token.value).join(' ') === 'this ability triggers only once each turn';
+    if (tokens.length === 0) {
+        return true;
+    }
+
+    const text = tokens.map(token => token.value).join(' ');
+    return text === 'this ability triggers only once each turn' ||
+        text === 'until end of turn';
 }
 
 function parseSimpleTriggeredAbilitySegment(text, context) {
@@ -1645,13 +1883,14 @@ function parseSimpleTriggeredAbilitySegment(text, context) {
         };
         actionSearchStart = 4;
     } else if (tokens[0].value === 'whenever' && tokens[1]?.value === 'you' && tokens[2]?.value === 'cast') {
+        const triggerScope = tokens.slice(3, findTriggeredActionStart(tokens, 3)).map(token => token.value).join(' ');
         parsedTrigger = {
             condition: {
                 name: 'spellCastMatches',
                 params: {
                     cardTypes: [],
                     controller: 'hookController',
-                    nonCreature: false,
+                    nonCreature: /\bnoncreature\b/i.test(triggerScope),
                 },
             },
             event: 'cast',
@@ -1911,6 +2150,34 @@ function oracleActionAnnotation(action) {
             label: 'Destroy permanent',
         };
     }
+    if (action.type === 'exilePermanent') {
+        return {
+            detail: 'Spell or ability resolution',
+            kind: 'option',
+            label: 'Exile permanent',
+        };
+    }
+    if (action.type === 'drawCards') {
+        return {
+            detail: 'Spell or ability resolution',
+            kind: 'option',
+            label: `Draw ${action.amount?.value ?? 1}`,
+        };
+    }
+    if (action.type === 'scry') {
+        return {
+            detail: 'Spell or ability resolution',
+            kind: 'option',
+            label: `Scry ${action.amount?.value ?? 1}`,
+        };
+    }
+    if (action.type === 'lifeChange') {
+        return {
+            detail: 'Spell or ability resolution',
+            kind: 'option',
+            label: 'Life change',
+        };
+    }
 
     return {
         detail: action.type ?? 'Oracle action',
@@ -1943,8 +2210,11 @@ function parseOracleSegmentGroup(group, groupIndex, context) {
         parseNextSpellCantBeCounteredSegment,
         parseTemporaryExilePlayPermissionSegment,
         parseManaAbilitySegment,
+        parseStandaloneSpellActionSegment,
         parseDamageSegment,
         parseDestroySegment,
+        parseExileSegment,
+        parseLifeChangeSegment,
     ];
     let parsed = null;
     for (const parser of parsers) {

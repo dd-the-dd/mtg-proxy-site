@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import {
+    buildOracleRuleGraph,
+    ruleLanguagePalette
+} from './OracleRuleGraph.mjs';
+import {
     damageActionAmountValue,
     OracleParseError,
     oracleTargetMatchesCard,
@@ -615,6 +619,201 @@ describe('OracleParser', () => {
             expect.objectContaining({
                 kind: 'action',
                 name: 'modifyPermanent',
+            }),
+        ]));
+    });
+
+    test('Feature: Oracle finite-state parser handles meta creature cast-pump triggers.', () => {
+        const result = parseOracleDocument(
+            'Whenever you cast a noncreature spell, this creature gets +2/+0 until end of turn.',
+            { cardName: 'Slickshot Show-Off' },
+        );
+
+        expect(result.errors).toEqual([]);
+        expect(result.actions).toEqual([
+            expect.objectContaining({
+                type: 'hook',
+                event: 'cast',
+                condition: {
+                    name: 'spellCastMatches',
+                    params: {
+                        cardTypes: [],
+                        controller: 'hookController',
+                        nonCreature: true,
+                    },
+                },
+                action: {
+                    name: 'modifyPermanent',
+                    params: {
+                        duration: 'untilEndOfTurn',
+                        powerDelta: 2,
+                        target: 'hookSource',
+                        toughnessDelta: 0,
+                    },
+                },
+            }),
+        ]);
+    });
+
+    test('Feature: Oracle finite-state rule graph exposes layered parser categories and primitive scripts.', () => {
+        const graph = buildOracleRuleGraph('Scry 1.\nDraw a card.', { cardName: 'Opt' });
+
+        expect(ruleLanguagePalette.map(entry => entry.key)).toEqual([
+            'actionPrimitive',
+            'readPrimitive',
+            'predicate',
+            'entityReference',
+            'cost',
+            'trigger',
+            'timing',
+            'logic',
+            'magicVocabulary',
+            'effectBlock',
+        ]);
+        expect(graph.errors).toEqual([]);
+        expect(graph.stateMachines.map(machine => machine.level)).toEqual([
+            'document',
+            'ability',
+            'boolean',
+            'reference',
+            'vocabulary',
+            'primitive',
+        ]);
+        expect(graph.segments).toEqual([
+            expect.objectContaining({
+                text: 'Scry 1.',
+                effectBlocks: [
+                    expect.objectContaining({
+                        kind: 'SpellEffect',
+                        script: expect.arrayContaining([
+                            expect.objectContaining({
+                                category: 'magicVocabulary',
+                                name: 'scry',
+                                primitives: expect.arrayContaining([
+                                    expect.objectContaining({
+                                        category: 'actionPrimitive',
+                                        name: 'moveCard',
+                                        params: expect.objectContaining({
+                                            from: expect.objectContaining({
+                                                position: 'top',
+                                                zone: 'library',
+                                            }),
+                                            to: expect.objectContaining({
+                                                position: 'bottomOrTopChoice',
+                                                zone: 'library',
+                                            }),
+                                        }),
+                                    }),
+                                ]),
+                            }),
+                        ]),
+                    }),
+                ],
+            }),
+            expect.objectContaining({
+                text: 'Draw a card.',
+                effectBlocks: [
+                    expect.objectContaining({
+                        script: expect.arrayContaining([
+                            expect.objectContaining({
+                                category: 'magicVocabulary',
+                                name: 'drawCards',
+                                primitives: expect.arrayContaining([
+                                    expect.objectContaining({
+                                        category: 'actionPrimitive',
+                                        name: 'moveCard',
+                                        params: expect.objectContaining({
+                                            from: expect.objectContaining({
+                                                position: 'top',
+                                                zone: 'library',
+                                            }),
+                                            to: expect.objectContaining({
+                                                zone: 'hand',
+                                            }),
+                                        }),
+                                    }),
+                                ]),
+                            }),
+                        ]),
+                    }),
+                ],
+            }),
+        ]);
+    });
+
+    test('Feature: Oracle finite-state parser handles meta-card exile and linked life-change effects.', () => {
+        const result = parseOracleDocument([
+            "This spell can't be countered.",
+            'Exile target nonland permanent.',
+            'Its controller loses 3 life and you gain 3 life.',
+        ].join('\n'), { cardName: 'Inevitable Defeat' });
+        const graph = buildOracleRuleGraph([
+            "This spell can't be countered.",
+            'Exile target nonland permanent.',
+            'Its controller loses 3 life and you gain 3 life.',
+        ].join('\n'), { cardName: 'Inevitable Defeat' });
+
+        expect(result.errors).toEqual([]);
+        expect(result.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                type: 'exilePermanent',
+                targets: [
+                    expect.objectContaining({
+                        candidates: [
+                            expect.objectContaining({
+                                entity: 'permanent',
+                                excludedCardTypes: ['land'],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            expect.objectContaining({
+                type: 'lifeChange',
+                changes: [
+                    expect.objectContaining({
+                        amount: 3,
+                        direction: 'lose',
+                        player: expect.objectContaining({
+                            reference: 'controllerOf',
+                            targetRef: 'it',
+                        }),
+                    }),
+                    expect.objectContaining({
+                        amount: 3,
+                        direction: 'gain',
+                        player: expect.objectContaining({
+                            reference: 'you',
+                        }),
+                    }),
+                ],
+            }),
+        ]));
+        expect(graph.errors).toEqual([]);
+        expect(graph.segments.flatMap(segment => segment.effectBlocks)).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'SpellEffect',
+                script: expect.arrayContaining([
+                    expect.objectContaining({
+                        name: 'exilePermanent',
+                        primitives: expect.arrayContaining([
+                            expect.objectContaining({
+                                name: 'movePermanentToZone',
+                            }),
+                        ]),
+                    }),
+                ]),
+            }),
+            expect.objectContaining({
+                kind: 'SpellEffect',
+                script: expect.arrayContaining([
+                    expect.objectContaining({
+                        name: 'loseLife',
+                    }),
+                    expect.objectContaining({
+                        name: 'gainLife',
+                    }),
+                ]),
             }),
         ]));
     });

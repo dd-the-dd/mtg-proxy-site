@@ -971,6 +971,127 @@ describe('GameSimulator', () => {
         }));
     });
 
+    test('Feature: Game simulation uses parsed Oracle target specs for nonland permanent spells.', () => {
+        const mountain = {
+            id: 'mountain:0',
+            name: 'mountain',
+            quantity: 1,
+            state: { tapped: false },
+            typeLine: 'Basic Land - Mountain',
+        };
+        const inevitableDefeat = {
+            id: 'inevitable defeat:0',
+            manaCost: '{R}',
+            manaValue: 1,
+            name: 'inevitable defeat',
+            oracleText: [
+                "This spell can't be countered.",
+                'Exile target nonland permanent.',
+                'Its controller loses 3 life and you gain 3 life.',
+            ].join('\n'),
+            quantity: 1,
+            typeLine: 'Instant',
+        };
+        const you = {
+            key: 'you',
+            name: 'You',
+            role: 'human',
+            zones: {
+                battlefield: {
+                    creatures: [],
+                    lands: [mountain],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, recoverable: [], top: null },
+                graveyard: { cards: [], count: 0, recoverable: [], top: null },
+                hand: [inevitableDefeat],
+                handCount: 1,
+                landPlaysAvailable: 0,
+                libraryCount: 0,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [inevitableDefeat],
+            },
+        };
+        const opponentWithOnlyLand = {
+            key: 'opponent',
+            name: 'Opponent',
+            role: 'ai',
+            zones: {
+                battlefield: {
+                    creatures: [],
+                    lands: [{
+                        id: 'forest:0',
+                        name: 'forest',
+                        quantity: 1,
+                        state: { tapped: false },
+                        typeLine: 'Basic Land - Forest',
+                    }],
+                    nonCreaturePermanents: [],
+                },
+                exile: { cards: [], count: 0, recoverable: [], top: null },
+                graveyard: { cards: [], count: 0, recoverable: [], top: null },
+                hand: [],
+                handCount: 0,
+                landPlaysAvailable: 0,
+                libraryCount: 0,
+                manaPool: { B: 0, C: 0, G: 0, R: 0, U: 0, W: 0 },
+                playableHand: [],
+            },
+        };
+        const opponentWithArtifact = {
+            ...opponentWithOnlyLand,
+            zones: {
+                ...opponentWithOnlyLand.zones,
+                battlefield: {
+                    ...opponentWithOnlyLand.zones.battlefield,
+                    nonCreaturePermanents: [{
+                        id: 'tablet:0',
+                        name: 'tablet',
+                        quantity: 1,
+                        state: { tapped: false },
+                        typeLine: 'Artifact',
+                    }],
+                },
+            },
+        };
+
+        const withoutTarget = annotateSimulationPlayerActions(you, 'main', {
+            isActivePlayer: true,
+            targetPlayers: [you, opponentWithOnlyLand],
+        });
+        expect(withoutTarget.zones.hand.find(cardInHand => {
+            return cardInHand.name === 'inevitable defeat';
+        }).actionState).toBeUndefined();
+
+        const withTarget = buildPlayerDecisionOptions(you, 'main', {
+            targetPlayers: [you, opponentWithArtifact],
+        });
+
+        expect(withTarget.options).toContainEqual(expect.objectContaining({
+            kind: 'cast',
+            card: expect.objectContaining({ name: 'inevitable defeat' }),
+            targets: expect.objectContaining({
+                candidates: expect.objectContaining({
+                    cards: [
+                        expect.objectContaining({
+                            card: expect.objectContaining({ name: 'tablet' }),
+                            playerKey: 'opponent',
+                        }),
+                    ],
+                }),
+                targetRequirements: [
+                    expect.objectContaining({
+                        candidates: [
+                            expect.objectContaining({
+                                excludedCardTypes: ['land'],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        }));
+    });
+
     test('Feature: Game simulation phase snapshots surface recoverable graveyard and exile actions.', () => {
         const recoverableFromGraveyard = [
             card('mountain', 2, { typeLine: 'Basic Land - Mountain' }),

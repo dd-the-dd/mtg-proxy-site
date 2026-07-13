@@ -1,3 +1,8 @@
+import {
+    oracleTargetMatchesCard,
+    parseOracleDocument
+} from './OracleParser.mjs';
+
 function selected(card) {
     return card.selectedOption ?? card;
 }
@@ -1058,7 +1063,95 @@ function hasActivatedAbility(card) {
     return /(?:^|\n)\s*(?:\{[^}]+}|[A-Z0-9, ]+)?[^.\n]*:\s+/i.test(oracleTextOf(card));
 }
 
+const oracleProfileCache = new Map();
+
+function targetMinimum(target) {
+    const min = Number(target?.quantity?.min ?? 1);
+    return Number.isFinite(min) ? min : 1;
+}
+
+function targetAllowsPlayer(target) {
+    return (target?.candidates ?? []).some(candidate => candidate.entity === 'player');
+}
+
+function targetTypesFromTargets(targets = []) {
+    const types = new Set();
+    for (const target of targets) {
+        for (const candidate of target.candidates ?? []) {
+            if (candidate.entity === 'player') {
+                types.add('player');
+            } else if (candidate.entity === 'permanent') {
+                const cardTypes = candidate.cardTypes ?? [];
+                if (cardTypes.length > 0) {
+                    for (const cardType of cardTypes) {
+                        types.add(cardType);
+                    }
+                } else {
+                    types.add('permanent');
+                }
+            }
+        }
+    }
+
+    return [...types];
+}
+
+function parsedOracleProfile(card) {
+    const oracleText = oracleTextOf(card);
+    if (!oracleText.trim()) {
+        return null;
+    }
+
+    const cacheKey = `${cardName(card)}::${oracleText}`;
+    if (oracleProfileCache.has(cacheKey)) {
+        return oracleProfileCache.get(cacheKey);
+    }
+
+    const document = parseOracleDocument(oracleText, { cardName: cardName(card) });
+    const targetGroups = [];
+    const effectActions = [];
+    for (const action of document.actions) {
+        if (action.type === 'modalSpell') {
+            for (const choice of action.choices ?? []) {
+                if ((choice.targets ?? []).some(target => targetMinimum(target) > 0)) {
+                    targetGroups.push(choice.targets);
+                }
+                effectActions.push(...(choice.actions ?? []));
+            }
+            continue;
+        }
+
+        if ((action.targets ?? []).some(target => targetMinimum(target) > 0)) {
+            targetGroups.push(action.targets);
+        }
+        effectActions.push(action);
+    }
+
+    if (targetGroups.length === 0 && effectActions.length === 0) {
+        oracleProfileCache.set(cacheKey, null);
+        return null;
+    }
+
+    const targetRequirements = targetGroups.flat();
+    const profile = {
+        damageAmount: effectActions.find(action => action.type === 'damage')?.amount?.value ?? 0,
+        effectActions,
+        oracleErrors: document.errors,
+        requiresTarget: targetGroups.length > 0,
+        targetGroups,
+        targetRequirements,
+        targetTypes: targetTypesFromTargets(targetRequirements),
+    };
+    oracleProfileCache.set(cacheKey, profile);
+    return profile;
+}
+
 function damageTargetProfile(card) {
+    const parsed = parsedOracleProfile(card);
+    if (parsed) {
+        return parsed;
+    }
+
     const oracleText = oracleTextOf(card);
     const anyTarget = /\bdeals? (\d+) damage to any target\b/i.exec(oracleText);
     if (anyTarget) {
@@ -1112,9 +1205,34 @@ function cardMatchesTargetTypes(card, targetTypes = []) {
         targetTypes.includes('permanent');
 }
 
+function targetRequirementHasCandidate(target, context) {
+    if (targetMinimum(target) === 0) {
+        return true;
+    }
+
+    if (
+        targetAllowsPlayer(target) &&
+        (context.targetCandidates?.players?.length ?? 0) > 0
+    ) {
+        return true;
+    }
+
+    return (context.targetCandidates?.cards ?? []).some(candidate => {
+        return oracleTargetMatchesCard(target, candidate.card ?? candidate);
+    });
+}
+
+function targetGroupHasValidTargets(targetGroup = [], context) {
+    return targetGroup.every(target => targetRequirementHasCandidate(target, context));
+}
+
 function hasValidTarget(targetProfile, context) {
     if (!targetProfile.requiresTarget) {
         return true;
+    }
+
+    if ((targetProfile.targetGroups ?? []).length > 0) {
+        return targetProfile.targetGroups.some(targetGroup => targetGroupHasValidTargets(targetGroup, context));
     }
 
     const targetTypes = targetProfile.targetTypes ?? [];
@@ -1481,10 +1599,19 @@ export function annotateSimulationPlayerActions(player, phase, options = {}) {
 function actionTargets(option, targetPlayers = []) {
     const targetTypes = option.targetTypes ?? [];
     const targetCandidates = targetCandidatesFromSummaryPlayers(targetPlayers);
-    const cards = targetCandidates.cards.filter(candidate => {
-        return cardMatchesTargetTypes(candidate.card, targetTypes);
-    });
-    const players = targetTypes.includes('player') ? targetCandidates.players : [];
+    const targetRequirements = option.targetRequirements ?? [];
+    const cards = targetRequirements.length > 0
+        ? targetCandidates.cards.filter(candidate => {
+            return targetRequirements.some(target => oracleTargetMatchesCard(target, candidate.card));
+        })
+        : targetCandidates.cards.filter(candidate => {
+            return cardMatchesTargetTypes(candidate.card, targetTypes);
+        });
+    const players = targetRequirements.length > 0
+        ? targetAllowsPlayer({ candidates: targetRequirements.flatMap(target => target.candidates ?? []) })
+            ? targetCandidates.players
+            : []
+        : targetTypes.includes('player') ? targetCandidates.players : [];
 
     return {
         candidates: {
@@ -1492,6 +1619,7 @@ function actionTargets(option, targetPlayers = []) {
             players,
         },
         required: Boolean(option.requiresTarget),
+        targetRequirements,
         targetTypes,
     };
 }
