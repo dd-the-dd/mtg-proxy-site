@@ -87,12 +87,55 @@
 ## Section 11: Finite-State Parser Levels
 
 - The Oracle parser is layered so high-level structure is detected before low-level Magic vocabulary is expanded.
+- The entity-extraction state machine runs first and emits semantic word and phrase tokens before any ability classification happens.
 - The document-level state machine splits official Oracle text into clauses, preserves modal bullet lines, and merges adjacent clauses that form one ability.
 - The ability-level state machine classifies a segment as an option, triggered ability, static modifier, replacement effect, spell effect, or unsupported clause.
 - The boolean-level state machine parses condition expressions with explicit `not`, `and`, `or`, comparisons, and grouped predicate calls.
 - The reference-level state machine resolves entity references such as `you`, `self`, `target`, `chosen`, `that card`, zone positions, and each/set references.
 - The vocabulary-level state machine recognizes Magic terms such as draw, mill, scry, damage, destroy, exile, copy, and life change.
 - The primitive-level state machine expands supported vocabulary to action primitives, choice requests, event emissions, and state mutations.
+
+### Entity Extraction FSM
+
+```mermaid
+stateDiagram-v2
+    [*] --> StartToken
+    StartToken --> ManaSymbol: "{...}"
+    StartToken --> TapSymbol: "{T}" / "{Q}"
+    StartToken --> AbilitySeparator: ":"
+    StartToken --> Boundary: "." / ";" / newline
+    StartToken --> TriggerWord: when / whenever / at
+    StartToken --> LogicWord: if / unless / and / or / not
+    StartToken --> ChoiceWord: choose / may
+    StartToken --> TargetWord: target
+    StartToken --> QuantityWord: X / number / number word
+    StartToken --> PlayerReference: you / your / opponent / controller / owner
+    StartToken --> RelativeReference: this / that / it / them
+    StartToken --> ZoneWord: library / graveyard / exile / battlefield / hand / stack
+    StartToken --> TypeWord: creature / artifact / enchantment / land / planeswalker / battle / spell
+    StartToken --> ActionWord: draw / scry / exile / destroy / copy / deal / add / tap / untap
+    StartToken --> NameOrUnknown: fallback word or phrase
+
+    ManaSymbol --> EmitEntity
+    TapSymbol --> EmitEntity
+    AbilitySeparator --> EmitEntity
+    Boundary --> EmitEntity
+    TriggerWord --> EmitEntity
+    LogicWord --> EmitEntity
+    ChoiceWord --> EmitEntity
+    TargetWord --> EmitEntity
+    QuantityWord --> EmitEntity
+    PlayerReference --> EmitEntity
+    RelativeReference --> EmitEntity
+    ZoneWord --> EmitEntity
+    TypeWord --> EmitEntity
+    ActionWord --> EmitEntity
+    NameOrUnknown --> EmitEntity
+
+    EmitEntity --> PhraseMerge: adjacent tokens form known phrase
+    PhraseMerge --> StartToken: continue scanning
+    PhraseMerge --> [*]: end of text
+```
 
 ### Document FSM
 
@@ -272,6 +315,6 @@ stateDiagram-v2
 ## Section 12: Parser Audit Output
 
 - Card Analysis can expose the rule graph for each oracle segment using the shared color legend.
-- Each segment can show high-level cells, effect blocks, script steps, primitive expansions, parser state, unsupported tokens, and user feedback.
+- Each card can show collapsible parser-stage sections for entity retrieval, document grouping, ability classification, reference extraction, vocabulary expansion, primitive expansion, parser state, unsupported tokens, and user feedback.
 - The simulator consumes target requirements and supported effect metadata from the parser instead of duplicating target regexes in UI code.
 - Representative project cards used as parser fixtures include conditional lands, tap mana lands, modal spells such as Abrade, can-not-be-countered spells, nonland permanent exile, linked life changes, Opt-style scry/draw effects, and Slickshot-style cast-pump triggers.

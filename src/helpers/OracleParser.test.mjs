@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
     buildOracleRuleGraph,
+    extractOracleEntities,
     ruleLanguagePalette
 } from './OracleRuleGraph.mjs';
 import {
@@ -672,6 +673,7 @@ describe('OracleParser', () => {
         ]);
         expect(graph.errors).toEqual([]);
         expect(graph.stateMachines.map(machine => machine.level)).toEqual([
+            'entityExtraction',
             'document',
             'ability',
             'boolean',
@@ -679,6 +681,35 @@ describe('OracleParser', () => {
             'vocabulary',
             'primitive',
         ]);
+        expect(graph.stages.map(stage => stage.key)).toEqual([
+            'entityRetrieval',
+            'documentFsm',
+            'abilityClassifier',
+            'referenceExtraction',
+            'vocabularyExpansion',
+            'primitiveExpansion',
+        ]);
+        expect(graph.stages[0]).toMatchObject({
+            title: 'Entity retrieval',
+            status: 'ready',
+        });
+        expect(graph.stages[0].items).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                category: 'magicVocabulary',
+                label: 'Scry',
+                type: 'actionWord',
+            }),
+            expect.objectContaining({
+                category: 'logic',
+                label: '1',
+                type: 'quantity',
+            }),
+            expect.objectContaining({
+                category: 'magicVocabulary',
+                label: 'Draw',
+                type: 'actionWord',
+            }),
+        ]));
         expect(graph.segments).toEqual([
             expect.objectContaining({
                 text: 'Scry 1.',
@@ -739,6 +770,43 @@ describe('OracleParser', () => {
                 ],
             }),
         ]);
+    });
+
+    test('Feature: Oracle entity extraction emits semantic tokens and phrase entities before document parsing.', () => {
+        const extraction = extractOracleEntities(
+            '{2}, {T}: Copy target enchantment you control. If it is an Aura, untap Yenna, then scry 2.',
+            { cardName: 'Yenna, Redtooth Regent' },
+        );
+
+        expect(extraction.errors).toEqual([]);
+        expect(extraction.tokens).toEqual(expect.arrayContaining([
+            expect.objectContaining({ category: 'cost', raw: '{2}', type: 'manaSymbol' }),
+            expect.objectContaining({ category: 'cost', raw: '{T}', type: 'tapSymbol' }),
+            expect.objectContaining({ category: 'cost', raw: ':', type: 'abilitySeparator' }),
+            expect.objectContaining({ category: 'magicVocabulary', raw: 'Copy', type: 'actionWord' }),
+            expect.objectContaining({ category: 'entityReference', raw: 'target', type: 'targetMarker' }),
+            expect.objectContaining({ category: 'entityReference', raw: 'you', type: 'playerReference' }),
+            expect.objectContaining({ category: 'logic', raw: 'If', type: 'logicWord' }),
+            expect.objectContaining({ category: 'entityReference', raw: 'it', type: 'relativeReference' }),
+            expect.objectContaining({ category: 'magicVocabulary', raw: 'scry', type: 'actionWord' }),
+        ]));
+        expect(extraction.phrases).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                category: 'entityReference',
+                label: 'target enchantment you control',
+                type: 'targetReference',
+            }),
+            expect.objectContaining({
+                category: 'predicate',
+                label: 'it is an Aura',
+                type: 'typePredicate',
+            }),
+            expect.objectContaining({
+                category: 'magicVocabulary',
+                label: 'scry 2',
+                type: 'vocabularyAction',
+            }),
+        ]));
     });
 
     test('Feature: Oracle finite-state parser handles meta-card exile and linked life-change effects.', () => {

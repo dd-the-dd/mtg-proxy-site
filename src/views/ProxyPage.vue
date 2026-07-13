@@ -2072,6 +2072,48 @@
                 >
                   {{ report.oracleText }}
                 </div>
+                <section
+                  v-if="report.parserStages.length"
+                  class="card-parser-panel card-parser-panel-stages"
+                >
+                  <div class="card-parser-panel-title">
+                    Parser pipeline
+                  </div>
+                  <details
+                    v-for="stage in report.parserStages"
+                    :key="stage.id"
+                    class="card-parser-stage-section"
+                    :open="stage.open"
+                  >
+                    <summary class="card-parser-stage-summary">
+                      <span>{{ stage.title }}</span>
+                      <span class="card-parser-stage-count">
+                        {{ stage.status }} · {{ stage.items.length }}
+                      </span>
+                    </summary>
+                    <div
+                      v-if="stage.items.length"
+                      class="card-parser-stage-items"
+                    >
+                      <span
+                        v-for="item in stage.items"
+                        :key="item.id"
+                        class="card-parser-stage-item"
+                        :class="parserStageItemClass(item)"
+                      >
+                        <strong>{{ item.label }}</strong>
+                        <small>{{ item.type }}</small>
+                        <small v-if="item.status">{{ item.status }}</small>
+                      </span>
+                    </div>
+                    <div
+                      v-else
+                      class="card-parser-empty"
+                    >
+                      No entities in this stage.
+                    </div>
+                  </details>
+                </section>
                 <section class="card-parser-panel card-parser-panel-oracle">
                   <div class="card-parser-panel-title">
                     Official oracle analysis
@@ -2468,7 +2510,7 @@ import {
     parseRuleHooksFromCard,
     ruleEventTypes
 } from "../helpers/GameSimulator.mjs";
-import { parseOracleDocument } from "../helpers/OracleParser.mjs";
+import { buildOracleRuleGraph } from "../helpers/OracleRuleGraph.mjs";
 import { createParserFeedbackStorage } from "../helpers/ParserFeedbackStorage.mjs";
 import { ruleContractGroups, ruleDefinitionForName } from "../helpers/RuleContracts.mjs";
 import { createSessionStorage } from "../helpers/SessionStorage.mjs";
@@ -4163,6 +4205,34 @@ export default {
                 };
             });
         },
+        parserStageItemClass(item) {
+            const category = String(item?.category ?? 'logic')
+                .replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)
+                .replace(/^-/, '')
+                .replace(/[^a-z0-9-]/gi, '-')
+                .toLowerCase();
+            return `card-parser-stage-item-${category || 'logic'}`;
+        },
+        buildParserStageReports(stages = []) {
+            return stages.map((stage, stageIndex) => {
+                return {
+                    id: `parser-stage:${stage.key}:${stageIndex}`,
+                    items: (stage.items ?? []).map((item, itemIndex) => {
+                        return {
+                            category: item.category ?? 'logic',
+                            id: `parser-stage:${stage.key}:${itemIndex}`,
+                            label: String(item.label ?? item.raw ?? item.name ?? item.type ?? 'item'),
+                            status: item.status ?? '',
+                            type: String(item.type ?? item.name ?? item.category ?? 'entity'),
+                        };
+                    }),
+                    key: stage.key,
+                    open: stageIndex === 0,
+                    status: stage.status ?? 'ready',
+                    title: stage.title ?? stage.key,
+                };
+            });
+        },
         hookTimingLabel(hook) {
             const timingLabels = {
                 beginningOfUpkeep: 'Beginning of upkeep',
@@ -4329,7 +4399,7 @@ export default {
         buildCardParserReport(card) {
             const selectedData = this.selectedCardData(card);
             const oracleText = selectedData.oracleText ?? card.oracleText ?? '';
-            const oracleResult = parseOracleDocument(oracleText, {
+            const oracleResult = buildOracleRuleGraph(oracleText, {
                 cardName: card.name,
             });
             const coverage = this.cardParserCoverage(oracleResult, oracleText);
@@ -4384,6 +4454,7 @@ export default {
                 oracleErrors,
                 oracleSegments: this.buildOracleSegmentReports(card, oracleResult.segments ?? [], options),
                 oracleText,
+                parserStages: this.buildParserStageReports(oracleResult.stages ?? []),
                 quantity: card.quantity ?? 1,
                 typeLine: selectedData.typeLine ?? card.typeLine ?? '',
             };
@@ -7232,6 +7303,137 @@ export default {
     color: #101828;
     font-size: 0.68rem;
     font-weight: 900;
+}
+
+.card-parser-panel-stages {
+    background: #fcfcfd;
+}
+
+.card-parser-stage-section {
+    background: #fff;
+    border: 1px solid #e4e7ec;
+    border-radius: 4px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.card-parser-stage-summary {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+    gap: 0.45rem;
+    justify-content: space-between;
+    list-style: none;
+    min-width: 0;
+    padding: 0.36rem 0.42rem;
+
+    &::-webkit-details-marker {
+        display: none;
+    }
+
+    span:first-child {
+        color: #101828;
+        font-size: 0.64rem;
+        font-weight: 900;
+    }
+}
+
+.card-parser-stage-count {
+    background: #f2f4f7;
+    border: 1px solid #dadee4;
+    border-radius: 999px;
+    color: #667085;
+    flex: 0 0 auto;
+    font-size: 0.56rem;
+    font-weight: 900;
+    line-height: 1;
+    padding: 0.18rem 0.34rem;
+    text-transform: uppercase;
+}
+
+.card-parser-stage-items {
+    border-top: 1px solid #e4e7ec;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.24rem;
+    min-width: 0;
+    padding: 0.36rem 0.42rem;
+}
+
+.card-parser-stage-item {
+    border: 1px solid #dadee4;
+    border-radius: 999px;
+    display: inline-flex;
+    gap: 0.22rem;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0.2rem 0.34rem;
+
+    strong {
+        color: #303742;
+        font-size: 0.58rem;
+        font-weight: 900;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    small {
+        color: #667085;
+        font-size: 0.54rem;
+        font-weight: 850;
+        line-height: 1.2;
+    }
+}
+
+.card-parser-stage-item-action-primitive {
+    background: #ecfdf3;
+    border-color: #abefc6;
+}
+
+.card-parser-stage-item-read-primitive {
+    background: #eef4ff;
+    border-color: #c7d7fe;
+}
+
+.card-parser-stage-item-predicate {
+    background: #f4ebff;
+    border-color: #d6bbfb;
+}
+
+.card-parser-stage-item-entity-reference {
+    background: #fffaeb;
+    border-color: #fedf89;
+}
+
+.card-parser-stage-item-cost {
+    background: #fff4ed;
+    border-color: #ffd6ae;
+}
+
+.card-parser-stage-item-trigger {
+    background: #fef3f2;
+    border-color: #fecdca;
+}
+
+.card-parser-stage-item-timing {
+    background: #ecfdff;
+    border-color: #a5f0fc;
+}
+
+.card-parser-stage-item-magic-vocabulary {
+    background: #fdf2fa;
+    border-color: #fcceee;
+}
+
+.card-parser-stage-item-effect-block {
+    background: #f8f9fa;
+    border-color: #d0d5dd;
+}
+
+.card-parser-stage-item-unsupported {
+    background: #fff1f3;
+    border-color: #fecdd6;
 }
 
 .card-parser-segment-list {

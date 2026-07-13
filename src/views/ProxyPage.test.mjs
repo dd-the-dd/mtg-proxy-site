@@ -234,6 +234,14 @@ describe('Core Rendering', async () => {
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Unsupported clause');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).not.toContain('Oracle actions');
         expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Official oracle analysis');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Entity retrieval');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Document FSM');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Ability classifier');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('Vocabulary expansion');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('abilitySeparator');
+        expect(wrapper.find('#card-analysis-parser-inspector').text()).toContain('target creature');
+        expect(wrapper.findAll('#card-analysis-parser-inspector .card-parser-stage-section')).toHaveLength(30);
+        expect(wrapper.findAll('#card-analysis-parser-inspector details.card-parser-stage-section').length).toBeGreaterThan(0);
         const parserPanelTitles = wrapper.findAll('#card-analysis-parser-inspector .card-parser-panel-title').map(title => title.text());
         expect(parserPanelTitles).not.toContain('Parser gaps');
         expect(parserPanelTitles).not.toContain('Rule hooks');
