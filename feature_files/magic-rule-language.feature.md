@@ -94,26 +94,179 @@
 - The vocabulary-level state machine recognizes Magic terms such as draw, mill, scry, damage, destroy, exile, copy, and life change.
 - The primitive-level state machine expands supported vocabulary to action primitives, choice requests, event emissions, and state mutations.
 
-```mermaid
-flowchart TD
-    Oracle[Official Oracle Text]
-    DocumentFSM[Document FSM\nsplit clauses, preserve bullets, merge linked sentences]
-    AbilityFSM[Ability FSM\noption, trigger, static, replacement, spell effect]
-    BoolFSM[Boolean FSM\nnot, and, or, comparisons, predicates]
-    RefFSM[Reference FSM\nyou, self, target, each, chosen, zone position]
-    VocabFSM[Vocabulary FSM\ndraw, scry, damage, destroy, exile, life change]
-    PrimitiveFSM[Primitive FSM\nmoveCard, movePermanentToZone, setPlayerState, emitEvent]
-    RuleGraph[Auditable Rule Graph\ncolored cells + effect blocks]
-    GameEngine[Game Engine\noptions, stack blocks, triggers, state changes]
+### Document FSM
 
-    Oracle --> DocumentFSM --> AbilityFSM
-    AbilityFSM --> BoolFSM
-    AbilityFSM --> RefFSM
-    AbilityFSM --> VocabFSM
-    BoolFSM --> RuleGraph
-    RefFSM --> RuleGraph
-    VocabFSM --> PrimitiveFSM --> RuleGraph
-    RuleGraph --> GameEngine
+```mermaid
+stateDiagram-v2
+    [*] --> StartDocument
+    StartDocument --> ReadLine: next official line
+    ReadLine --> ChoiceLine: bullet marker
+    ReadLine --> PlainLine: no bullet marker
+    ChoiceLine --> SplitClause: strip bullet, remember choiceLine=true
+    PlainLine --> SplitClause: remember choiceLine=false
+    SplitClause --> EmitClause: split on sentence/semicolon boundary
+    EmitClause --> ReadLine: more line text
+    EmitClause --> GroupClauses: end of input
+
+    GroupClauses --> ModalGroup: opener is "Choose N" and following clauses are choice lines
+    GroupClauses --> TriggerRiderGroup: trigger followed by "This ability..."
+    GroupClauses --> ExilePermissionGroup: activated exile top card followed by play permission
+    GroupClauses --> SingleClauseGroup: no merge rule matched
+
+    ModalGroup --> SegmentAccepted
+    TriggerRiderGroup --> SegmentAccepted
+    ExilePermissionGroup --> SegmentAccepted
+    SingleClauseGroup --> SegmentAccepted
+    SegmentAccepted --> [*]
+```
+
+### Ability Classifier FSM
+
+```mermaid
+stateDiagram-v2
+    [*] --> StartSegment
+    StartSegment --> ModalOpener: starts with Choose one/two/three
+    StartSegment --> TriggerOpener: starts with when/whenever/at
+    StartSegment --> ThisEnters: starts with this + entity + enters
+    StartSegment --> StaticSpell: starts with "This spell"
+    StartSegment --> ActivatedCost: contains ":" before effect text
+    StartSegment --> SpellVocabulary: starts with supported spell action
+    StartSegment --> Unsupported: no supported opener
+
+    ModalOpener --> ParseModalChoices: read each bullet choice
+    ParseModalChoices --> AcceptModal: every choice parses
+    ParseModalChoices --> Unsupported: unsupported choice action/target
+
+    TriggerOpener --> ParseTriggerEvent
+    ParseTriggerEvent --> ParseTriggerCondition
+    ParseTriggerCondition --> ParseTriggerAction
+    ParseTriggerAction --> ParseTriggerRider: optional rider such as once each turn or until end of turn
+    ParseTriggerRider --> AcceptTrigger
+    ParseTriggerAction --> AcceptTrigger
+
+    ThisEnters --> ParseEnterDestination
+    ParseEnterDestination --> ParseEnterState: tapped/untapped/etc
+    ParseEnterState --> ParseConditionalBranch: unless/if optional
+    ParseConditionalBranch --> AcceptReplacementOrEtbHook
+    ParseEnterState --> AcceptReplacementOrEtbHook
+
+    StaticSpell --> ParseStackModifier
+    ParseStackModifier --> AcceptStaticModifier
+
+    ActivatedCost --> ParseCostList
+    ParseCostList --> ParseActivatedEffect
+    ParseActivatedEffect --> AcceptActivatedOption
+    ParseActivatedEffect --> Unsupported
+
+    SpellVocabulary --> ParseSpellEffectBlock
+    ParseSpellEffectBlock --> AcceptSpellEffect
+    ParseSpellEffectBlock --> Unsupported
+
+    AcceptModal --> [*]
+    AcceptTrigger --> [*]
+    AcceptReplacementOrEtbHook --> [*]
+    AcceptStaticModifier --> [*]
+    AcceptActivatedOption --> [*]
+    AcceptSpellEffect --> [*]
+    Unsupported --> [*]
+```
+
+### Reference And Target FSM
+
+```mermaid
+stateDiagram-v2
+    [*] --> StartReference
+    StartReference --> YouRef: "you" / "your"
+    StartReference --> OpponentRef: opponent phrase
+    StartReference --> SelfRef: "this" or source card name/prefix
+    StartReference --> AnyTarget: "any target"
+    StartReference --> TargetQuantity: "target" or "up to N target"
+    StartReference --> EachSet: "each ..."
+    StartReference --> ChosenRef: "chosen" / "that" / "it"
+    StartReference --> ZonePosition: "top card of your library"
+    StartReference --> EntityMatcher: implicit entity phrase
+
+    AnyTarget --> AcceptTrueTarget: candidates player, creature, planeswalker, battle
+
+    TargetQuantity --> EntityMatcher: set min/max and target=true
+    EachSet --> EntityMatcher: target=false, set selector=each
+    EntityMatcher --> EntityAlternative: parse type/supertype/subtype/name/color/qualifier
+    EntityAlternative --> EntityMatcher: "or" / "and" alternative
+    EntityAlternative --> AcceptReference
+
+    YouRef --> AcceptReference
+    OpponentRef --> AcceptReference
+    SelfRef --> AcceptReference
+    ChosenRef --> AcceptReference
+    ZonePosition --> AcceptReference
+
+    AcceptTrueTarget --> [*]
+    AcceptReference --> [*]
+```
+
+### Boolean Logic FSM
+
+```mermaid
+stateDiagram-v2
+    [*] --> StartLogic
+    StartLogic --> NotExpr: not/unless
+    StartLogic --> PredicateCall: supported predicate phrase
+    StartLogic --> GroupExpr: "(" or grouped clause
+    StartLogic --> UnsupportedLogic: unknown condition opener
+
+    NotExpr --> PredicateCall
+    NotExpr --> GroupExpr
+    GroupExpr --> PredicateCall
+    PredicateCall --> ComparisonExpr: equals/greater/less/etc
+    PredicateCall --> LogicJoin: and/or
+    PredicateCall --> AcceptLogic
+    ComparisonExpr --> LogicJoin
+    ComparisonExpr --> AcceptLogic
+    LogicJoin --> PredicateCall
+    LogicJoin --> NotExpr
+    LogicJoin --> GroupExpr
+
+    AcceptLogic --> [*]
+    UnsupportedLogic --> [*]
+```
+
+### Vocabulary Action FSM
+
+```mermaid
+stateDiagram-v2
+    [*] --> StartAction
+    StartAction --> DrawAction: draw + amount + cards
+    StartAction --> ScryAction: scry + amount
+    StartAction --> DamageAction: deals + amount + damage + to
+    StartAction --> DestroyAction: destroy + reference
+    StartAction --> ExileAction: exile + reference
+    StartAction --> LifeChangeAction: player ref + gains/loses + amount + life
+    StartAction --> PumpAction: reference + gets + power/toughness + duration
+    StartAction --> ManaAction: add + mana expression
+    StartAction --> UnsupportedAction: unknown action opener
+
+    DrawAction --> ExpandDrawPrimitive
+    ScryAction --> ExpandScryPrimitive
+    DamageAction --> ParseDamageTarget
+    DestroyAction --> ParseActionReference
+    ExileAction --> ParseActionReference
+    LifeChangeAction --> ExpandLifePrimitive
+    PumpAction --> ExpandPermanentPropertyPrimitive
+    ManaAction --> ExpandManaPrimitive
+
+    ParseDamageTarget --> ExpandDamagePrimitive
+    ParseActionReference --> ExpandMovePermanentPrimitive
+
+    ExpandDrawPrimitive --> AcceptAction
+    ExpandScryPrimitive --> AcceptAction
+    ExpandDamagePrimitive --> AcceptAction
+    ExpandMovePermanentPrimitive --> AcceptAction
+    ExpandLifePrimitive --> AcceptAction
+    ExpandPermanentPropertyPrimitive --> AcceptAction
+    ExpandManaPrimitive --> AcceptAction
+
+    AcceptAction --> [*]
+    UnsupportedAction --> [*]
 ```
 
 ## Section 12: Parser Audit Output
