@@ -11,6 +11,8 @@
         "showPromoPrintings": "Show Promo Printings",
         "matchInputEditions": "Match Input Editions",
         "includeBasicLands": "Include Basic Lands",
+        "includeCards": "Include Cards",
+        "includeGamePieces": "Include Tokens / Helpers",
         "showCutLines": "Show Cut Lines",
         "imageType": {
             "label": "Image Type",

@@ -53,13 +53,13 @@ export default {
                     quote: `"I hope you leave enough room for my fist because I'm going to ram it into your stomach and break your goddamn spine!"`,
                     attribution: `Ben Richards (The Running Man)`,
                 }
-            } else if (this.cards.find(card => ['sld', 'slp', 'slc', 'slu'].includes(card.selectedOption.setCode))) {
+            } else if (this.cards.find(card => ['sld', 'slp', 'slc', 'slu'].includes(card.selectedOption?.setCode))) {
                 return {
                     header: `Secret Lairs?! Really?`,
                     quote: `"I gotta tell you, Santa, there's something about this place that doesn't seem quite... Kosher."`,
                     attribution: `Howard Langston (Jingle All The Way)`,
                 }
-            } else if (this.cards.find(card => ['ugl', 'unh', 'punh', 'ust', 'und', 'unf'].includes(card.selectedOption.setCode))) {
+            } else if (this.cards.find(card => ['ugl', 'unh', 'punh', 'ust', 'und', 'unf'].includes(card.selectedOption?.setCode))) {
                 return {
                     header: `I'm starting to UN-derstand what's going on here.`,
                     quote: `"You're a funny guy, Sully, I like you. That's why I'm going to kill you last."`,

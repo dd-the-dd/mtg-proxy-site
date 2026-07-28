@@ -1,12 +1,34 @@
 <template>
-  <div class="card-loading loading loading-lg" :class="{ 'hidden': loaded }" />
-  <img v-bind="$attrs" :src="internalSrc">
-  <img v-if="!loaded" :src="src" @load="onLoaded" class="hidden">
+  <LoadingSpinner
+    v-if="!loaded"
+    class="card-loading"
+    size="lg"
+    label="Loading image"
+  />
+  <img
+    v-bind="$attrs"
+    :src="internalSrc"
+    loading="lazy"
+    decoding="async"
+  >
+  <img
+    v-if="!loaded"
+    :src="src"
+    @load="onLoaded"
+    class="hidden"
+    loading="eager"
+    decoding="async"
+  >
 </template>
 
 <script>
+import LoadingSpinner from './LoadingSpinner.vue';
+
 export default {
     name: 'ImageLoader',
+    components: {
+        LoadingSpinner,
+    },
     props: {
         src: {
             type: String,
@@ -41,11 +63,11 @@ export default {
 </script>
 
 <style scoped>
-.card-loading.loading {
+.card-loading {
     position: absolute;
-    width: 100%;
-    top: 30%;
-    margin: 0 auto;
+    left: calc(50% - 0.8rem);
+    top: 36%;
+    z-index: 2;
 }
 
 img {

@@ -161,7 +161,7 @@ describe("parseDecklist()", () => {
             });
         });
 
-        test("Sideboard Section Header", () => {
+        test("Feature: Sideboard section and SB prefix mark sideboard lines.", () => {
             expect(
                 parseDecklist(
                     `
@@ -174,8 +174,8 @@ describe("parseDecklist()", () => {
                 ),
             ).toStrictEqual({
                 lines: [
-                    { name: "abandon hope", quantity: 3 },
-                    { name: "price of progress", quantity: 2 },
+                    { name: "abandon hope", quantity: 3, isSideboard: true },
+                    { name: "price of progress", quantity: 2, isSideboard: true },
                 ],
                 errors: [],
             });
@@ -248,11 +248,13 @@ describe("parseDecklist()", () => {
                     {
                         name: `brotherhood's end`,
                         quantity: 2,
+                        isSideboard: true,
                         collectorsNumber: "128",
                     },
                     {
                         name: "final revels",
                         quantity: 2,
+                        isSideboard: true,
                         set: "lrw",
                         collectorsNumber: "113",
                     },
@@ -276,7 +278,7 @@ describe("parseDecklist()", () => {
                 lines: [
                     { name: "mountain", quantity: 5 },
                     { name: "city of traitors", quantity: 4 },
-                    { name: `brotherhood's end`, quantity: 2 },
+                    { name: `brotherhood's end`, quantity: 2, isSideboard: true },
                 ],
                 errors: [],
             });
@@ -306,7 +308,7 @@ describe("parseDecklist()", () => {
                         set: "sta",
                         collectorsNumber: "26",
                     },
-                    { name: "vadmir, new blood", quantity: 2 },
+                    { name: "vadmir, new blood", quantity: 2, isSideboard: true },
                 ],
                 errors: [],
             });

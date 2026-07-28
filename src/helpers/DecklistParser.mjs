@@ -5,17 +5,26 @@ export function parseDecklist(decklist) {
         lines: [],
         errors: [],
     };
+    let inSideboard = false;
 
     for (let line of decklist.split("\n")) {
         line = line.trim();
+
+        if (/^(?:\/\/\s*)?Sideboard:?$/i.test(line)) {
+            inSideboard = true;
+            continue;
+        }
+
+        if (/^Deck:?$/i.test(line)) {
+            inSideboard = false;
+            continue;
+        }
 
         // Different sites have different sideboard formats.
         // Look for the word "sideboard" or lines that start with a double slash and skip them.
         // CubeCobra uses # to represent a comment line.
         // MTGA uses Sideboard and Deck as section headers.
         if (
-            /^Sideboard:?$/i.test(line) ||
-            /^Deck:?$/i.test(line) ||
             /^\/\//.test(line) ||
             /^#/.test(line) ||
             line === ""
@@ -23,6 +32,7 @@ export function parseDecklist(decklist) {
             continue;
         }
 
+        const sideboardPrefix = /^SB:\s+/i.test(line);
         line = line.replace(/\s+#!\S+/g, "").trim();
 
         // Extract the quantity and card name.
@@ -65,6 +75,7 @@ export function parseDecklist(decklist) {
         response.lines.push({
             name: normalizeCardName(inputCardName),
             quantity: parseInt(quantity),
+            ...(inSideboard || sideboardPrefix ? { isSideboard: true } : {}),
             ...(setName ? { set: setName.toLocaleLowerCase() } : {}),
             ...(collectorsNumber ? { collectorsNumber } : {}),
         });

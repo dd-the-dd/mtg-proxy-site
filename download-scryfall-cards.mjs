@@ -96,6 +96,67 @@ function isGamePiece(card) {
         /(^| — | \/\/ )(Dungeon|Emblem|Plane|Scheme)( — | \/\/ |$)/.test(card.type_line);
 }
 
+function comboPieceCategory(card, part) {
+    const name = normalizeCardName(card.name);
+    const typeLine = card.type_line ?? '';
+
+    if (name.includes('the ring') || typeLine === 'Emblem // Card') {
+        return 'ring';
+    }
+
+    if (name.includes('initiative')) {
+        return 'initiative';
+    }
+
+    if (typeLine.includes('Dungeon')) {
+        return 'dungeon';
+    }
+
+    if (card.layout === 'emblem' || typeLine.includes('Emblem')) {
+        return 'emblem';
+    }
+
+    if (part.component === 'token') {
+        return 'token';
+    }
+
+    if (typeLine === 'Card') {
+        const trackerNames = ['experience', 'energy reserve', 'poison counter', 'radiation'];
+        if (trackerNames.includes(name)) {
+            return 'tracker';
+        }
+
+        return 'mechanicHelper';
+    }
+
+    return 'realCard';
+}
+
+function cardOracleText(card) {
+    return [
+        card.oracle_text,
+        ...(card.card_faces ?? []).map(face => face.oracle_text),
+    ].filter(Boolean).join('\n');
+}
+
+function hasConjureText(card) {
+    return /conjure/i.test(cardOracleText(card));
+}
+
+function shouldIncludeRelatedGamePiece(sourceCard, relatedCard, part) {
+    const category = comboPieceCategory(relatedCard, part);
+
+    if (category === 'realCard' && sourceCard.type_line?.includes('Basic Land')) {
+        return false;
+    }
+
+    if (category === 'realCard' && hasConjureText(relatedCard) && !hasConjureText(sourceCard)) {
+        return false;
+    }
+
+    return true;
+}
+
 const stripped = cards.filter(card => {
     // Process the exclusions.
     return includedSets.includes(card.set) ||
@@ -132,6 +193,33 @@ const stripped = cards.filter(card => {
                 name: normalizeCardName(token.name),
                 setCode: token.set,
                 collectorNumber: token.collector_number,
+                typeLine: token.type_line,
+                oracleText: cardOracleText(token) || undefined,
+                manaCost: token.mana_cost,
+                manaValue: token.cmc,
+                power: token.power,
+                toughness: token.toughness,
+            };
+        });
+    const normalizedCardName = normalizeCardName(card.name);
+    const relatedGamePieces = isGamePiece(card) ? undefined : card.all_parts
+        ?.filter(part => ['combo_piece', 'token'].includes(part.component) && part.id !== card.id)
+        .map(part => {
+            return {
+                part,
+                card: cardsById.get(part.id),
+            };
+        })
+        .filter(({ card }) => card)
+        .filter(({ card }) => normalizeCardName(card.name) !== normalizedCardName)
+        .filter(({ part, card: relatedCard }) => shouldIncludeRelatedGamePiece(card, relatedCard, part))
+        .map(({ part, card }) => {
+            return {
+                name: normalizeCardName(card.name),
+                displayName: card.name,
+                setCode: card.set,
+                collectorNumber: card.collector_number,
+                category: comboPieceCategory(card, part),
             };
         });
 
@@ -151,7 +239,14 @@ const stripped = cards.filter(card => {
         isPromo: !customNotPromoSets.includes(card.set) && (card.promo || applicablePromoTypes.length > 0 || customPromoSetTypes.includes(card.set_type) || customPromoSets.includes(card.set)),
         isToken: card.layout === 'token' || card.layout === 'double_faced_token',
         isGamePiece: isGamePiece(card),
+        typeLine: card.type_line,
+        oracleText: cardOracleText(card) || undefined,
+        manaCost: card.mana_cost,
+        manaValue: card.cmc,
+        power: card.power,
+        toughness: card.toughness,
         relatedTokens: relatedTokens?.length ? relatedTokens : undefined,
+        relatedGamePieces: relatedGamePieces?.length ? relatedGamePieces : undefined,
         imageUris: {
             front: `https://cards.scryfall.io/border_crop/${card.reversible_face || 'front'}/${card.id.charAt(0)}/${card.id.charAt(1)}/${card.id}.jpg`,
             back: cardBackUri,
@@ -221,7 +316,14 @@ const minimized = stripped.sort((a, b) => {
             isPromo: card.isPromo ? true : undefined,
             isToken: card.isToken ? true : undefined,
             ...(card.isGamePiece ? { isGamePiece: true } : {}),
+            ...(card.typeLine ? { typeLine: card.typeLine } : {}),
+            ...(card.oracleText ? { oracleText: card.oracleText } : {}),
+            ...(card.manaCost ? { manaCost: card.manaCost } : {}),
+            ...(card.manaValue !== undefined ? { manaValue: card.manaValue } : {}),
+            ...(card.power ? { power: card.power } : {}),
+            ...(card.toughness ? { toughness: card.toughness } : {}),
             ...(card.relatedTokens ? { relatedTokens: card.relatedTokens } : {}),
+            ...(card.relatedGamePieces ? { relatedGamePieces: card.relatedGamePieces } : {}),
 
             urlFront: card.imageUris.front,
             urlBack: card.imageUris.back,
@@ -240,47 +342,25 @@ console.log(`Found ${Object.keys(minimized.cards).length} distinct cards from ${
 
 // Run some basic sanity tests.
 // FIXME: Replace this test with a card that isn't likely to get a reprint.
+const toralfPrintings = minimized.cards["toralf, god of fury // toralf's hammer"];
 assert.deepStrictEqual(
-    minimized.cards["toralf, god of fury // toralf's hammer"],
+    toralfPrintings.map(card => {
+        return {
+            setCode: card.setCode,
+            collectorNumber: card.collectorNumber,
+            isDigital: card.isDigital,
+            isPromo: card.isPromo,
+        };
+    }),
     [
-        {
-            "setCode": "khm",
-            "collectorNumber": "154",
-            "isDigital": undefined,
-            "isPromo": undefined,
-            "isToken": undefined,
-            "urlFront": "https://cards.scryfall.io/border_crop/front/2/2/22a6a5f1-1405-4efb-af3e-e1f58d664e99.jpg",
-            "urlBack": "https://api.scryfall.com/cards/khm/154?format=image&face=back",
-          },
-          {
-            "setCode": "pkhm",
-            "collectorNumber": "154s",
-            "isDigital": undefined,
-            "isPromo": true,
-            "isToken": undefined,
-            "urlFront": "https://cards.scryfall.io/border_crop/front/5/6/56169747-9603-431e-bd88-bfa6982f029c.jpg",
-            "urlBack": "https://api.scryfall.com/cards/pkhm/154s?format=image&face=back",
-          },
-          {
-            "setCode": "khm",
-            "collectorNumber": "313",
-            "isDigital": undefined,
-            "isPromo": true,
-            "isToken": undefined,
-            "urlFront": "https://cards.scryfall.io/border_crop/front/5/a/5af80f3b-229d-43f8-976e-50bee70b32e7.jpg",
-            "urlBack": "https://api.scryfall.com/cards/khm/313?format=image&face=back",
-          },
-          {
-            "setCode": "prm",
-            "collectorNumber": "88302",
-            "isDigital": true,
-            "isPromo": true,
-            "isToken": undefined,
-            "urlFront": "https://cards.scryfall.io/border_crop/front/e/7/e71fdafd-7548-4be6-a6a6-146c4d4ca0b3.jpg",
-            "urlBack": "https://api.scryfall.com/cards/prm/88302?format=image&face=back",
-          },
+        { setCode: "khm", collectorNumber: "154", isDigital: undefined, isPromo: undefined },
+        { setCode: "pkhm", collectorNumber: "154s", isDigital: undefined, isPromo: true },
+        { setCode: "khm", collectorNumber: "313", isDigital: undefined, isPromo: true },
+        { setCode: "prm", collectorNumber: "88302", isDigital: true, isPromo: true },
     ],
 );
+assert.equal(toralfPrintings[0].typeLine, 'Legendary Creature — God // Legendary Artifact — Equipment');
+assert.match(toralfPrintings[0].oracleText, /excess noncombat damage/);
 
 assert.equal(
     minimized.sets['plc'],

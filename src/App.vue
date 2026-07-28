@@ -88,4 +88,18 @@ export default {
   max-width: 1200px;
 }
 
+body.play-board-active {
+  overflow: hidden;
+}
+
+body.play-board-active .navbar {
+  display: none;
+}
+
+body.play-board-active #content {
+  margin: 0;
+  max-width: none;
+  width: 100%;
+}
+
 </style>
