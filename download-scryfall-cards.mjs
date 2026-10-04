@@ -1,7 +1,5 @@
 import fs from 'fs';
 import { createReadStream } from 'fs';
-import { createInterface } from 'readline';
-import { createGunzip } from 'zlib';
 import axios from 'axios';
 import { strict as assert } from 'assert';
 import { withParserAsStream } from 'stream-json/streamers/stream-array.js';
@@ -14,10 +12,8 @@ if (!fs.existsSync('./data/default-cards.json') || process.argv[2] == "--update"
         url: `https://api.scryfall.com/bulk-data/default-cards?format=file`,
         method: 'GET',
         responseType: 'stream',
-        decompress: false,
         headers: {
             'User-Agent': 'Griselbrand/0.1.0',
-            'Accept': 'application/json',
         },
     });
 
@@ -33,34 +29,12 @@ if (!fs.existsSync('./data/default-cards.json') || process.argv[2] == "--update"
     console.log('Using existing card data.');
 }
 
-// Scryfall currently returns gzipped JSON Lines, while an older cached
-// download may still be an uncompressed JSON array. Stream either
-// representation to avoid V8's string length limit.
-const firstChunk = Buffer.alloc(4096);
-const input = fs.openSync('./data/default-cards.json', 'r');
-const bytesRead = fs.readSync(input, firstChunk, 0, firstChunk.length, 0);
-fs.closeSync(input);
-const firstCharacter = firstChunk.subarray(0, bytesRead).toString('utf8').trimStart()[0];
-const isGzip = bytesRead >= 2 && firstChunk[0] === 0x1f && firstChunk[1] === 0x8b;
-
+// Stream-parse the large JSON array to avoid V8's string length limit.
 const cards = [];
-if (firstCharacter === '[') {
-    const pipeline = createReadStream('./data/default-cards.json')
-        .pipe(withParserAsStream());
-    for await (const { value } of pipeline) {
-        cards.push(value);
-    }
-} else {
-    const source = createReadStream('./data/default-cards.json');
-    const lines = createInterface({
-        input: isGzip ? source.pipe(createGunzip()) : source,
-        crlfDelay: Infinity,
-    });
-    for await (const line of lines) {
-        if (line.trim()) {
-            cards.push(JSON.parse(line));
-        }
-    }
+const pipeline = createReadStream('./data/default-cards.json')
+    .pipe(withParserAsStream());
+for await (const { value } of pipeline) {
+    cards.push(value);
 }
 
 const cardsById = new Map(cards.map(card => [card.id, card]));
