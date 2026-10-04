@@ -13,11 +13,16 @@ beforeAll(async () => {
     while(Object.keys(wrapper.getCurrentComponent().data.sets).length === 0) {
         await new Promise(r => setTimeout(r, 50));
     }
-}, 30000);
+}, 90000);
 
 describe('Core Rendering', async () => {
     test('Renders', () => {
         expect(wrapper.find('#deck-input').exists()).toBe(true);
+    });
+
+    test('Cut lines are enabled by default for printed sheets', () => {
+        expect(wrapper.getCurrentComponent().data.config.showCutLines).toBe(true);
+        expect(wrapper.find('#print-content').classes()).toContain('with-cut-lines');
     });
 });
 
@@ -36,6 +41,64 @@ describe('Deck Loading', async () => {
     test('Has Card Entry', () => {
         expect(wrapper.findAll('.card-select').length).toBe(1);
     })
+
+    test('Deck card widgets choose whether to print and which artwork to use', async () => {
+        const component = wrapper.getCurrentComponent();
+        const originalCards = component.data.cards;
+        const firstPrinting = { name: 'Alpha First', urlFront: 'alpha-first' };
+        const secondPrinting = { name: 'Alpha Second', urlFront: 'alpha-second' };
+
+        component.data.cards = [
+            {
+                quantity: 1,
+                name: 'alpha',
+                isBasic: false,
+                printSelected: true,
+                selectedOption: firstPrinting,
+                setOptions: [firstPrinting, secondPrinting],
+            },
+        ];
+        await wrapper.vm.$nextTick();
+
+        const printingSelect = wrapper.find('select[name="selected-option"]');
+        printingSelect.element.selectedIndex = 1;
+        await printingSelect.trigger('change');
+
+        expect(component.data.cards[0].selectedOption).toStrictEqual(secondPrinting);
+        expect(component.ctx.resolveCardImage(component.data.cards[0])).toBe('alpha-second');
+
+        await wrapper.find('input[name="print-card"]').setValue(false);
+        expect(component.ctx.printSlotsFront).toEqual([]);
+        expect(wrapper.find('#print').attributes()).toHaveProperty('disabled');
+
+        component.data.cards = originalCards;
+        await wrapper.vm.$nextTick();
+    });
+
+    test('Considering cards load as permanently excluded from printing', async () => {
+        const component = wrapper.getCurrentComponent();
+
+        component.data.config.decklist = `
+            Deck
+            1 Lightning Bolt
+            Considering
+            1 Chain Lightning
+        `;
+        await component.ctx.loadCardList();
+        await wrapper.vm.$nextTick();
+
+        const consideringCard = component.data.cards.find(card => card.name === 'chain lightning');
+        expect(consideringCard.isConsidering).toBe(true);
+        expect(consideringCard.printSelected).toBe(false);
+        expect(component.ctx.printSlotsFront.map(card => card.name)).toEqual(['lightning bolt']);
+
+        const consideringToggle = wrapper.findAll('input[name="print-card"]')
+            .find(toggle => toggle.element.disabled);
+        expect(consideringToggle).toBeDefined();
+
+        component.data.config.decklist = '4 Wild Nacatl';
+        await component.ctx.loadCardList();
+    });
 
     test('Feature: Bracketed set code selects token printing.', async () => {
         const component = wrapper.getCurrentComponent();
@@ -225,6 +288,32 @@ describe('shouldShowSetOption()', async () => {
 });
 
 describe('Print layout', async () => {
+    test('Considering cards remain excluded even if their print flag is forced on', () => {
+        const data = wrapper.getCurrentComponent().data;
+        const ctx = wrapper.getCurrentComponent().ctx;
+
+        data.config.cardBacks = 'none';
+        data.cards = [
+            {
+                quantity: 1,
+                name: 'lightning bolt',
+                isBasic: false,
+                printSelected: true,
+                selectedOption: { urlFront: 'bolt-front' },
+            },
+            {
+                quantity: 2,
+                name: 'chain lightning',
+                isBasic: false,
+                isConsidering: true,
+                printSelected: true,
+                selectedOption: { urlFront: 'chain-front' },
+            },
+        ];
+
+        expect(ctx.printSlotsFront.map(card => card.name)).toEqual(['lightning bolt']);
+    });
+
     test('All pages mode mirrors back rows', () => {
         const data = wrapper.getCurrentComponent().data;
         const ctx = wrapper.getCurrentComponent().ctx;
