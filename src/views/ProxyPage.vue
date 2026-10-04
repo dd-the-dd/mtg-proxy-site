@@ -28,7 +28,7 @@
               id="print"
               class="btn btn-block tooltip"
               @click="printList"
-              :disabled="printSlotsFront.length == 0"
+              :disabled="cards.length == 0"
               :data-tooltip="$t('consumedSlots', { count: cardCountWhenPrinting.count, bound: cardCountWhenPrinting.bound})"
             >
               <span class="icon-print" /> {{ $t('buttons.print') }}
@@ -257,7 +257,6 @@
             v-for="(card, cardIndex) in cards"
             :key="cardIndex"
             class="card-select column col-3 col-sm-6 mt-2"
-            :class="{ 'card-select-not-printing': !shouldPrintCard(card) }"
             v-show="shouldShowCard(card)"
           >
             <div class="p-relative">
@@ -270,40 +269,27 @@
               <span
                 class="card-quantity bg-primary text-light docs-shape s-rounded centered"
               >{{ card.quantity }}x</span>
-              <label class="form-checkbox card-print-toggle">
-                <input
-                  type="checkbox"
-                  name="print-card"
-                  v-model="card.printSelected"
-                  :disabled="card.isConsidering"
+              <select
+                class="form-select select-sm mt-2"
+                name="selected-option"
+                v-model="card.selectedOption"
+                @change="
+                  updateSessionSet(
+                    card.name,
+                    card.selectedOption,
+                    cardIndex,
+                  )
+                "
+              >
+                <option
+                  v-for="(set, setIndex) in card.setOptions"
+                  :value="set"
+                  :key="setIndex"
+                  v-show="shouldShowSetOption(card, set)"
                 >
-                <i class="form-icon" />
-                {{ card.isConsidering ? 'Considering — not printed' : 'Include in print' }}
-              </label>
-              <label class="form-label card-printing-label">
-                Printing artwork
-                <select
-                  class="form-select select-sm"
-                  name="selected-option"
-                  v-model="card.selectedOption"
-                  @change="
-                    updateSessionSet(
-                      card.name,
-                      card.selectedOption,
-                      cardIndex,
-                    )
-                  "
-                >
-                  <option
-                    v-for="(set, setIndex) in card.setOptions"
-                    :value="set"
-                    :key="setIndex"
-                    v-show="shouldShowSetOption(card, set)"
-                  >
-                    {{ set.name }}
-                  </option>
-                </select>
-              </label>
+                  {{ set.name }}
+                </option>
+              </select>
             </div>
           </div>
         </div>
@@ -387,7 +373,7 @@ export default {
                 includePromo: false,
                 matchEditions: false,
                 includeBasics: false,
-                showCutLines: true,
+                showCutLines: false,
                 fixedPageSize: false,
                 imageType: "border_crop",
                 scale: "normal",
@@ -449,7 +435,7 @@ export default {
             const slots = [];
 
             for (const card of this.cards) {
-                if (!this.shouldPrintCard(card, "front")) {
+                if (!this.shouldShowCard(card, "front")) {
                     continue;
                 }
 
@@ -530,11 +516,17 @@ export default {
             }
 
             const slots = [];
-            for (const card of this.printSlotsFront) {
-                slots.push({ card, face: "front" });
+            for (const card of this.cards) {
+                if (!this.shouldShowCard(card, "front")) {
+                    continue;
+                }
 
-                if (this.shouldShowCard(card, "back")) {
-                    slots.push({ card, face: "back" });
+                for (let i = 0; i < card.quantity; i += 1) {
+                    slots.push({ card, face: "front" });
+
+                    if (this.shouldShowCard(card, "back")) {
+                        slots.push({ card, face: "back" });
+                    }
                 }
             }
 
@@ -645,7 +637,7 @@ export default {
             this.config.includePromo = bindStorage('includePromo', (v) => v === "true");
             this.config.matchEditions = bindStorage('matchEditions', (v) => v === "true");
             this.config.includeBasics = bindStorage('includeBasics', (v) => v === "true");
-            this.config.showCutLines = bindStorage('showCutLines', (v) => v !== "false");
+            this.config.showCutLines = bindStorage('showCutLines', (v) => v === "true");
             this.config.fixedPageSize = bindStorage('fixedPageSize', (v) => v === "true");
             this.config.imageType = bindStorage('imageType', (v) => v ?? "border_crop");
             this.config.scale = bindStorage('scale', (v) => v ?? "normal");
@@ -682,11 +674,6 @@ export default {
             }
 
             return true;
-        },
-        shouldPrintCard(card, face = "front") {
-            return !card.isConsidering &&
-                card.printSelected !== false &&
-                this.shouldShowCard(card, face);
         },
         resolveCardImage(card, face = "front") {
             if (face == "front") {
@@ -746,10 +733,6 @@ export default {
             this.sessionSetSelections[cardName][deckIndex] = setOption;
         },
         printList() {
-            if (this.printSlotsFront.length === 0) {
-                return;
-            }
-
             window.print();
         },
         async loadCardList() {
@@ -794,8 +777,6 @@ export default {
                         };
                     }),
                     isBasic: basicLands.includes(line.name.toLowerCase()),
-                    isConsidering: Boolean(line.isConsidering),
-                    printSelected: !line.isConsidering,
                     requestedSet: line.set,
                     requestedCollectorNumber: line.collectorsNumber,
                     selectedOption: this.sessionSetSelections[line.name]?.[cardIndex],
@@ -935,19 +916,6 @@ html.dark-theme {
     line-height: 1rem;
 }
 
-.card-print-toggle {
-    margin: 0.35rem 0 0.2rem;
-}
-
-.card-printing-label {
-    margin-bottom: 0;
-}
-
-.card-select-not-printing .card-image {
-    filter: grayscale(0.7);
-    opacity: 0.55;
-}
-
 #arnold {
     margin-top: 2.4em;
 }
@@ -1038,12 +1006,6 @@ html.dark-theme {
 
     #print-content.with-cut-lines .print-grid {
         gap: 1px;
-    }
-
-    #print-content.with-cut-lines img,
-    #print-content.with-cut-lines .print-slot {
-        outline: 0.2mm solid #777;
-        outline-offset: -0.2mm;
     }
 
     .print-page {

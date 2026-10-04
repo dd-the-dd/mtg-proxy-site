@@ -181,37 +181,6 @@ describe("parseDecklist()", () => {
             });
         });
 
-        test("Considering and maybeboard sections mark cards that must not print", () => {
-            expect(
-                parseDecklist(
-                    `
-                    Deck
-                    1 Lightning Bolt
-                    // Considering
-                    2 Chain Lightning
-                    Maybeboard:
-                    1 Lava Spike (CHK) 178
-                    Deck:
-                    1 Mountain
-                    `,
-                ),
-            ).toStrictEqual({
-                lines: [
-                    { name: "lightning bolt", quantity: 1 },
-                    { name: "chain lightning", quantity: 2, isConsidering: true },
-                    {
-                        name: "lava spike",
-                        quantity: 1,
-                        isConsidering: true,
-                        set: "chk",
-                        collectorsNumber: "178",
-                    },
-                    { name: "mountain", quantity: 1 },
-                ],
-                errors: [],
-            });
-        });
-
         test("Commented Out Lines", () => {
             expect(
                 parseDecklist(
